@@ -3,6 +3,48 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.2.1] — 2026-11-15
+
+Interface bug-fix and packaging release on the 0.2 line. Schema version stays at
+2 and no project data is migrated.
+
+### Fixed
+
+- Removed the sidebar collapse control. It shrank the sidebar to an icon rail,
+  hid the project file tree, hid its own toggle, and persisted that state in
+  `localStorage`, so the interface reopened compressed with no way back.
+- The sidebar "New project" button had no click handler; it now opens the project
+  dialog from any page.
+- The mobile sidebar toggle rendered on desktop, where it did nothing, because
+  `.icon-btn` overrode `.mobile-only`. It now appears only below 900px.
+- Archiving a project left that project's bible, cast, and chapters in the
+  sidebar. Reloading the project list now refreshes the project tree as well.
+- The topbar theme toggle re-rendered the view and discarded unsaved editor text.
+  It now applies the theme without touching the current view.
+- The Preview reader's A+/A- controls stopped after one step because they read a
+  stale appearance snapshot; they now step through the full 15-26px range.
+- The breadcrumb repeated the section name ("Projects > Project > Projects").
+- Modals without footer buttons rendered an empty bordered strip.
+- The "System" theme preview drew mismatched split blocks.
+- Project initials included punctuation, so "Salt & Ember" became "S&".
+- Links and link-styled buttons underlined on hover, including sidebar items,
+  tree rows, chapter links, and `Read`/`Open in editor` buttons.
+
+### Changed
+
+- The sidebar keeps a fixed width; the small-screen drawer remains.
+- The workspace, reader, and settings layouts stack at 1080px instead of
+  squeezing two columns into a mid-size window.
+
+### Added
+
+- `LICENSE` (MIT, Copyright (c) 2026 Prabir Kumar Das) and SPDX metadata in
+  `pyproject.toml`, including repository and issue URLs.
+- README setup rewritten around the public repository: clone, virtual
+  environment, editable install, then `ollama serve` and `novellire`.
+- The packaged project description is now "AI narrative intelligence & novel
+  writing environment".
+
 ## [0.2.0] — 2026-11-15
 
 The interface is rewritten as a browser harness served by a small FastAPI

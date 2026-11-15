@@ -43,7 +43,7 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
 
     assert payload["status"] == "ok"
     assert payload["schema_version"] == 2
-    assert payload["version"] == "0.2.0"
+    assert payload["version"] == "0.2.1"
 
 
 def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:

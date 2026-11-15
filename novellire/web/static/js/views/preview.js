@@ -49,8 +49,9 @@ export function renderPreview(ctx) {
   const sizeLabel = el('span', { class: 'size-value' }, `${appearance.reading_font_size}px`);
 
   const changeSize = async (delta) => {
-    const next = Math.min(26, Math.max(15, appearance.reading_font_size + delta));
-    if (next === appearance.reading_font_size) return;
+    const current = ctx.state.settings.appearance.reading_font_size;
+    const next = Math.min(26, Math.max(15, current + delta));
+    if (next === current) return;
     await ctx.saveAppearance({ reading_font_size: next }, { rerender: false });
     sizeLabel.textContent = `${next}px`;
   };

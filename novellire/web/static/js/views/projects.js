@@ -139,7 +139,7 @@ function projectCard(ctx, project) {
   );
 }
 
-function openProjectForm(ctx, project = null) {
+export function openProjectForm(ctx, project = null) {
   const isEdit = Boolean(project);
   const name = input({
     value: project?.name || '',

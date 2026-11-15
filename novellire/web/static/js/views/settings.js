@@ -427,7 +427,7 @@ function aboutCard(state) {
     el(
       'p',
       { class: 'hint', style: { marginTop: '14px' } },
-      'Novellire is a local-first harness. No telemetry, no analytics, and no project content leaves the machine while using a local model.'
+      'No telemetry and no analytics. While a local model is selected, no project content leaves this machine.'
     )
   );
   return settingsCard('feather', 'About', 'Build information.', body);

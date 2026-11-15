@@ -6,7 +6,7 @@ import {
   initials,
   toast,
 } from './ui.js';
-import { renderProjects } from './views/projects.js';
+import { openProjectForm, renderProjects } from './views/projects.js';
 import { renderWorkspace } from './views/workspace.js';
 import { renderPreview } from './views/preview.js';
 import { renderSettings } from './views/settings.js';
@@ -95,7 +95,7 @@ function parseHash() {
 function applyRouteDefaults() {
   const { route } = state;
   if (route.name === 'workspace') {
-    if (route.a) state.workspaceType = route.a;
+    if (['bible', 'characters', 'chapters'].includes(route.a)) state.workspaceType = route.a;
     if (route.b) state.selectedId = Number(route.b);
   }
   if (route.name === 'preview' && route.a) state.previewChapterId = Number(route.a);
@@ -213,7 +213,8 @@ async function saveAppearance(patch, { rerender = true } = {}) {
 
 async function toggleTheme() {
   const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-  await saveAppearance({ theme: next });
+  await saveAppearance({ theme: next }, { rerender: false });
+  renderTopbar();
 }
 
 /* -------------------------------------------------------------------------
@@ -229,6 +230,7 @@ function makeContext() {
     },
     reloadProjects: async () => {
       await refreshProjects();
+      await loadProjectData();
       render();
     },
     refreshOllama,
@@ -430,7 +432,8 @@ function renderFooter() {
   if (!host) return;
   host.replaceChildren();
   const available = Boolean(state.ollama?.available);
-  const model = state.settings?.generation?.model || 'Choose a model';
+  const model =
+    state.settings?.generation?.model || state.ollama?.models?.[0]?.name || 'Choose a model';
   host.append(
     el('span', {
       class: `status-dot ${available ? 'online' : 'offline'}`,
@@ -447,12 +450,16 @@ function renderTopbar() {
   if (!crumbs || !actions) return;
   crumbs.replaceChildren();
   const project = state.projects.find((item) => item.id === state.activeProjectId);
-  crumbs.append(el('a', { class: 'crumb', href: '#/projects' }, 'Projects'));
-  if (project) {
-    crumbs.append(icon('chevron-right'), el('span', { class: 'crumb' }, project.name));
-  }
   const label = NAV.find((item) => item.key === state.route.name)?.label || 'Projects';
-  crumbs.append(icon('chevron-right'), el('span', { class: 'crumb current' }, label));
+  if (state.route.name === 'projects') {
+    crumbs.append(el('span', { class: 'crumb current' }, 'Projects'));
+  } else {
+    crumbs.append(el('a', { class: 'crumb', href: '#/projects' }, 'Projects'));
+    if (project) {
+      crumbs.append(icon('chevron-right'), el('span', { class: 'crumb' }, project.name));
+    }
+    crumbs.append(icon('chevron-right'), el('span', { class: 'crumb current' }, label));
+  }
 
   actions.replaceChildren();
   actions.append(
@@ -515,13 +522,8 @@ function updateScrim() {
 }
 
 function bindChrome() {
-  const collapse = document.getElementById('sidebar-collapse');
-  collapse?.addEventListener('click', () => {
-    const root = document.documentElement;
-    root.dataset.sidebar = root.dataset.sidebar === 'collapsed' ? 'expanded' : 'collapsed';
-    try {
-      localStorage.setItem('novellire.sidebar', root.dataset.sidebar);
-    } catch (error) { /* storage is optional */ }
+  document.getElementById('new-project-btn')?.addEventListener('click', () => {
+    if (context) openProjectForm(context);
   });
 
   document.getElementById('sidebar-toggle')?.addEventListener('click', () => {

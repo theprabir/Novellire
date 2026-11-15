@@ -1,6 +1,6 @@
 # Novellire
 
-Local-first AI narrative intelligence and novel writing environment.
+AI narrative intelligence & novel writing environment.
 
 Novellire is an LLM orchestration harness for long-form fiction. It keeps a
 project's story bible, cast, chapter map, scene drafts, and generation history in
@@ -13,8 +13,8 @@ assets — the interface loads from the same loopback process that owns the data
 
 ## Privacy and network use
 
-Novellire is **local-first**, and what leaves the machine depends on the provider
-you choose.
+By default Novellire runs entirely on your machine, and what leaves it depends on
+the provider you choose.
 
 - **Local models (the only mode implemented today).** Inference goes to an Ollama
   server on `http://localhost:11434`. Prompts, story bibles, and prose stay on
@@ -33,7 +33,9 @@ you choose.
 The server has no authentication and binds `127.0.0.1` by default. Do not expose
 it to a network interface you do not trust.
 
-## Requirements
+## Setup
+
+### Requirements
 
 - Windows 11 (developed and tested there), macOS, or Linux
 - Python 3.11 or newer
@@ -46,11 +48,14 @@ it to a network interface you do not trust.
   ollama pull qwen2.5:1.5b
   ```
 
-## Installation
+### Install
 
-From the repository root, in a terminal (PowerShell or Git Bash):
+Clone the repository and install it into a virtual environment (PowerShell or
+Git Bash):
 
 ```bash
+git clone https://github.com/theprabir/Novellire.git
+cd Novellire
 python -m venv .venv
 .venv\Scripts\activate
 python -m pip install --upgrade pip
@@ -63,7 +68,7 @@ Optional: copy `config.example.toml` to `config.toml` to change the Ollama
 endpoint, timeouts, or default generation parameters. Novellire runs without a
 configuration file using built-in defaults.
 
-## Running
+### Run
 
 Start Ollama in one terminal:
 
@@ -217,7 +222,10 @@ database is upgraded in place without losing projects or generations.
 
 ## Status
 
-Current release: **v0.2.0** (schema version 2).
+Current release: **v0.2.1** (schema version 2). `v0.2.1` is an interface and
+packaging patch on the 0.2 line: the sidebar collapse trap and several broken
+controls are fixed, hover underlines are gone, and the project now ships an MIT
+license with a documented clone-and-install setup. No schema change.
 
 The Phase 1 foundation and the Phase 2 narrative data model are complete, and the
 interface has been rebuilt as a browser harness. Still missing: document import,
@@ -227,4 +235,6 @@ exist as designed UI scopes only. Chapters and scenes cannot yet be reordered or
 deleted, and generation does not yet feed the story bible or character profiles
 into the prompt.
 
-License: to be determined.
+## License
+
+MIT. See [LICENSE](LICENSE). Copyright (c) 2026 Prabir Kumar Das.

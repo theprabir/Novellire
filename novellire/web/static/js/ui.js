@@ -121,7 +121,10 @@ export function formatDate(value) {
 }
 
 export function initials(name) {
-  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  const parts = String(name || '')
+    .trim()
+    .split(/\s+/)
+    .filter((part) => /[a-z0-9]/i.test(part));
   if (!parts.length) return '·';
   return parts.slice(0, 2).map((part) => part[0].toUpperCase()).join('');
 }
@@ -166,7 +169,9 @@ export function openModal({ title, body, footer = [], wide = false }) {
   const bodyNodes = Array.isArray(body) ? body : [body];
   bodyHost.replaceChildren(...bodyNodes.filter(Boolean));
   const footHost = document.getElementById('modal-foot');
-  footHost.replaceChildren(...footer.filter(Boolean));
+  const footNodes = Array.isArray(footer) ? footer.filter(Boolean) : [footer].filter(Boolean);
+  footHost.replaceChildren(...footNodes);
+  modal.classList.toggle('no-foot', footNodes.length === 0);
   if (!modal.open) modal.showModal();
   return {
     close: () => modal.close(),

@@ -1,14 +1,15 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "novellire"
-version = "0.2.0"
-description = "Local-first AI narrative intelligence and novel writing environment"
+version = "0.2.1"
+description = "AI narrative intelligence & novel writing environment"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "TBD" }
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "fastapi>=0.115,<1",
     "uvicorn>=0.30,<1",
@@ -19,6 +20,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0,<9", "httpx>=0.27,<1"]
+
+[project.urls]
+Repository = "https://github.com/theprabir/Novellire"
+Issues = "https://github.com/theprabir/Novellire/issues"
 
 [project.scripts]
 novellire = "novellire.__main__:main"

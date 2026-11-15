@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Novellire</title>
-  <meta name="description" content="Local-first narrative intelligence and novel writing environment">
+  <meta name="description" content="AI narrative intelligence and novel writing environment">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a78bfa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.2 12.2a6 6 0 0 0-8.5-8.5L5 10.5V19h8.5z'/%3E%3Cpath d='M16 8 2 22'/%3E%3Cpath d='M17.5 15H9'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/static/app.css">
   <script>
@@ -35,8 +35,6 @@
         if (cached.ui_font) root.style.setProperty('--ui-font', uiFonts[cached.ui_font] || uiFonts.system);
         if (cached.reading_font) root.style.setProperty('--reading-font', readingFonts[cached.reading_font] || readingFonts.garamond);
       }
-      const sidebar = localStorage.getItem('novellire.sidebar');
-      if (sidebar) document.documentElement.dataset.sidebar = sidebar;
     } catch (error) { /* appearance is optional */ }
   </script>
 </head>
@@ -86,9 +84,6 @@
         <strong>Novellire</strong>
         <small>narrative studio</small>
       </span>
-      <button class="icon-btn sidebar-collapse" id="sidebar-collapse" type="button" title="Collapse sidebar" aria-label="Collapse sidebar">
-        <svg class="icon"><use href="#i-sidebar"></use></svg>
-      </button>
     </div>
 
     <div class="sidebar-scroll">
