@@ -155,6 +155,46 @@ MIGRATION_2_SCENES_INDEX = """
 CREATE INDEX idx_scenes_chapter ON scenes (chapter_id, position)
 """
 
+MIGRATION_3_DOCUMENTS = """
+CREATE TABLE project_documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL
+        CHECK (kind IN ('master_bible', 'character_bible', 'chapter_map', 'style_guide')),
+    content TEXT NOT NULL DEFAULT '',
+    derived INTEGER NOT NULL DEFAULT 0 CHECK (derived IN (0, 1)),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (project_id, kind)
+)
+"""
+
+MIGRATION_3_CHAPTER_CONTENT = """
+ALTER TABLE chapters ADD COLUMN content TEXT NOT NULL DEFAULT ''
+"""
+
+MIGRATION_3_CHAPTER_WORDS = """
+ALTER TABLE chapters ADD COLUMN word_count INTEGER NOT NULL DEFAULT 0
+"""
+
+MIGRATION_3_CHAPTER_ORIGIN = """
+ALTER TABLE chapters ADD COLUMN origin TEXT NOT NULL DEFAULT 'written'
+    CHECK (origin IN ('written', 'imported'))
+"""
+
+MIGRATION_3_BACKFILL_CONTENT = """
+UPDATE chapters SET content = COALESCE((
+    SELECT group_concat(content, char(10) || char(10))
+    FROM (SELECT content FROM scenes WHERE scenes.chapter_id = chapters.id ORDER BY position)
+), '')
+"""
+
+MIGRATION_3_BACKFILL_WORDS = """
+UPDATE chapters SET word_count = COALESCE((
+    SELECT SUM(word_count) FROM scenes WHERE scenes.chapter_id = chapters.id
+), 0)
+"""
+
 MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
     (
         1,
@@ -177,6 +217,17 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
             MIGRATION_2_CHAPTERS_INDEX,
             MIGRATION_2_SCENES,
             MIGRATION_2_SCENES_INDEX,
+        ),
+    ),
+    (
+        3,
+        (
+            MIGRATION_3_DOCUMENTS,
+            MIGRATION_3_CHAPTER_CONTENT,
+            MIGRATION_3_CHAPTER_WORDS,
+            MIGRATION_3_CHAPTER_ORIGIN,
+            MIGRATION_3_BACKFILL_CONTENT,
+            MIGRATION_3_BACKFILL_WORDS,
         ),
     ),
 )

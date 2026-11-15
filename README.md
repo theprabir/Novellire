@@ -3,8 +3,9 @@
 AI narrative intelligence & novel writing environment.
 
 Novellire is an LLM orchestration harness for long-form fiction. It keeps a
-project's story bible, cast, chapter map, scene drafts, and generation history in
-one SQLite database, and writes prose with a model running on your own machine.
+project's master story bible, character bible, chapter map, style guide, chapter
+text, and generation history in one SQLite database, and writes prose with a
+model running on your own machine.
 
 `v0.2.0` replaces the Streamlit prototype with a browser interface: a FastAPI
 server exposes a small JSON API and serves a static client written in HTML, CSS,
@@ -90,17 +91,25 @@ The interface has these surfaces:
 
 - **Projects** — create, open, edit, and archive novels; word counts, generation
   counts, and target progress per project.
-- **Workspace** — three sections sharing one editor layout:
-  - *Story bible* — categorised canon entries.
-  - *Characters* — identity profile, aliases, and eleven profile fields.
-  - *Chapters* — ordered chapter map with part/act, summary, objectives,
-    viewpoint, status, target words, plus the scene list and scene prose editor.
-  Every section has a searchable list, and the scene editor opens the generation
-  dialog: choose a model, describe what happens, edit the draft, then insert or
-  append it into the scene.
+- **Workspace** — four documents plus the chapter list:
+  - *Master Story Bible* — complete storyline, themes and metaphysics, historical
+    background, world rules, and important events.
+  - *Character Bible* — personalities and motivations, physical descriptions,
+    relationships and romantic developments, secrets and internal conflicts,
+    and character arcs.
+  - *Chapter Map* — chapter objectives, key events, emotional progression, plot
+    revelations, and cliffhangers.
+  - *Style Guide* — narrative perspective, sentence structure, vocabulary,
+    dialogue style, descriptive density, emotional intensity, and what to avoid.
+  Each document is one editor; its categories are shown as placeholder guidance,
+  not as separate forms. All four are fed to generation.
+  *Chapters* holds the manuscript itself. Add a chapter with a title and paste its
+  full text: Novellire counts and displays words and marks it pre-written, and
+  the AI never rewrites it. New chapters can be drafted from the documents, and
+  drafts are editable before insertion.
 - **Preview** — the reading surface. Cream paper in both themes, a Garamond-first
-  serif stack, drop caps, scene ornaments, chapter navigation, and live reading
-  size and measure controls.
+  serif stack, drop caps, chapter navigation, and live reading size and measure
+  controls.
 - **Settings** — appearance (theme, accent, interface and reading fonts, sizes,
   reading width), the Ollama connection and generation defaults, data locations,
   and build information.
@@ -118,9 +127,10 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-109 tests run fully offline. All inference is stubbed, so no model or Ollama
+116 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
-client and covers project scoping, error mapping, generation persistence, and
+client and covers project scoping, error mapping, document saves, pre-written
+chapter protection, automatic style-guide learning, generation persistence, and
 appearance round-trips.
 
 ## Architecture
@@ -144,10 +154,12 @@ novellire/
     projects.py            Project validation and use cases
     settings_service.py    Persisted generation and appearance preferences
     generation.py          Prompt -> provider -> saved record
-    story_bible.py         Categorised story bible entries
-    characters.py          Character profiles and aliases
-    chapters.py            Ordered chapter blueprint
-    scenes.py              Ordered scenes and scene drafts
+    documents.py           Workspace document definitions and save/read service
+    style_guide.py         Learns a style guide from the manuscript
+    story_bible.py         Categorised story bible entries (legacy API)
+    characters.py          Character profiles and aliases (legacy API)
+    chapters.py            Ordered chapters with pasted or drafted text
+    scenes.py              Ordered scenes and scene drafts (legacy API)
     work_status.py         Shared planned/drafting/drafted/approved values
     validation.py          Shared input validation helpers
     text.py                Word counting
@@ -160,6 +172,7 @@ novellire/
     schema.py              Ordered, versioned migrations
     database.py            Connection handling, PRAGMAs, migration runner
     repositories.py        SQL access for projects, generations, settings
+    document_repository.py SQL access for workspace documents
     story_repositories.py  SQL access for story bible, characters, chapters, scenes
 tests/                     Pytest suite with a fake provider
 ```
@@ -216,24 +229,25 @@ by Git. Never commit a novel project's database.
 | :--- | :--- |
 | 1 | `projects`, `generations`, `app_settings` |
 | 2 | `story_bible_entries`, `characters`, `character_aliases`, `chapters`, `scenes` |
+| 3 | `project_documents`; chapter `content`, `word_count`, `origin` |
 
-Migrations are applied in order inside transactions; an existing Phase 1
-database is upgraded in place without losing projects or generations.
+Migrations are applied in order inside transactions; an existing database is
+upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.2.1** (schema version 2). `v0.2.1` is an interface and
-packaging patch on the 0.2 line: the sidebar collapse trap and several broken
-controls are fixed, hover underlines are gone, and the project now ships an MIT
-license with a documented clone-and-install setup. No schema change.
+Current release: **v0.2.2** (schema version 3). `v0.2.2` restructures the
+Workspace around four author-written documents, adds chapter import with word
+counts and pre-written protection, feeds the documents to generation, and learns
+a style guide from the manuscript when none is written.
 
 The Phase 1 foundation and the Phase 2 narrative data model are complete, and the
-interface has been rebuilt as a browser harness. Still missing: document import,
-event extraction, chapter summaries, retrieval and narrative memory, continuity
-validation, export, and cloud API providers. Chat, Memory, Continuity, and Export
-exist as designed UI scopes only. Chapters and scenes cannot yet be reordered or
-deleted, and generation does not yet feed the story bible or character profiles
-into the prompt.
+interface is a browser harness. Still missing: event extraction, chapter
+summaries, retrieval and narrative memory, continuity validation, export, and
+cloud API providers. Chat, Memory, Continuity, and Export exist as designed UI
+scopes only. Chapters cannot yet be reordered or deleted. The older story bible
+entry, character, and scene endpoints remain for compatibility but are no longer
+part of the Workspace.
 
 ## License
 

@@ -772,6 +772,30 @@ input[type="range"]::-webkit-slider-thumb {
 .list-row .texts .sub { font-size: var(--fs-xs); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list-row .meta { margin-left: auto; font-size: 10px; color: var(--faint); font-variant-numeric: tabular-nums; }
 
+.list-section { padding: 6px; }
+.list-section + .list-section { border-top: 1px solid var(--border); }
+.list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px 6px;
+  font-size: 10px;
+  font-weight: 640;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.textarea.doc-text,
+.textarea.chapter-text {
+  min-height: 420px;
+  font-family: var(--reading-font);
+  font-size: 15px;
+  line-height: 1.7;
+}
+.textarea.doc-text { min-height: 460px; }
+
 .editor-panel { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 
 .editor-head {

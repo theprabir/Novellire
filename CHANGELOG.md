@@ -3,6 +3,38 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.2.2] — 2026-11-15
+
+Workspace restructure and chapter import on the 0.2 line. Schema version 3 adds
+project documents and chapter text; existing projects are migrated in place.
+
+### Changed
+
+- The Workspace is now four author-written documents — Master Story Bible,
+  Character Bible, Chapter Map, and Style Guide — each a single editor whose
+  category prompts appear as placeholders. The per-entry story bible list, the
+  Characters tab, the character profile editors, and the scene list and scene
+  editor are gone from this surface.
+- Generation receives all four documents (each clipped to 2,500 characters) and
+  drafts into chapter text instead of scene text.
+- The Preview reader renders chapter prose rather than scene prose.
+
+### Added
+
+- Chapters hold their own text. "Add chapter" takes a title and the full pasted
+  text, stores the word count, and marks the chapter pre-written. The generation
+  API refuses to write into a pre-written chapter with a 400.
+- `project_documents` stores one row per project and document kind, plus chapter
+  `content`, `word_count`, and `origin`. Migration 3 backfills chapter text by
+  joining existing scenes in order.
+- Style-guide learning: `POST /api/projects/{id}/style-guide/analyze` reads the
+  manuscript and documents and stores a derived guide. The first generation for
+  a project that has chapters but no guide does this automatically before
+  writing, and the response reports `style_guide_inferred`. A hand-written guide
+  is never overwritten.
+- `GET`/`PUT /api/projects/{id}/documents`, and document titles, summaries, and
+  placeholders in `/api/meta`.
+
 ## [0.2.1] — 2026-11-15
 
 Interface bug-fix and packaging release on the 0.2 line. Schema version stays at

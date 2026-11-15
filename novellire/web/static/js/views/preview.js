@@ -19,7 +19,7 @@ export function renderPreview(ctx) {
       emptyState({
         iconName: 'book',
         title: 'Nothing to read yet',
-        body: 'Select a project with chapters, or add a chapter in the workspace. The reader renders scene prose as a typeset manuscript.',
+        body: 'Select a project with chapters, or add a chapter in the workspace. The reader renders chapter prose as a typeset manuscript.',
         action: el('a', { class: 'btn btn-primary', href: '#/projects' }, 'Go to projects'),
       })
     );
@@ -33,8 +33,8 @@ export function renderPreview(ctx) {
       emptyState({
         iconName: 'book',
         title: 'This project has no chapters',
-        body: 'Create a chapter and a scene in the workspace, then the manuscript appears here.',
-        action: el('a', { class: 'btn btn-primary', href: '#/workspace/chapters' }, 'Open chapter map'),
+        body: 'Add a chapter in the workspace, or paste one you have already written, and it appears here.',
+        action: el('a', { class: 'btn btn-primary', href: '#/workspace/chapters' }, 'Open chapters'),
       })
     );
     return wrap;
@@ -158,26 +158,20 @@ function chapterNav(ctx, chapters, activeId) {
 }
 
 function readerSurface(chapter) {
-  const scenes = chapter.scenes || [];
-  const sections = scenes.map((scene) =>
-    el(
-      'section',
-      { class: 'scene' },
-      scene.title ? el('div', { class: 'scene-title' }, scene.title) : null,
-      proseNodes(scene.content)
-    )
-  );
+  const content = (chapter.content || '').trim();
 
   return el(
     'article',
     { class: 'reader', 'aria-label': `Chapter ${chapter.position}: ${chapter.title}` },
     el('div', { class: 'chapter-eyebrow' }, `Chapter ${chapter.position}`),
     el('h1', {}, chapter.title),
-    chapter.summary ? el('p', { class: 'chapter-summary' }, chapter.summary) : null,
+    chapter.origin === 'imported'
+      ? el('p', { class: 'chapter-summary' }, 'Pre-written chapter')
+      : null,
     el('div', { class: 'rule' }),
-    scenes.length
-      ? sections
-      : el('p', { class: 'reader-empty' }, 'This chapter has no scenes yet.'),
+    content
+      ? proseNodes(content)
+      : el('p', { class: 'reader-empty' }, 'This chapter has no text yet.'),
     el(
       'div',
       { class: 'colophon' },

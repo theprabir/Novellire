@@ -1,7 +1,6 @@
 import { api } from '../api.js';
 import {
   closeModal,
-  copyText,
   count,
   el,
   emptyState,
@@ -9,15 +8,17 @@ import {
   icon,
   input,
   openModal,
-  proseNodes,
   select,
-  statusChip,
   textarea,
   toast,
 } from '../ui.js';
 
-const TYPE_LABELS = { bible: 'Story bible', characters: 'Characters', chapters: 'Chapters' };
-const TYPE_ICONS = { bible: 'file', characters: 'user', chapters: 'layers' };
+const DOCUMENT_ICONS = {
+  master_bible: 'file',
+  character_bible: 'user',
+  chapter_map: 'layers',
+  style_guide: 'feather',
+};
 
 export function renderWorkspace(ctx) {
   const { state } = ctx;
@@ -29,7 +30,7 @@ export function renderWorkspace(ctx) {
       emptyState({
         iconName: 'layers',
         title: 'No project selected',
-        body: 'Open or create a project to build its story bible, cast, and chapter map.',
+        body: 'Open or create a project to write its story bible, character bible, chapter map, and style guide.',
         action: el('a', { class: 'btn btn-primary', href: '#/projects' }, 'Go to projects'),
       })
     );
@@ -37,18 +38,15 @@ export function renderWorkspace(ctx) {
   }
 
   const project = state.tree.project;
-  const type = TYPE_LABELS[state.workspaceType] ? state.workspaceType : 'chapters';
-  const items = workspaceItems(state, type);
+  const chapters = state.manuscript?.chapters || [];
+  const documents = state.documents || [];
+  const section = state.workspaceType === 'chapters' ? 'chapters' : 'docs';
 
-  if (!items.some((item) => item.id === state.selectedId)) {
-    state.selectedId = items.length ? items[0].id : null;
+  if (section === 'chapters' && !chapters.some((chapter) => chapter.id === state.selectedId)) {
+    state.selectedId = chapters.length ? chapters[0].id : null;
   }
-  if (type === 'chapters') {
-    const chapter = findChapter(state, state.selectedId);
-    const scenes = chapter?.scenes || [];
-    if (!scenes.some((scene) => scene.id === state.selectedSceneId)) {
-      state.selectedSceneId = scenes.length ? scenes[0].id : null;
-    }
+  if (section === 'docs' && !documents.some((document) => document.kind === state.selectedDoc)) {
+    state.selectedDoc = 'master_bible';
   }
 
   wrap.append(
@@ -62,13 +60,13 @@ export function renderWorkspace(ctx) {
         el(
           'div',
           { class: 'sub' },
-          `${count(state.tree.stats.chapters)} chapters · ${count(state.tree.stats.scenes)} scenes · ${count(state.tree.stats.characters)} characters · ${count(state.tree.stats.words)} drafted words`
+          `${count(chapters.length)} chapter${chapters.length === 1 ? '' : 's'} · ${count(state.tree.stats.words)} words written`
         )
       ),
       el(
         'div',
         { class: 'actions' },
-        el('span', { class: 'chip' }, project.genre || 'No genre'),
+        project.genre ? el('span', { class: 'chip' }, project.genre) : null,
         project.target_word_count
           ? el('span', { class: 'chip' }, `${count(project.target_word_count)} target`)
           : null
@@ -79,703 +77,440 @@ export function renderWorkspace(ctx) {
   wrap.append(
     el(
       'div',
-      { class: 'workspace-toolbar' },
-      segmentedTypes(ctx, type),
-      el(
-        'button',
-        {
-          class: 'btn btn-primary btn-sm',
-          type: 'button',
-          onClick: () => openCreateDialog(ctx, type, project.id),
-        },
-        icon('plus'),
-        `New ${type === 'bible' ? 'entry' : type === 'characters' ? 'character' : 'chapter'}`
-      )
-    )
-  );
-
-  wrap.append(
-    el(
-      'div',
       { class: 'split' },
-      listPanel(ctx, type, items),
-      editorPanel(ctx, type, project.id)
+      listPanel(ctx, documents, chapters, section),
+      section === 'chapters'
+        ? chapterEditor(ctx, chapters.find((chapter) => chapter.id === state.selectedId))
+        : documentEditor(ctx, documents.find((document) => document.kind === state.selectedDoc))
     )
   );
 
   return wrap;
 }
 
-function segmentedTypes(ctx, active) {
-  const wrap = el('div', { class: 'segmented', role: 'group', 'aria-label': 'Workspace section' });
-  for (const [key, label] of Object.entries(TYPE_LABELS)) {
-    wrap.append(
+/* -- file list ------------------------------------------------------------ */
+
+function listPanel(ctx, documents, chapters, section) {
+  const { state } = ctx;
+  const panel = el('div', { class: 'list-panel' });
+  const docSection = el('div', { class: 'list-section' });
+  docSection.append(el('div', { class: 'list-heading' }, el('span', {}, 'Documents')));
+
+  for (const document of documents) {
+    const active = section === 'docs' && document.kind === state.selectedDoc;
+    docSection.append(
       el(
         'button',
         {
+          class: 'list-row',
           type: 'button',
-          'aria-pressed': key === active ? 'true' : 'false',
-          onClick: () => {
-            window.location.hash = `#/workspace/${key}`;
-          },
+          'aria-current': active ? 'true' : undefined,
+          onClick: () => selectDocument(ctx, document.kind),
         },
-        icon(TYPE_ICONS[key], 'icon'),
-        label
-      )
-    );
-  }
-  return wrap;
-}
-
-function workspaceItems(state, type) {
-  if (type === 'bible') {
-    return (state.details?.bible || []).map((entry) => ({
-      id: entry.id,
-      title: entry.title,
-      subtitle: categoryLabel(state, entry.category),
-    }));
-  }
-  if (type === 'characters') {
-    return (state.details?.characters || []).map((character) => ({
-      id: character.id,
-      title: character.name,
-      subtitle: character.aliases.length ? `aka ${character.aliases.join(', ')}` : character.personality || 'No profile yet',
-    }));
-  }
-  return (state.manuscript?.chapters || []).map((chapter) => ({
-    id: chapter.id,
-    title: `${chapter.position}. ${chapter.title}`,
-    subtitle: `${chapter.scenes.length} scene${chapter.scenes.length === 1 ? '' : 's'} · ${count(chapter.word_count)} words`,
-    status: chapter.status,
-  }));
-}
-
-function listPanel(ctx, type, items) {
-  const search = input({ placeholder: `Search ${TYPE_LABELS[type].toLowerCase()}…`, type: 'search' });
-  const rows = el('div', { class: 'list-scroll' });
-
-  const renderRows = (filter = '') => {
-    rows.replaceChildren();
-    const needle = filter.trim().toLowerCase();
-    const visible = items.filter(
-      (item) =>
-        !needle ||
-        item.title.toLowerCase().includes(needle) ||
-        (item.subtitle || '').toLowerCase().includes(needle)
-    );
-    if (!visible.length) {
-      rows.append(el('div', { class: 'tree-empty' }, items.length ? 'No matches' : 'Nothing here yet'));
-      return;
-    }
-    for (const item of visible) {
-      rows.append(
+        icon(DOCUMENT_ICONS[document.kind] || 'file', 'icon sm'),
         el(
-          'button',
-          {
-            class: 'list-row',
-            type: 'button',
-            'aria-current': item.id === ctx.state.selectedId ? 'true' : undefined,
-            onClick: () => {
-              ctx.state.selectedId = item.id;
-              window.location.hash = `#/workspace/${type}/${item.id}`;
-            },
-          },
-          icon(TYPE_ICONS[type], 'icon sm'),
+          'span',
+          { class: 'texts' },
+          el('span', { class: 'name' }, document.title),
           el(
             'span',
-            { class: 'texts' },
-            el('span', { class: 'name' }, item.title),
-            item.subtitle ? el('span', { class: 'sub' }, item.subtitle) : null
-          ),
-          item.status ? statusChip(item.status, ctx.state.meta) : null
+            { class: 'sub' },
+            document.content.trim()
+              ? document.derived
+                ? 'Learned from your chapters'
+                : wordsLabel(document.content)
+              : 'Not written yet'
+          )
         )
-      );
-    }
-  };
+      )
+    );
+  }
 
-  search.addEventListener('input', () => renderRows(search.value));
-  renderRows();
-
-  return el(
-    'div',
-    { class: 'list-panel' },
-    el('div', { class: 'list-panel-head' }, field(`All ${TYPE_LABELS[type].toLowerCase()}`, search)),
-    rows
+  const chapterSection = el('div', { class: 'list-section' });
+  chapterSection.append(
+    el(
+      'div',
+      { class: 'list-heading' },
+      el('span', {}, `Chapters · ${chapters.length}`),
+      el(
+        'button',
+        {
+          class: 'icon-btn tiny',
+          type: 'button',
+          title: 'Add chapter',
+          'aria-label': 'Add chapter',
+          onClick: () => openChapterDialog(ctx),
+        },
+        icon('plus')
+      )
+    )
   );
+
+  if (!chapters.length) {
+    chapterSection.append(el('div', { class: 'tree-empty' }, 'No chapters yet'));
+  }
+
+  for (const chapter of chapters) {
+    chapterSection.append(
+      el(
+        'button',
+        {
+          class: 'list-row',
+          type: 'button',
+          'aria-current': section === 'chapters' && chapter.id === state.selectedId ? 'true' : undefined,
+          onClick: () => selectChapter(ctx, chapter.id),
+        },
+        icon('file', 'icon sm'),
+        el(
+          'span',
+          { class: 'texts' },
+          el('span', { class: 'name' }, `${chapter.position}. ${chapter.title}`),
+          el('span', { class: 'sub' }, `${count(chapter.word_count)} words`)
+        ),
+        chapter.origin === 'imported'
+          ? el('span', { class: 'chip soon' }, 'Pre-written')
+          : null
+      )
+    );
+  }
+
+  panel.append(docSection, chapterSection);
+  return panel;
 }
 
-function editorPanel(ctx, type, projectId) {
+function selectDocument(ctx, kind) {
+  ctx.state.workspaceType = 'docs';
+  ctx.state.selectedDoc = kind;
+  syncHash(`#/workspace/docs/${kind}`);
+  ctx.render();
+}
+
+function selectChapter(ctx, chapterId) {
+  ctx.state.workspaceType = 'chapters';
+  ctx.state.selectedId = chapterId;
+  syncHash(`#/workspace/chapters/${chapterId}`);
+  ctx.render();
+}
+
+/* -- document editor ------------------------------------------------------ */
+
+function documentEditor(ctx, document) {
   const { state } = ctx;
-  if (!state.selectedId) {
+  if (!document) {
     return el(
       'div',
       { class: 'editor-panel' },
       emptyState({
-        iconName: TYPE_ICONS[type],
-        title: `No ${TYPE_LABELS[type].toLowerCase()} yet`,
-        body:
-          type === 'chapters'
-            ? 'Create a chapter to start the chapter map. Scenes live inside chapters and hold the prose.'
-            : 'Add the first entry so the writing workspace has canon to work from.',
+        iconName: 'file',
+        title: 'No document selected',
+        body: 'Choose one of the four workspace documents.',
+      })
+    );
+  }
+
+  const chaptersWithText = (state.manuscript?.chapters || []).filter((chapter) =>
+    chapter.content.trim()
+  );
+  const words = el('span', { class: 'hint' }, wordsLabel(document.content));
+  const text = textarea({
+    value: document.content,
+    rows: 22,
+    class: 'textarea doc-text',
+    placeholder: document.placeholder,
+  });
+  text.addEventListener('input', () => {
+    words.textContent = wordsLabel(text.value);
+  });
+
+  const actions = [
+    el('button', { class: 'btn btn-primary', type: 'submit' }, 'Save document'),
+    words,
+  ];
+
+  const canAnalyse =
+    document.kind === 'style_guide' &&
+    chaptersWithText.length > 0 &&
+    (!document.content.trim() || document.derived);
+  if (canAnalyse) {
+    actions.push(
+      el(
+        'button',
+        {
+          class: 'btn btn-ghost',
+          type: 'button',
+          onClick: (event) => analyseStyleGuide(ctx, event.currentTarget),
+        },
+        icon('sparkles'),
+        'Analyse my manuscript'
+      )
+    );
+  }
+
+  const form = el(
+    'form',
+    { class: 'card form-card' },
+    text,
+    el('div', { class: 'form-actions' }, ...actions)
+  );
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      await api.put(`/api/projects/${state.activeProjectId}/documents/${document.kind}`, {
+        content: text.value,
+      });
+      await ctx.refresh();
+      toast(`${document.title} saved.`, 'success');
+    } catch (error) {
+      toast(error.message, 'error');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  return el(
+    'div',
+    { class: 'editor-panel' },
+    el(
+      'div',
+      { class: 'editor-head' },
+      el(
+        'div',
+        {},
+        el('h2', {}, document.title),
+        el('div', { class: 'sub' }, document.summary)
+      ),
+      el(
+        'div',
+        { class: 'actions' },
+        document.derived ? el('span', { class: 'chip accent' }, 'Learned') : null,
+        document.updated_at
+          ? el('span', { class: 'hint' }, `Saved ${new Date(document.updated_at).toLocaleString()}`)
+          : el('span', { class: 'hint' }, 'Not saved yet')
+      )
+    ),
+    form,
+    el(
+      'p',
+      { class: 'hint' },
+      document.kind === 'style_guide'
+        ? 'Leave this empty and Novellire will learn the style from your chapters before it writes.'
+        : 'Write in prose or bullets. These documents are the only context the AI is given.'
+    )
+  );
+}
+
+async function analyseStyleGuide(ctx, button) {
+  const state = ctx.state;
+  const model =
+    state.settings?.generation?.model || state.ollama?.models?.[0]?.name || '';
+  button.disabled = true;
+  button.replaceChildren(icon('refresh'), 'Reading your chapters…');
+  try {
+    const result = await api.post(
+      `/api/projects/${state.activeProjectId}/style-guide/analyze`,
+      { model }
+    );
+    toast(`Style guide learned from your chapters (${count(result.word_count)} words).`, 'success');
+    await ctx.refresh();
+  } catch (error) {
+    toast(error.message, 'error');
+    button.disabled = false;
+    button.replaceChildren(icon('sparkles'), 'Analyse my manuscript');
+  }
+}
+
+/* -- chapter editor ------------------------------------------------------- */
+
+function chapterEditor(ctx, chapter) {
+  if (!chapter) {
+    return el(
+      'div',
+      { class: 'editor-panel' },
+      emptyState({
+        iconName: 'file',
+        title: 'No chapter selected',
+        body: 'Add a chapter, paste one you have already written, or let Novellire draft a new one from your documents.',
         action: el(
           'button',
-          { class: 'btn btn-primary btn-sm', type: 'button', onClick: () => openCreateDialog(ctx, type, projectId) },
+          { class: 'btn btn-primary btn-sm', type: 'button', onClick: () => openChapterDialog(ctx) },
           icon('plus'),
-          'Create'
+          'Add chapter'
         ),
       })
     );
   }
 
-  if (type === 'bible') return bibleEditor(ctx, state.details.bible.find((entry) => entry.id === state.selectedId));
-  if (type === 'characters') return characterEditor(ctx, state.details.characters.find((item) => item.id === state.selectedId));
-  return chapterEditor(ctx, findChapter(state, state.selectedId));
-}
-
-function editorHead(eyebrow, title, meta, actions = []) {
-  return el(
-    'div',
-    { class: 'editor-head' },
-    el('div', {}, el('div', { class: 'hint' }, eyebrow), el('h2', {}, title), meta ? el('div', { class: 'sub' }, meta) : null),
-    el('div', { class: 'actions' }, ...actions)
-  );
-}
-
-/* -- story bible ---------------------------------------------------------- */
-
-function bibleEditor(ctx, entry) {
-  const { state } = ctx;
-  const category = select(
-    state.meta.bible_categories.map((item) => ({ value: item.key, label: item.label })),
-    { value: entry.category }
-  );
-  const title = input({ value: entry.title, maxlength: '200' });
-  const content = textarea({ value: entry.content, rows: 16, placeholder: 'Established facts, rules, and details…' });
-
-  const form = el(
-    'form',
-    { class: 'card form-card form-grid' },
-    el('div', { class: 'span-2' }, field('Category', category)),
-    el('div', { class: 'span-2' }, field('Title', title)),
-    el('div', { class: 'span-2' }, field('Content', content, 'Canon text. Later phases retrieve this automatically when writing.')),
-    el(
-      'div',
-      { class: 'form-actions span-2' },
-      el('button', { class: 'btn btn-primary', type: 'submit' }, 'Save entry'),
-      el('span', { class: 'hint' }, `Updated ${entry.updated_at ? new Date(entry.updated_at).toLocaleString() : '—'}`)
-    )
-  );
-
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    try {
-      await api.patch(`/api/bible/${entry.id}`, {
-        category: category.value,
-        title: title.value,
-        content: content.value,
-      });
-      await ctx.refresh();
-      toast('Story bible entry saved.', 'success');
-    } catch (error) {
-      toast(error.message, 'error');
-    }
+  const imported = chapter.origin === 'imported';
+  const title = input({ value: chapter.title, maxlength: '200', placeholder: 'Chapter title' });
+  const content = textarea({
+    value: chapter.content,
+    rows: 24,
+    class: 'textarea chapter-text',
+    placeholder:
+      'Write the chapter here, or leave it empty and let Novellire draft it from your documents.',
   });
-
-  return el(
-    'div',
-    { class: 'editor-panel' },
-    editorHead(categoryLabel(state, entry.category), entry.title, `Entry #${entry.id}`, [
-      el('span', { class: 'chip' }, categoryLabel(state, entry.category)),
-    ]),
-    form
-  );
-}
-
-function openBibleCreateDialog(ctx, projectId) {
-  const { state } = ctx;
-  const category = select(state.meta.bible_categories.map((item) => ({ value: item.key, label: item.label })));
-  const title = input({ placeholder: 'The dying star', maxlength: '200' });
-  const content = textarea({ rows: 8, placeholder: 'What is established about this part of the world?' });
-
-  const form = el(
-    'form',
-    { class: 'form-grid' },
-    el('div', { class: 'span-2' }, field('Category', category)),
-    el('div', { class: 'span-2' }, field('Title', title)),
-    el('div', { class: 'span-2' }, field('Content', content)),
-    el(
-      'div',
-      { class: 'form-actions span-2' },
-      el('button', { class: 'btn btn-primary', type: 'submit' }, 'Add entry'),
-      el('button', { class: 'btn btn-ghost', type: 'button', onClick: closeModal }, 'Cancel')
-    )
-  );
-
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    try {
-      const created = await api.post(`/api/projects/${projectId}/bible`, {
-        category: category.value,
-        title: title.value,
-        content: content.value,
-      });
-      ctx.state.selectedId = created.id;
-      closeModal();
-      await ctx.refresh();
-      syncHash(`#/workspace/bible/${created.id}`);
-      toast('Entry added.', 'success');
-    } catch (error) {
-      toast(error.message, 'error');
-    }
+  const words = el('span', { class: 'hint' }, `${count(chapter.word_count)} words`);
+  content.addEventListener('input', () => {
+    words.textContent = `${count(countWords(content.value))} words`;
   });
-
-  openModal({ title: 'New story bible entry', body: form });
-}
-
-/* -- characters ----------------------------------------------------------- */
-
-function characterEditor(ctx, character) {
-  const { state } = ctx;
-  const name = input({ value: character.name, maxlength: '120' });
-  const aliases = input({ value: character.aliases.join(', '), placeholder: 'M, the Courier' });
-
-  const profileInputs = new Map();
-  const profileNodes = state.meta.character_fields.map((definition) => {
-    const control = textarea({
-      value: character[definition.key] || '',
-      rows: 3,
-      placeholder: '',
-    });
-    profileInputs.set(definition.key, control);
-    return field(definition.label, control);
-  });
-
-  const form = el(
-    'form',
-    { class: 'card form-card form-grid' },
-    field('Name', name),
-    field('Aliases', aliases, 'Comma separated. Used later for entity matching.'),
-    ...profileNodes,
-    el(
-      'div',
-      { class: 'form-actions span-2' },
-      el('button', { class: 'btn btn-primary', type: 'submit' }, 'Save character'),
-      el('span', { class: 'hint' }, 'Identity only. Current location and knowledge arrive with narrative state (Phase 5).')
-    )
-  );
-
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const profile = {};
-    for (const [key, control] of profileInputs.entries()) profile[key] = control.value;
-    try {
-      await api.patch(`/api/characters/${character.id}`, { name: name.value, ...profile });
-      await api.put(`/api/characters/${character.id}/aliases`, {
-        aliases: aliases.value.split(',').map((value) => value.trim()).filter(Boolean),
-      });
-      await ctx.refresh();
-      toast('Character saved.', 'success');
-    } catch (error) {
-      toast(error.message, 'error');
-    }
-  });
-
-  return el(
-    'div',
-    { class: 'editor-panel' },
-    editorHead('Character', character.name, character.aliases.length ? `aka ${character.aliases.join(', ')}` : 'No aliases', [
-      el('span', { class: 'chip' }, 'Profile'),
-    ]),
-    form
-  );
-}
-
-function openCharacterCreateDialog(ctx, projectId) {
-  const { state } = ctx;
-  const name = input({ placeholder: 'Mira Voss', maxlength: '120' });
-  const aliases = input({ placeholder: 'M, the Courier' });
-  const profileInputs = new Map();
-  const profileNodes = state.meta.character_fields.map((definition) => {
-    const control = textarea({ rows: 2 });
-    profileInputs.set(definition.key, control);
-    return field(definition.label, control);
-  });
-
-  const form = el(
-    'form',
-    { class: 'form-grid' },
-    field('Name', name),
-    field('Aliases', aliases, 'Comma separated.'),
-    ...profileNodes,
-    el(
-      'div',
-      { class: 'form-actions span-2' },
-      el('button', { class: 'btn btn-primary', type: 'submit' }, 'Add character'),
-      el('button', { class: 'btn btn-ghost', type: 'button', onClick: closeModal }, 'Cancel')
-    )
-  );
-
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const profile = {};
-    for (const [key, control] of profileInputs.entries()) profile[key] = control.value;
-    try {
-      const created = await api.post(`/api/projects/${projectId}/characters`, {
-        name: name.value,
-        aliases: aliases.value.split(',').map((value) => value.trim()).filter(Boolean),
-        ...profile,
-      });
-      ctx.state.selectedId = created.id;
-      closeModal();
-      await ctx.refresh();
-      syncHash(`#/workspace/characters/${created.id}`);
-      toast('Character added.', 'success');
-    } catch (error) {
-      toast(error.message, 'error');
-    }
-  });
-
-  openModal({ title: 'New character', body: form });
-}
-
-/* -- chapters and scenes -------------------------------------------------- */
-
-function findChapter(state, chapterId) {
-  return (state.manuscript?.chapters || []).find((chapter) => chapter.id === chapterId);
-}
-
-function chapterEditor(ctx, chapter) {
-  if (!chapter) return el('div', { class: 'editor-panel' });
-  const { state } = ctx;
-  const title = input({ value: chapter.title, maxlength: '200' });
-  const part = input({ value: chapter.part, maxlength: '120', placeholder: 'Act One' });
-  const summary = textarea({ value: chapter.summary, rows: 3 });
-  const objectives = textarea({ value: chapter.objectives, rows: 3 });
-  const target = input({ type: 'number', min: '0', max: '100000', step: '500', value: String(chapter.target_word_count || 0) });
-  const status = select(
-    state.meta.work_statuses.map((item) => ({ value: item.key, label: item.label })),
-    { value: chapter.status, class: 'select status-select' }
-  );
-  const viewpoint = select(
-    [{ value: '', label: 'No viewpoint set' }, ...state.details.characters.map((character) => ({ value: String(character.id), label: character.name }))],
-    { value: chapter.viewpoint_character_id ? String(chapter.viewpoint_character_id) : '' }
-  );
 
   const form = el(
     'form',
     { class: 'card form-card form-grid' },
     el('div', { class: 'span-2' }, field('Chapter title', title)),
-    field('Part or act', part),
-    field('Status', status),
-    field('Viewpoint character', viewpoint),
-    field('Target words', target),
-    el('div', { class: 'span-2' }, field('Summary', summary, 'What this chapter must accomplish.')),
-    el('div', { class: 'span-2' }, field('Objectives and required developments', objectives)),
+    el('div', { class: 'span-2' }, content),
     el(
       'div',
       { class: 'form-actions span-2' },
       el('button', { class: 'btn btn-primary', type: 'submit' }, 'Save chapter'),
-      el('span', { class: 'hint' }, `${chapter.scenes.length} scenes · ${count(chapter.word_count)} drafted words`)
+      words,
+      imported
+        ? el('span', { class: 'chip' }, 'Pre-written')
+        : el(
+            'button',
+            {
+              class: 'btn btn-ghost',
+              type: 'button',
+              onClick: () => openGenerateDialog(ctx, chapter),
+            },
+            icon('wand'),
+            'Draft with AI'
+          )
     )
   );
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
     try {
       await api.patch(`/api/chapters/${chapter.id}`, {
         title: title.value,
-        part: part.value,
-        summary: summary.value,
-        objectives: objectives.value,
-        status: status.value,
-        viewpoint_character_id: viewpoint.value ? Number(viewpoint.value) : null,
-        target_word_count: Number(target.value) || null,
+        content: content.value,
       });
       await ctx.refresh();
       toast('Chapter saved.', 'success');
     } catch (error) {
       toast(error.message, 'error');
+    } finally {
+      button.disabled = false;
     }
   });
-
-  const scene = chapter.scenes.find((item) => item.id === state.selectedSceneId);
 
   return el(
     'div',
     { class: 'editor-panel' },
-    editorHead(`Chapter ${chapter.position}`, chapter.title, `${count(chapter.word_count)} words · ${chapter.scenes.length} scenes`, [
-      statusChip(chapter.status, state.meta),
-      el('a', { class: 'btn btn-sm', href: `#/preview/${chapter.id}` }, icon('book'), 'Read'),
-    ]),
-    form,
-    scenesSection(ctx, chapter, scene)
-  );
-}
-
-function scenesSection(ctx, chapter, scene) {
-  const { state } = ctx;
-  const stack = el('div', { class: 'scene-stack' });
-  if (!chapter.scenes.length) {
-    stack.append(el('p', { class: 'hint' }, 'No scenes yet. Add a scene to hold the prose for this chapter.'));
-  }
-  for (const item of chapter.scenes) {
-    stack.append(
-      el(
-        'div',
-        { class: 'scene-row' },
-        el('span', { class: 'index' }, String(item.position).padStart(2, '0')),
-        el('span', { class: 'name' }, item.title || 'Untitled scene'),
-        el('span', { class: 'excerpt' }, item.content ? item.content.slice(0, 90).replace(/\s+/g, ' ') : 'Empty scene'),
-        statusChip(item.status, state.meta),
-        el('span', { class: 'meta' }, `${count(item.word_count)} w`),
-        el(
-          'button',
-          {
-            class: 'btn btn-sm',
-            type: 'button',
-            onClick: () => {
-              ctx.state.selectedSceneId = item.id;
-              syncHash(`#/workspace/chapters/${chapter.id}`);
-              ctx.render();
-            },
-          },
-          'Edit'
-        )
-      )
-    );
-  }
-
-  const header = el(
-    'div',
-    { class: 'editor-toolbar' },
-    el('div', { class: 'left' }, icon('file'), el('strong', {}, 'Scenes'), el('span', { class: 'hint' }, 'Prose is saved per scene.')),
     el(
       'div',
-      { class: 'right' },
-      el(
-        'button',
-        { class: 'btn btn-sm', type: 'button', onClick: () => openSceneCreateDialog(ctx, chapter.id) },
-        icon('plus'),
-        'Add scene'
-      )
-    )
-  );
-
-  const wrapper = el('div', { class: 'card card-pad' }, header, stack);
-  if (scene) wrapper.append(sceneEditor(ctx, chapter, scene));
-  return wrapper;
-}
-
-function sceneEditor(ctx, chapter, scene) {
-  const { state } = ctx;
-  const title = input({ value: scene.title, maxlength: '200', placeholder: 'Untitled scene' });
-  const summary = textarea({ value: scene.summary, rows: 2 });
-  const objectives = textarea({ value: scene.objectives, rows: 2 });
-  const content = textarea({ value: scene.content, rows: 16, class: 'textarea prose' });
-  const status = select(
-    state.meta.work_statuses.map((item) => ({ value: item.key, label: item.label })),
-    { value: scene.status, class: 'select status-select' }
-  );
-
-  const form = el(
-    'form',
-    { class: 'scene-editor form-grid', style: { marginTop: '16px', borderTop: '1px solid var(--border)', paddingTop: '16px' } },
-    el('div', { class: 'span-2' }, field('Scene title', title)),
-    field('Status', status),
-    field('Summary', summary),
-    el('div', { class: 'span-2' }, field('Objectives', objectives)),
-    el(
-      'div',
-      { class: 'span-2' },
+      { class: 'editor-head' },
       el(
         'div',
-        { class: 'editor-toolbar', style: { marginBottom: '6px' } },
-        el('label', { class: 'label' }, 'Scene text'),
+        {},
+        el('h2', {}, `Chapter ${chapter.position}`),
         el(
           'div',
-          { class: 'right' },
-          el('span', { class: 'hint' }, `${count(scene.word_count)} words`),
-          el('button', { class: 'btn btn-sm', type: 'button', onClick: () => copyText(content.value) }, icon('copy'), 'Copy'),
-          el(
-            'button',
-            {
-              class: 'btn btn-sm',
-              type: 'button',
-              onClick: () => openGenerateDialog(ctx, chapter, scene),
-            },
-            icon('wand'),
-            'Generate draft'
-          )
+          { class: 'sub' },
+          imported
+            ? 'Pre-written chapter. Novellire will not change this text; you can still edit it yourself.'
+            : 'Written in Novellire. The AI may draft into this chapter.'
         )
       ),
-      content
+      el(
+        'div',
+        { class: 'actions' },
+        imported ? el('span', { class: 'chip soon' }, 'Pre-written') : null,
+        el('a', { class: 'btn btn-sm', href: `#/preview/${chapter.id}` }, icon('book'), 'Read')
+      )
     ),
-    el(
-      'div',
-      { class: 'form-actions span-2' },
-      el('button', { class: 'btn btn-primary', type: 'submit' }, 'Save scene'),
-      el('span', { class: 'hint' }, 'Generation never overwrites automatically — insert a draft yourself.')
-    )
+    form
   );
-
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    try {
-      await api.patch(`/api/scenes/${scene.id}`, {
-        title: title.value,
-        summary: summary.value,
-        objectives: objectives.value,
-        content: content.value,
-        status: status.value,
-      });
-      await ctx.refresh();
-      toast('Scene saved.', 'success');
-    } catch (error) {
-      toast(error.message, 'error');
-    }
-  });
-
-  return form;
 }
 
-function openChapterCreateDialog(ctx, projectId) {
-  const { state } = ctx;
+function openChapterDialog(ctx) {
   const title = input({ placeholder: 'The Sealed Vault', maxlength: '200' });
-  const part = input({ placeholder: 'Act One', maxlength: '120' });
-  const summary = textarea({ rows: 3 });
-  const objectives = textarea({ rows: 3 });
-  const viewpoint = select(
-    [{ value: '', label: 'No viewpoint set' }, ...state.details.characters.map((character) => ({ value: String(character.id), label: character.name }))],
-    { value: '' }
-  );
-  const target = input({ type: 'number', min: '0', max: '100000', step: '500', value: '2500' });
+  const content = textarea({
+    rows: 12,
+    class: 'textarea chapter-text',
+    placeholder: 'Paste the full chapter here, or leave empty to draft it with AI later.',
+  });
 
   const form = el(
     'form',
     { class: 'form-grid' },
     el('div', { class: 'span-2' }, field('Chapter title', title)),
-    field('Part or act', part),
-    field('Viewpoint character', viewpoint),
-    field('Target words', target),
-    el('div', { class: 'span-2' }, field('Summary', summary)),
-    el('div', { class: 'span-2' }, field('Objectives and required developments', objectives)),
+    el('div', { class: 'span-2' }, field('Chapter text', content)),
     el(
       'div',
       { class: 'form-actions span-2' },
       el('button', { class: 'btn btn-primary', type: 'submit' }, 'Add chapter'),
       el('button', { class: 'btn btn-ghost', type: 'button', onClick: closeModal }, 'Cancel')
+    ),
+    el(
+      'p',
+      { class: 'hint span-2' },
+      'Pasted text is saved as a pre-written chapter. Novellire counts its words and never rewrites it.'
     )
   );
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
     try {
-      const created = await api.post(`/api/projects/${projectId}/chapters`, {
+      const pasted = content.value.trim();
+      const created = await api.post(`/api/projects/${ctx.state.activeProjectId}/chapters`, {
         title: title.value,
-        part: part.value,
-        summary: summary.value,
-        objectives: objectives.value,
-        viewpoint_character_id: viewpoint.value ? Number(viewpoint.value) : null,
-        target_word_count: Number(target.value) || null,
+        content: content.value,
+        origin: pasted ? 'imported' : 'written',
       });
+      ctx.state.workspaceType = 'chapters';
       ctx.state.selectedId = created.id;
-      ctx.state.selectedSceneId = null;
       closeModal();
       await ctx.refresh();
       syncHash(`#/workspace/chapters/${created.id}`);
       toast('Chapter added.', 'success');
     } catch (error) {
       toast(error.message, 'error');
+      button.disabled = false;
     }
   });
 
-  openModal({ title: 'New chapter', body: form });
-}
-
-function openSceneCreateDialog(ctx, chapterId) {
-  const { state } = ctx;
-  const title = input({ placeholder: 'Approach', maxlength: '200' });
-  const summary = textarea({ rows: 2 });
-  const objectives = textarea({ rows: 2 });
-  const content = textarea({ rows: 6, placeholder: 'Optional starting prose.' });
-  const status = select(
-    state.meta.work_statuses.map((item) => ({ value: item.key, label: item.label })),
-    { value: 'planned' }
-  );
-
-  const form = el(
-    'form',
-    { class: 'form-grid' },
-    el('div', { class: 'span-2' }, field('Scene title', title)),
-    field('Status', status),
-    field('Summary', summary),
-    el('div', { class: 'span-2' }, field('Objectives', objectives)),
-    el('div', { class: 'span-2' }, field('Starting text', content)),
-    el(
-      'div',
-      { class: 'form-actions span-2' },
-      el('button', { class: 'btn btn-primary', type: 'submit' }, 'Add scene'),
-      el('button', { class: 'btn btn-ghost', type: 'button', onClick: closeModal }, 'Cancel')
-    )
-  );
-
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    try {
-      const created = await api.post(`/api/chapters/${chapterId}/scenes`, {
-        title: title.value,
-        summary: summary.value,
-        objectives: objectives.value,
-        content: content.value,
-        status: status.value,
-      });
-      ctx.state.selectedSceneId = created.id;
-      closeModal();
-      await ctx.refresh();
-      toast('Scene added.', 'success');
-    } catch (error) {
-      toast(error.message, 'error');
-    }
-  });
-
-  openModal({ title: 'New scene', body: form });
+  openModal({ title: 'Add chapter', body: form, wide: true });
 }
 
 /* -- generation ----------------------------------------------------------- */
 
-function openGenerateDialog(ctx, chapter, scene) {
-  const { state } = ctx;
+function openGenerateDialog(ctx, chapter) {
+  const state = ctx.state;
   const models = (state.ollama?.models || []).map((model) => model.name);
   const saved = state.settings.generation;
   const preferred = models.includes(saved.model) ? saved.model : models[0] || '';
 
+  const instructions = textarea({
+    rows: 4,
+    placeholder: 'What happens in this chapter? Who changes, and what must be true by the end?',
+  });
+  const targetWords = input({ type: 'number', min: '200', max: '6000', step: '50', value: '1200' });
+  const notes = textarea({ rows: 2, placeholder: 'Anything the model must honour.' });
   const model = select(
     models.length
       ? models.map((name) => ({ value: name, label: name }))
       : [{ value: '', label: 'No models installed' }],
     { value: preferred }
   );
-  const instructions = textarea({
-    rows: 4,
-    placeholder: 'What happens in this scene? Who is present, what changes, what must be true by the end?',
-  });
-  const targetWords = input({ type: 'number', min: '200', max: '2000', step: '50', value: '900' });
-  const notes = textarea({ rows: 2, placeholder: 'Details the model must honour: names, objects, prior events.' });
   const temperature = input({ type: 'range', min: '0', max: '2', step: '0.05', value: String(saved.temperature) });
   const temperatureValue = el('span', { class: 'chip' }, Number(saved.temperature).toFixed(2));
   temperature.addEventListener('input', () => { temperatureValue.textContent = Number(temperature.value).toFixed(2); });
-  const topP = input({ type: 'range', min: '0.05', max: '1', step: '0.05', value: String(saved.top_p) });
-  const topPValue = el('span', { class: 'chip' }, Number(saved.top_p).toFixed(2));
-  topP.addEventListener('input', () => { topPValue.textContent = Number(topP.value).toFixed(2); });
   const numPredict = input({ type: 'number', min: '32', max: '8192', step: '1', value: String(saved.num_predict) });
-  const contextWindow = select([2048, 4096, 8192].map((value) => ({ value: String(value), label: `${value} tokens` })), { value: String(saved.context_window) });
-
-  const submit = el(
-    'button',
-    { class: 'btn btn-primary', type: 'submit' },
-    icon('wand'),
-    'Generate'
+  const contextWindow = select(
+    [2048, 4096, 8192].map((value) => ({ value: String(value), label: `${value} tokens` })),
+    { value: String(saved.context_window) }
   );
+
+  const submit = el('button', { class: 'btn btn-primary', type: 'submit' }, icon('wand'), 'Generate');
   if (!preferred) {
     submit.disabled = true;
     submit.title = 'Install a model first';
@@ -796,7 +531,6 @@ function openGenerateDialog(ctx, chapter, scene) {
         'div',
         { class: 'form-grid', style: { marginTop: '10px' } },
         el('div', { class: 'field' }, el('label', { class: 'label' }, 'Temperature'), el('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } }, temperature, temperatureValue)),
-        el('div', { class: 'field' }, el('label', { class: 'label' }, 'Top-p'), el('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } }, topP, topPValue)),
         field('Maximum output tokens', numPredict),
         field('Context window', contextWindow)
       )
@@ -806,42 +540,38 @@ function openGenerateDialog(ctx, chapter, scene) {
       { class: 'form-actions span-2' },
       submit,
       el('button', { class: 'btn btn-ghost', type: 'button', onClick: closeModal }, 'Cancel'),
-      !models.length
-        ? el('span', { class: 'chip warn' }, 'Start Ollama and pull a model')
-        : el('span', { class: 'hint' }, 'One model runs at a time.')
+      !models.length ? el('span', { class: 'chip warn' }, 'Start Ollama and pull a model') : null
     )
   );
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     submit.disabled = true;
-    submit.replaceChildren(icon('refresh'), 'Generating…');
+    submit.replaceChildren(icon('refresh'), 'Writing…');
     try {
       const record = await api.post(`/api/projects/${state.activeProjectId}/generate`, {
         instructions: instructions.value,
         model: model.value,
         temperature: Number(temperature.value),
-        top_p: Number(topP.value),
+        top_p: Number(saved.top_p),
         num_predict: Number(numPredict.value),
         context_window: Number(contextWindow.value),
         target_words: Number(targetWords.value),
         chapter_title: chapter.title,
-        scene_title: scene.title,
         context_notes: notes.value,
         chapter_id: chapter.id,
-        scene_id: scene.id,
       });
       api
         .put('/api/settings/generation', {
           model: model.value,
           temperature: Number(temperature.value),
-          top_p: Number(topP.value),
+          top_p: Number(saved.top_p),
           num_predict: Number(numPredict.value),
           context_window: Number(contextWindow.value),
         })
         .then((settings) => { state.settings.generation = settings; })
         .catch(() => {});
-      showGenerationResult(ctx, record, scene);
+      showDraft(ctx, record, chapter);
     } catch (error) {
       toast(error.message, 'error');
       submit.disabled = false;
@@ -849,40 +579,14 @@ function openGenerateDialog(ctx, chapter, scene) {
     }
   });
 
-  openModal({ title: `Generate — ${scene.title || 'scene'}`, body: form, wide: true });
+  openModal({ title: `Draft chapter ${chapter.position}`, body: form, wide: true });
 }
 
-function showGenerationResult(ctx, record, scene) {
-  const existing = scene.content || '';
-  const output = textarea({ value: record.output, rows: 16, class: 'textarea prose' });
+function showDraft(ctx, record, chapter) {
+  const existing = chapter.content || '';
+  const output = textarea({ value: record.output, rows: 16, class: 'textarea chapter-text' });
   const append = input({ type: 'checkbox' });
   append.checked = Boolean(existing);
-
-  const seconds = (record.duration_ms / 1000).toFixed(1);
-  const body = [
-    el(
-      'div',
-      { class: 'editor-toolbar' },
-      el(
-        'div',
-        { class: 'left' },
-        el('span', { class: 'chip accent' }, record.model),
-        el('span', { class: 'chip' }, `${count(record.word_count)} words`),
-        el('span', { class: 'chip' }, `${seconds}s`),
-        record.truncated ? el('span', { class: 'chip warn' }, 'Hit output limit') : null
-      ),
-      el('span', { class: 'hint' }, 'Edit before inserting if needed. The saved generation log is immutable.')
-    ),
-    output,
-    existing
-      ? el(
-          'label',
-          { class: 'hint', style: { display: 'flex', gap: '8px', alignItems: 'center' } },
-          append,
-          'Append to existing scene text (otherwise replaces it)'
-        )
-      : null,
-  ];
 
   const insert = el(
     'button',
@@ -897,11 +601,12 @@ function showGenerationResult(ctx, record, scene) {
         }
         insert.disabled = true;
         try {
-          const next = append.checked && existing ? `${existing}\n\n${text}` : text;
-          await api.patch(`/api/scenes/${scene.id}`, { content: next });
+          await api.patch(`/api/chapters/${chapter.id}`, {
+            content: append.checked && existing ? `${existing}\n\n${text}` : text,
+          });
           closeModal();
           await ctx.refresh();
-          toast('Draft inserted into the scene.', 'success');
+          toast('Draft inserted into the chapter.', 'success');
         } catch (error) {
           toast(error.message, 'error');
           insert.disabled = false;
@@ -909,31 +614,53 @@ function showGenerationResult(ctx, record, scene) {
       },
     },
     icon('check'),
-    'Insert into scene'
+    'Insert into chapter'
   );
 
   openModal({
     title: 'Generated draft',
-    body,
+    body: [
+      el(
+        'div',
+        { class: 'editor-toolbar' },
+        el(
+          'div',
+          { class: 'left' },
+          el('span', { class: 'chip accent' }, record.model),
+          el('span', { class: 'chip' }, `${count(record.word_count)} words`),
+          record.truncated ? el('span', { class: 'chip warn' }, 'Hit output limit') : null,
+          record.style_guide_inferred ? el('span', { class: 'chip ok' }, 'Style guide learned') : null
+        ),
+        el('span', { class: 'hint' }, 'Edit before inserting if needed.')
+      ),
+      output,
+      existing
+        ? el(
+            'label',
+            { class: 'hint', style: { display: 'flex', gap: '8px', alignItems: 'center' } },
+            append,
+            'Append to the existing chapter text (otherwise replaces it)'
+          )
+        : null,
+    ],
     wide: true,
     footer: [
-      el('button', { class: 'btn btn-ghost', type: 'button', onClick: () => copyText(output.value) }, icon('copy'), 'Copy'),
       el('button', { class: 'btn btn-ghost', type: 'button', onClick: closeModal }, 'Close'),
       insert,
     ],
   });
 }
 
-/* -- shared --------------------------------------------------------------- */
+/* -- helpers -------------------------------------------------------------- */
 
-function openCreateDialog(ctx, type, projectId) {
-  if (type === 'bible') return openBibleCreateDialog(ctx, projectId);
-  if (type === 'characters') return openCharacterCreateDialog(ctx, projectId);
-  return openChapterCreateDialog(ctx, projectId);
+function wordsLabel(text) {
+  const total = countWords(text);
+  return total ? `${count(total)} words` : 'Empty';
 }
 
-function categoryLabel(state, key) {
-  return (state.meta?.bible_categories || []).find((item) => item.key === key)?.label || key;
+function countWords(text) {
+  const trimmed = String(text || '').trim();
+  return trimmed ? trimmed.split(/\s+/).length : 0;
 }
 
 function syncHash(hash) {

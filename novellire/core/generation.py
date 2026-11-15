@@ -24,6 +24,13 @@ logger = get_logger("core.generation")
 DEFAULT_TARGET_WORDS = 900
 MIN_TARGET_WORDS = 50
 MAX_TARGET_WORDS = 6000
+DOCUMENT_CHAR_LIMIT = 2_500
+WORKSPACE_DOCUMENT_KINDS = (
+    "master_bible",
+    "character_bible",
+    "chapter_map",
+    "style_guide",
+)
 
 
 @dataclass(frozen=True)
@@ -67,6 +74,7 @@ class GenerationService:
         scene_title: str = "",
         context_notes: str = "",
         target_words: int | None = None,
+        workspace_context: dict[str, str] | None = None,
     ) -> GenerationOutcome:
         project = self._projects.get(project_id)
         if project is None:
@@ -94,6 +102,7 @@ class GenerationService:
                 f"{MAX_TARGET_WORDS} words for a single scene."
             )
 
+        documents = workspace_context or {}
         system_prompt, user_prompt = build_writing_prompt(
             project_name=project.name,
             genre=project.genre,
@@ -103,6 +112,10 @@ class GenerationService:
             chapter_title=(chapter_title or "").strip(),
             scene_title=(scene_title or "").strip(),
             context_notes=(context_notes or "").strip(),
+            **{
+                kind: _clip(documents.get(kind, ""))
+                for kind in WORKSPACE_DOCUMENT_KINDS
+            },
         )
 
         request = GenerationRequest(
@@ -186,3 +199,8 @@ class GenerationService:
             request.model,
             duration_ms,
         )
+
+
+def _clip(text: str) -> str:
+    """Keep prompt context small enough for CPU inference."""
+    return (text or "")[:DOCUMENT_CHAR_LIMIT]

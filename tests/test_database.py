@@ -11,6 +11,7 @@ from novellire.errors import DatabaseError
 from novellire.storage.database import Database
 from novellire.storage.repositories import ProjectRepository
 from novellire.storage.schema import LATEST_SCHEMA_VERSION, MIGRATIONS
+from novellire.storage.story_repositories import ChapterRepository
 
 
 def test_initialize_applies_migrations(database: Database) -> None:
@@ -83,6 +84,49 @@ def test_data_directory_is_created(tmp_path: Path) -> None:
     assert db.path.is_file()
 
 
+def test_migration_3_backfills_chapter_content(tmp_path: Path) -> None:
+    """A Phase 2 database keeps its scene prose as chapter text."""
+    path = tmp_path / "legacy-v2.db"
+    connection = sqlite3.connect(path)
+    connection.execute(
+        "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
+    )
+    for version, statements in MIGRATIONS[:2]:
+        for statement in statements:
+            connection.execute(statement)
+        connection.execute(
+            "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+            (version, "2026-01-01T00:00:00+00:00"),
+        )
+    stamp = "2026-01-01T00:00:00+00:00"
+    connection.execute(
+        "INSERT INTO projects (name, created_at, updated_at) VALUES (?, ?, ?)",
+        ("Legacy", stamp, stamp),
+    )
+    connection.execute(
+        "INSERT INTO chapters (project_id, position, title, created_at, updated_at) "
+        "VALUES (1, 1, 'One', ?, ?)",
+        (stamp, stamp),
+    )
+    for position, text, words in ((1, "First line.", 2), (2, "Second line.", 2)):
+        connection.execute(
+            "INSERT INTO scenes (chapter_id, position, content, word_count, "
+            "created_at, updated_at) VALUES (1, ?, ?, ?, ?, ?)",
+            (position, text, words, stamp, stamp),
+        )
+    connection.commit()
+    connection.close()
+
+    database = Database(path)
+    database.initialize()
+
+    chapter = ChapterRepository(database).list_for_project(1)[0]
+    assert chapter.content == "First line.\n\nSecond line."
+    assert chapter.word_count == 4
+    assert chapter.origin == "written"
+    assert database.schema_version() == LATEST_SCHEMA_VERSION == 3
+
+
 def test_migration_2_upgrades_an_existing_v1_database(tmp_path: Path) -> None:
     """A Phase 1 database keeps its data and gains the Phase 2 tables."""
     path = tmp_path / "legacy.db"
@@ -106,7 +150,7 @@ def test_migration_2_upgrades_an_existing_v1_database(tmp_path: Path) -> None:
     database = Database(path)
     database.initialize()
 
-    assert database.schema_version() == LATEST_SCHEMA_VERSION == 2
+    assert database.schema_version() == LATEST_SCHEMA_VERSION == 3
     assert [project.name for project in ProjectRepository(database).list()] == [
         "Legacy"
     ]

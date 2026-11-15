@@ -41,15 +41,16 @@ export const state = {
   activeProjectId: null,
   tree: null,
   manuscript: null,
-  details: { bible: [], characters: [] },
+  documents: [],
   settings: null,
   ollama: null,
   route: { name: 'projects', a: null, b: null },
-  workspaceType: 'chapters',
+  workspaceType: 'docs',
+  selectedDoc: 'master_bible',
   selectedId: null,
   selectedSceneId: null,
   previewChapterId: null,
-  filesOpen: { bible: true, characters: true, chapters: true },
+  filesOpen: { documents: true, chapters: true },
   loading: true,
 };
 
@@ -95,8 +96,13 @@ function parseHash() {
 function applyRouteDefaults() {
   const { route } = state;
   if (route.name === 'workspace') {
-    if (['bible', 'characters', 'chapters'].includes(route.a)) state.workspaceType = route.a;
-    if (route.b) state.selectedId = Number(route.b);
+    if (route.a === 'chapters') {
+      state.workspaceType = 'chapters';
+      if (route.b) state.selectedId = Number(route.b);
+    } else if (route.a === 'docs') {
+      state.workspaceType = 'docs';
+      if (route.b) state.selectedDoc = route.b;
+    }
   }
   if (route.name === 'preview' && route.a) state.previewChapterId = Number(route.a);
 }
@@ -105,25 +111,24 @@ async function loadProjectData() {
   if (!state.activeProjectId) {
     state.tree = null;
     state.manuscript = null;
-    state.details = { bible: [], characters: [] };
+    state.documents = [];
     return;
   }
   try {
-    const [tree, manuscript, bible, characters] = await Promise.all([
+    const [tree, manuscript, documents] = await Promise.all([
       api.get(`/api/projects/${state.activeProjectId}/tree`),
       api.get(`/api/projects/${state.activeProjectId}/manuscript`),
-      api.get(`/api/projects/${state.activeProjectId}/bible`),
-      api.get(`/api/projects/${state.activeProjectId}/characters`),
+      api.get(`/api/projects/${state.activeProjectId}/documents`),
     ]);
     state.tree = tree;
     state.manuscript = manuscript;
-    state.details = { bible, characters };
+    state.documents = documents;
   } catch (error) {
     if (error.status === 404) {
       state.activeProjectId = null;
       state.tree = null;
       state.manuscript = null;
-      state.details = { bible: [], characters: [] };
+      state.documents = [];
       await refreshProjects();
     } else {
       toast(error.message, 'error');
@@ -158,6 +163,8 @@ async function selectProject(projectId) {
     await api.post(`/api/projects/${projectId}/activate`, {});
     state.activeProjectId = projectId;
     state.selectedId = null;
+    state.selectedDoc = 'master_bible';
+    state.workspaceType = 'docs';
     state.selectedSceneId = null;
     state.previewChapterId = null;
     await Promise.all([refreshProjects(), loadProjectData()]);
@@ -334,12 +341,8 @@ function renderNav() {
   }
 }
 
-function categoryLabel(key) {
-  return (state.meta?.bible_categories || []).find((item) => item.key === key)?.label || key;
-}
-
-function treeGroup(label, type, items, iconName) {
-  const open = state.filesOpen[type];
+function treeGroup(label, key, items, renderItem) {
+  const open = state.filesOpen[key];
   const group = el('div', { class: 'tree-group' });
   group.append(
     el(
@@ -349,7 +352,7 @@ function treeGroup(label, type, items, iconName) {
         type: 'button',
         'aria-expanded': open ? 'true' : 'false',
         onClick: () => {
-          state.filesOpen[type] = !state.filesOpen[type];
+          state.filesOpen[key] = !state.filesOpen[key];
           renderFileTree();
         },
       },
@@ -362,26 +365,7 @@ function treeGroup(label, type, items, iconName) {
     group.append(el('div', { class: 'tree-empty' }, `No ${label.toLowerCase()} yet`));
     return group;
   }
-  for (const item of items) {
-    group.append(
-      el(
-        'a',
-        {
-          class: 'tree-item',
-          href: `#/workspace/${type}/${item.id}`,
-          'aria-current':
-            state.route.name === 'workspace' &&
-            state.workspaceType === type &&
-            Number(state.selectedId) === item.id
-              ? 'true'
-              : undefined,
-        },
-        icon(iconName, 'icon sm'),
-        el('span', { class: 'label' }, item.title),
-        item.meta ? el('span', { class: 'meta' }, item.meta) : null
-      )
-    );
-  }
+  for (const item of items) group.append(renderItem(item));
   return group;
 }
 
@@ -393,36 +377,56 @@ function renderFileTree() {
     host.append(el('div', { class: 'tree-empty' }, 'Select a project'));
     return;
   }
+
+  const documents = state.documents || [];
   host.append(
     treeGroup(
-      'Story bible',
-      'bible',
-      state.tree.bible.map((entry) => ({
-        id: entry.id,
-        title: entry.title,
-        meta: categoryLabel(entry.category),
-      })),
-      'file'
+      'Documents',
+      'documents',
+      documents,
+      (document) => {
+        const active =
+          state.route.name === 'workspace' &&
+          state.workspaceType === 'docs' &&
+          state.selectedDoc === document.kind;
+        return el(
+          'a',
+          {
+            class: 'tree-item',
+            href: `#/workspace/docs/${document.kind}`,
+            'aria-current': active ? 'true' : undefined,
+          },
+          icon(document.kind === 'character_bible' ? 'user' : document.kind === 'chapter_map' ? 'layers' : 'file', 'icon sm'),
+          el('span', { class: 'label' }, document.title),
+          document.derived ? el('span', { class: 'meta' }, 'Learned') : null
+        );
+      }
     )
   );
-  host.append(
-    treeGroup(
-      'Characters',
-      'characters',
-      state.tree.characters.map((character) => ({ id: character.id, title: character.name })),
-      'user'
-    )
-  );
+
+  const chapters = state.manuscript?.chapters || [];
   host.append(
     treeGroup(
       'Chapters',
       'chapters',
-      state.tree.chapters.map((chapter) => ({
-        id: chapter.id,
-        title: `${chapter.position}. ${chapter.title}`,
-        meta: `${chapter.scenes.length}`,
-      })),
-      'file'
+      chapters,
+      (chapter) => {
+        const active =
+          state.route.name === 'workspace' &&
+          state.workspaceType === 'chapters' &&
+          Number(state.selectedId) === chapter.id;
+        return el(
+          'a',
+          {
+            class: 'tree-item',
+            href: `#/workspace/chapters/${chapter.id}`,
+            'aria-current': active ? 'true' : undefined,
+          },
+          icon('file', 'icon sm'),
+          el('span', { class: 'label' }, `${chapter.position}. ${chapter.title}`),
+          el('span', { class: 'meta' }, `${count(chapter.word_count)}w`)
+        );
+      }
     )
   );
 }

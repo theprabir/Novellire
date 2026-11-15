@@ -42,8 +42,8 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
     payload = client.get("/api/health").json()
 
     assert payload["status"] == "ok"
-    assert payload["schema_version"] == 2
-    assert payload["version"] == "0.2.1"
+    assert payload["schema_version"] == 3
+    assert payload["version"] == "0.2.2"
 
 
 def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:
@@ -53,6 +53,14 @@ def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:
     assert any(item["key"] == "approved" for item in payload["work_statuses"])
     assert any(item["key"] == "character_arc" for item in payload["character_fields"])
     assert "violet" in payload["appearance_options"]["accents"]
+    kinds = [item["kind"] for item in payload["workspace_documents"]]
+    assert kinds == [
+        "master_bible",
+        "character_bible",
+        "chapter_map",
+        "style_guide",
+    ]
+    assert "Complete storyline" in payload["workspace_documents"][0]["placeholder"]
 
 
 def test_project_creation_sets_active_project(client: TestClient) -> None:
@@ -78,61 +86,186 @@ def test_project_validation_error_is_reported(client: TestClient) -> None:
     assert "required" in response.json()["detail"].lower()
 
 
-def test_tree_reports_structure_and_stats(client: TestClient) -> None:
+def test_tree_reports_documents_and_chapter_stats(client: TestClient) -> None:
     project = create_project(client)
-    character = client.post(
-        f"/api/projects/{project['id']}/characters",
-        json={"name": "Mira Voss", "aliases": ["M", "the Courier"]},
-    ).json()
-    chapter = client.post(
+    client.post(
         f"/api/projects/{project['id']}/chapters",
         json={
             "title": "The Sealed Vault",
-            "viewpoint_character_id": character["id"],
-            "target_word_count": 2_500,
+            "content": "Mira crossed the empty square.",
+            "origin": "imported",
         },
-    ).json()
-    client.post(
-        f"/api/chapters/{chapter['id']}/scenes",
-        json={"title": "Approach", "content": "Mira crossed the empty square."},
-    )
-    client.post(
-        f"/api/projects/{project['id']}/bible",
-        json={"category": "premise", "title": "The dying star", "content": "..."},
     )
 
     tree = client.get(f"/api/projects/{project['id']}/tree").json()
 
-    assert tree["stats"] == {
-        "words": 5,
-        "chapters": 1,
-        "scenes": 1,
-        "characters": 1,
-        "bible_entries": 1,
-    }
+    assert tree["stats"] == {"words": 5, "chapters": 1}
     assert tree["chapters"][0]["title"] == "The Sealed Vault"
-    assert tree["chapters"][0]["scenes"][0]["word_count"] == 5
-    assert tree["characters"][0]["aliases"] == ["M", "the Courier"]
+    assert tree["chapters"][0]["word_count"] == 5
+    assert tree["chapters"][0]["origin"] == "imported"
+
+    documents = client.get(f"/api/projects/{project['id']}/documents").json()
+    assert [document["kind"] for document in documents] == [
+        "master_bible",
+        "character_bible",
+        "chapter_map",
+        "style_guide",
+    ]
+    assert all(document["content"] == "" for document in documents)
 
 
-def test_manuscript_returns_ordered_prose(client: TestClient) -> None:
+def test_manuscript_returns_ordered_chapters(client: TestClient) -> None:
     project = create_project(client)
-    chapter = client.post(
-        f"/api/projects/{project['id']}/chapters", json={"title": "The Vault"}
-    ).json()
-    for title, text in (("Approach", "First scene text."), ("Descent", "Second scene text.")):
+    for title, text in (("One", "First chapter."), ("Two", "Second chapter text.")):
         client.post(
-            f"/api/chapters/{chapter['id']}/scenes",
+            f"/api/projects/{project['id']}/chapters",
             json={"title": title, "content": text},
         )
 
     manuscript = client.get(f"/api/projects/{project['id']}/manuscript").json()
 
-    assert [scene["title"] for scene in manuscript["chapters"][0]["scenes"]] == [
-        "Approach",
-        "Descent",
-    ]
-    assert manuscript["chapters"][0]["word_count"] == 6
+    assert [chapter["title"] for chapter in manuscript["chapters"]] == ["One", "Two"]
+    assert manuscript["chapters"][0]["content"] == "First chapter."
+    assert manuscript["chapters"][1]["word_count"] == 3
+
+
+def test_documents_save_and_reload(client: TestClient) -> None:
+    project = create_project(client)
+
+    saved = client.put(
+        f"/api/projects/{project['id']}/documents/master_bible",
+        json={"content": "The star is dimming, not dying."},
+    )
+    assert saved.status_code == 200
+    assert saved.json()["derived"] is False
+
+    documents = {
+        document["kind"]: document
+        for document in client.get(f"/api/projects/{project['id']}/documents").json()
+    }
+    assert documents["master_bible"]["content"] == "The star is dimming, not dying."
+    assert documents["style_guide"]["content"] == ""
+
+    unknown = client.put(
+        f"/api/projects/{project['id']}/documents/not_a_document",
+        json={"content": "x"},
+    )
+    assert unknown.status_code == 400
+
+
+def test_imported_chapter_counts_words_and_rejects_ai_writes(
+    client: TestClient,
+) -> None:
+    project = create_project(client)
+    chapter = client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={
+            "title": "Pasted opening",
+            "content": "Already written prose lives here.",
+            "origin": "imported",
+        },
+    ).json()
+
+    assert chapter["origin"] == "imported"
+    assert chapter["word_count"] == 5
+    assert chapter["status"] == "drafted"
+
+    blocked = client.post(
+        f"/api/projects/{project['id']}/generate",
+        json={
+            "instructions": "Continue this chapter.",
+            "model": "fake-model",
+            "chapter_id": chapter["id"],
+        },
+    )
+    assert blocked.status_code == 400
+    assert "pre-written" in blocked.json()["detail"]
+
+
+def test_chapter_content_update_recounts_words(client: TestClient) -> None:
+    project = create_project(client)
+    chapter = client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={"title": "Draft"},
+    ).json()
+
+    updated = client.patch(
+        f"/api/chapters/{chapter['id']}",
+        json={"content": "Four words in this line."},
+    ).json()
+
+    assert updated["word_count"] == 5
+    assert updated["origin"] == "written"
+
+
+def test_style_guide_analysis_reads_the_manuscript(client: TestClient) -> None:
+    project = create_project(client)
+    client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={"title": "Opening", "content": "The ash fell, warm and grey."},
+    )
+
+    response = client.post(
+        f"/api/projects/{project['id']}/style-guide/analyze",
+        json={"model": "fake-model"},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["derived"] is True
+    assert payload["content"].strip()
+
+    documents = {
+        document["kind"]: document
+        for document in client.get(f"/api/projects/{project['id']}/documents").json()
+    }
+    assert documents["style_guide"]["content"] == payload["content"]
+    assert documents["style_guide"]["derived"] is True
+
+
+def test_generation_learns_the_style_guide_first(
+    client: TestClient, fake_provider
+) -> None:
+    project = create_project(client)
+    client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={"title": "Opening", "content": "The ash fell, warm and grey."},
+    )
+
+    response = client.post(
+        f"/api/projects/{project['id']}/generate",
+        json={"instructions": "Write the next beat.", "model": "fake-model"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["style_guide_inferred"] is True
+    assert len(fake_provider.requests) == 2
+
+    documents = {
+        document["kind"]: document
+        for document in client.get(f"/api/projects/{project['id']}/documents").json()
+    }
+    assert documents["style_guide"]["derived"] is True
+    assert "style guide" in fake_provider.requests[1].prompt.lower()
+
+
+def test_generation_prompt_includes_workspace_documents(
+    client: TestClient, fake_provider
+) -> None:
+    project = create_project(client)
+    client.put(
+        f"/api/projects/{project['id']}/documents/master_bible",
+        json={"content": "The city lies beneath a dimming star."},
+    )
+
+    client.post(
+        f"/api/projects/{project['id']}/generate",
+        json={"instructions": "Write the next beat.", "model": "fake-model"},
+    )
+
+    prompt = fake_provider.requests[0].prompt
+    assert "The city lies beneath a dimming star." in prompt
+    assert "Master story bible" in prompt
 
 
 def test_story_bible_update_and_scoping(client: TestClient) -> None:

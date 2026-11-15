@@ -25,7 +25,8 @@ _CHARACTER_COLUMNS = (
 
 _CHAPTER_COLUMNS = (
     "id, project_id, position, title, part, summary, objectives, "
-    "viewpoint_character_id, target_word_count, status, created_at, updated_at"
+    "viewpoint_character_id, target_word_count, status, created_at, updated_at, "
+    "content, word_count, origin"
 )
 
 _SCENE_COLUMNS = (
@@ -59,6 +60,8 @@ _CHAPTER_UPDATE_FIELDS = frozenset(
         "viewpoint_character_id",
         "target_word_count",
         "status",
+        "content",
+        "word_count",
     }
 )
 _SCENE_UPDATE_FIELDS = frozenset(
@@ -112,6 +115,9 @@ class ChapterRecord:
     status: str
     created_at: str
     updated_at: str
+    content: str = ""
+    word_count: int = 0
+    origin: str = "written"
 
 
 @dataclass(frozen=True)
@@ -181,6 +187,9 @@ def _row_to_chapter(row: sqlite3.Row) -> ChapterRecord:
         status=str(row["status"]),
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
+        content=str(row["content"]),
+        word_count=int(row["word_count"]),
+        origin=str(row["origin"]),
     )
 
 
@@ -440,6 +449,9 @@ class ChapterRepository:
         viewpoint_character_id: int | None = None,
         target_word_count: int | None = None,
         status: str = "planned",
+        content: str = "",
+        word_count: int = 0,
+        origin: str = "written",
     ) -> ChapterRecord:
         now = utc_now_iso()
         with self._database.transaction() as connection:
@@ -455,8 +467,8 @@ class ChapterRepository:
                     INSERT INTO chapters
                         (project_id, position, title, part, summary, objectives,
                          viewpoint_character_id, target_word_count, status,
-                         created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         created_at, updated_at, content, word_count, origin)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         project_id,
@@ -470,6 +482,9 @@ class ChapterRepository:
                         status,
                         now,
                         now,
+                        content,
+                        word_count,
+                        origin,
                     ),
                 )
             except sqlite3.IntegrityError as exc:

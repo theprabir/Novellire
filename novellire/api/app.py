@@ -21,6 +21,7 @@ from ..config import Settings, load_settings
 from ..core.chapters import ChapterService
 from ..core.characters import FIELD_LABELS as CHARACTER_FIELD_LABELS
 from ..core.characters import PROFILE_FIELDS, CharacterService
+from ..core.documents import ProjectDocumentService, WORKSPACE_DOCUMENTS
 from ..core.generation import GenerationService
 from ..core.projects import ProjectService
 from ..core.scenes import SceneService
@@ -38,10 +39,12 @@ from ..core.story_bible import (
     STORY_BIBLE_CATEGORIES,
     StoryBibleService,
 )
+from ..core.style_guide import StyleGuideService
 from ..core.work_status import WORK_STATUSES, WORK_STATUS_LABELS
 from ..errors import (
     DuplicateEntryError,
     DuplicateProjectError,
+    InvalidInputError,
     LLMError,
     NovellireError,
     ProjectNotFoundError,
@@ -51,6 +54,7 @@ from ..llm.base import LLMProvider
 from ..llm.ollama import OllamaProvider
 from ..logging_setup import configure_logging
 from ..storage.database import Database
+from ..storage.document_repository import DocumentRepository
 from ..storage.repositories import (
     AppSettingsRepository,
     GenerationRecord,
@@ -142,6 +146,8 @@ class ChapterCreateRequest(BaseModel):
     viewpoint_character_id: int | None = None
     target_word_count: int | None = None
     status: str = "planned"
+    content: str = ""
+    origin: Literal["written", "imported"] = "written"
 
 
 class ChapterUpdateRequest(BaseModel):
@@ -152,6 +158,20 @@ class ChapterUpdateRequest(BaseModel):
     status: str | None = None
     viewpoint_character_id: int | None = None
     target_word_count: int | None = None
+    content: str | None = None
+
+
+class DocumentUpdateRequest(BaseModel):
+    content: str = ""
+
+
+class StyleGuideRequest(BaseModel):
+    model: str = ""
+    temperature: float = Field(default=0.3, ge=0.0, le=2.0)
+    top_p: float = Field(default=0.9, gt=0.0, le=1.0)
+    num_predict: int = Field(default=900, ge=32, le=8192)
+    context_window: int = Field(default=4096, ge=512, le=32768)
+    force: bool = False
 
 
 class SceneCreateRequest(BaseModel):
@@ -201,6 +221,8 @@ class ApiServices:
     characters: CharacterService
     chapters: ChapterService
     scenes: SceneService
+    documents: ProjectDocumentService
+    style_guide: StyleGuideService
     generations: GenerationRepository
 
 
@@ -211,6 +233,12 @@ def build_services(
     generation_repository = GenerationRepository(database)
     character_repository = CharacterRepository(database)
     chapter_repository = ChapterRepository(database)
+    chapter_service = ChapterService(
+        chapter_repository, project_repository, character_repository
+    )
+    document_service = ProjectDocumentService(
+        DocumentRepository(database), project_repository
+    )
 
     return ApiServices(
         settings=settings,
@@ -226,10 +254,12 @@ def build_services(
         ),
         story_bible=StoryBibleService(StoryBibleRepository(database), project_repository),
         characters=CharacterService(character_repository, project_repository),
-        chapters=ChapterService(
-            chapter_repository, project_repository, character_repository
-        ),
+        chapters=chapter_service,
         scenes=SceneService(SceneRepository(database), chapter_repository),
+        documents=document_service,
+        style_guide=StyleGuideService(
+            provider, project_repository, chapter_service, document_service
+        ),
         generations=generation_repository,
     )
 
@@ -368,6 +398,15 @@ def _build_router(services: ApiServices) -> APIRouter:
                 "reading_fonts": list(READING_FONTS),
                 "reading_widths": list(READING_WIDTHS),
             },
+            "workspace_documents": [
+                {
+                    "kind": item.kind,
+                    "title": item.title,
+                    "summary": item.summary,
+                    "placeholder": item.placeholder,
+                }
+                for item in WORKSPACE_DOCUMENTS
+            ],
         }
 
     @router.get("/settings")
@@ -479,80 +518,80 @@ def _build_router(services: ApiServices) -> APIRouter:
     @router.get("/projects/{project_id}/tree")
     def project_tree(project_id: int) -> dict[str, Any]:
         project = services.projects.require_project(project_id)
-        bible = [
-            {
-                "id": entry.id,
-                "title": entry.title,
-                "category": entry.category,
-            }
-            for entry in services.story_bible.list_entries(project_id)
-        ]
-        characters = [
-            {"id": character.id, "name": character.name, "aliases": list(character.aliases)}
-            for character in services.characters.list_characters(project_id)
-        ]
-
         chapters = []
         total_words = 0
-        scene_count = 0
         for chapter in services.chapters.list_chapters(project_id):
-            scenes = []
-            for scene in services.scenes.list_scenes(chapter.id):
-                scenes.append(
-                    {
-                        "id": scene.id,
-                        "position": scene.position,
-                        "title": scene.title,
-                        "status": scene.status,
-                        "word_count": scene.word_count,
-                    }
-                )
-                total_words += scene.word_count
-                scene_count += 1
+            total_words += chapter.word_count
             chapters.append(
                 {
                     "id": chapter.id,
                     "position": chapter.position,
                     "title": chapter.title,
                     "status": chapter.status,
-                    "part": chapter.part,
-                    "target_word_count": chapter.target_word_count,
-                    "word_count": sum(scene["word_count"] for scene in scenes),
-                    "scenes": scenes,
+                    "word_count": chapter.word_count,
+                    "origin": chapter.origin,
                 }
             )
-
         return {
             "project": asdict(project),
-            "bible": bible,
-            "characters": characters,
             "chapters": chapters,
-            "stats": {
-                "words": total_words,
-                "chapters": len(chapters),
-                "scenes": scene_count,
-                "characters": len(characters),
-                "bible_entries": len(bible),
-            },
+            "stats": {"words": total_words, "chapters": len(chapters)},
         }
 
     @router.get("/projects/{project_id}/manuscript")
     def manuscript(project_id: int) -> dict[str, Any]:
         project = services.projects.require_project(project_id)
-        chapters = []
-        for chapter in services.chapters.list_chapters(project_id):
-            scenes = [
-                asdict(scene)
-                for scene in services.scenes.list_scenes(chapter.id)
-            ]
-            chapters.append(
-                {
-                    **asdict(chapter),
-                    "word_count": sum(scene["word_count"] for scene in scenes),
-                    "scenes": scenes,
-                }
-            )
+        chapters = [
+            asdict(chapter)
+            for chapter in services.chapters.list_chapters(project_id)
+        ]
         return {"project": asdict(project), "chapters": chapters}
+
+    # -- workspace documents -------------------------------------------
+
+    @router.get("/projects/{project_id}/documents")
+    def list_documents(project_id: int) -> list[dict[str, Any]]:
+        return services.documents.list_documents(project_id)
+
+    @router.put("/projects/{project_id}/documents/{kind}")
+    def save_document(
+        project_id: int, kind: str, payload: DocumentUpdateRequest
+    ) -> dict[str, Any]:
+        document = services.documents.save_document(project_id, kind, payload.content)
+        definition = next(
+            item for item in WORKSPACE_DOCUMENTS if item.kind == document.kind
+        )
+        return {
+            "kind": document.kind,
+            "title": definition.title,
+            "content": document.content,
+            "derived": document.derived,
+            "updated_at": document.updated_at,
+        }
+
+    @router.post("/projects/{project_id}/style-guide/analyze")
+    def analyze_style_guide(
+        project_id: int, payload: StyleGuideRequest
+    ) -> dict[str, Any]:
+        defaults = services.app_settings.generation_settings()
+        outcome = services.style_guide.analyze(
+            project_id,
+            GenerationSettings(
+                model=payload.model or defaults.model,
+                temperature=payload.temperature,
+                top_p=payload.top_p,
+                num_predict=payload.num_predict,
+                context_window=payload.context_window,
+            ),
+            force=payload.force,
+        )
+        return {
+            "content": outcome.content,
+            "model": outcome.model,
+            "word_count": outcome.word_count,
+            "duration_ms": outcome.duration_ms,
+            "derived": True,
+        }
 
     # -- story bible ---------------------------------------------------
 
@@ -653,6 +692,8 @@ def _build_router(services: ApiServices) -> APIRouter:
             viewpoint_character_id=payload.viewpoint_character_id,
             target_word_count=payload.target_word_count,
             status=payload.status,
+            content=payload.content,
+            origin=payload.origin,
         )
         return asdict(chapter)
 
@@ -662,7 +703,7 @@ def _build_router(services: ApiServices) -> APIRouter:
     ) -> dict[str, Any]:
         data = payload.model_dump(exclude_unset=True)
         kwargs: dict[str, Any] = {}
-        for key in ("title", "part", "summary", "objectives", "status"):
+        for key in ("title", "part", "summary", "objectives", "status", "content"):
             if key in data and data[key] is not None:
                 kwargs[key] = data[key]
         if "viewpoint_character_id" in data:
@@ -705,27 +746,52 @@ def _build_router(services: ApiServices) -> APIRouter:
         scene_title = payload.scene_title
         if payload.chapter_id is not None:
             chapter = services.chapters.require_chapter(payload.chapter_id)
+            if chapter.origin == "imported":
+                raise InvalidInputError(
+                    "That chapter is pre-written, so Novellire will not change it. "
+                    "Generate into a new chapter instead."
+                )
             chapter_title = chapter_title or chapter.title
         if payload.scene_id is not None:
             scene = services.scenes.require_scene(payload.scene_id)
+            parent = services.chapters.require_chapter(scene.chapter_id)
+            if parent.origin == "imported":
+                raise InvalidInputError(
+                    "That chapter is pre-written, so Novellire will not change it. "
+                    "Generate into a new chapter instead."
+                )
             scene_title = scene_title or scene.title
+
+        inference_settings = GenerationSettings(
+            model=payload.model,
+            temperature=payload.temperature,
+            top_p=payload.top_p,
+            num_predict=payload.num_predict,
+            context_window=payload.context_window,
+        )
+
+        style_guide_inferred = False
+        guide = services.documents.get_document(project_id, "style_guide")
+        if (
+            (guide is None or not guide.content.strip())
+            and services.style_guide.has_source_material(project_id)
+        ):
+            services.style_guide.analyze(project_id, inference_settings)
+            style_guide_inferred = True
 
         outcome = services.generation.generate(
             project_id=project_id,
             instructions=payload.instructions,
-            settings=GenerationSettings(
-                model=payload.model,
-                temperature=payload.temperature,
-                top_p=payload.top_p,
-                num_predict=payload.num_predict,
-                context_window=payload.context_window,
-            ),
+            settings=inference_settings,
             chapter_title=chapter_title,
             scene_title=scene_title,
             context_notes=payload.context_notes,
             target_words=payload.target_words,
+            workspace_context=services.documents.context_for_prompt(project_id),
         )
-        return generation_payload(outcome.record, include_output=True)
+        result = generation_payload(outcome.record, include_output=True)
+        result["style_guide_inferred"] = style_guide_inferred
+        return result
 
     @router.get("/projects/{project_id}/generations")
     def list_generations(project_id: int, limit: int = 20) -> list[dict[str, Any]]:

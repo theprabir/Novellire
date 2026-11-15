@@ -198,7 +198,7 @@ export function renderScope(ctx, key) {
       el(
         'p',
         { class: 'hint', style: { marginTop: '16px' } },
-        `Project “${tree.project.name}” already has ${tree.stats.bible_entries} bible entries, ${tree.stats.characters} characters, and ${tree.stats.scenes} scenes ready for this surface to read.`
+        `Project “${tree.project.name}” already has ${tree.stats.chapters} chapters and ${tree.stats.words.toLocaleString()} words ready for this surface to read.`
       )
     );
   }
