@@ -27,6 +27,14 @@ def clean_optional_text(value: str, label: str, *, max_length: int) -> str:
     return cleaned
 
 
+def validate_direction(value: str) -> str:
+    """Validate a one-step move direction."""
+    cleaned = (value or "").strip().lower()
+    if cleaned not in ("up", "down"):
+        raise InvalidInputError("Direction must be 'up' or 'down'.")
+    return cleaned
+
+
 def clean_word_target(
     value: int | None, label: str, *, maximum: int
 ) -> int | None:

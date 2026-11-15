@@ -43,7 +43,7 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
 
     assert payload["status"] == "ok"
     assert payload["schema_version"] == 3
-    assert payload["version"] == "0.2.3"
+    assert payload["version"] == "0.2.4"
 
 
 def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:
@@ -196,6 +196,89 @@ def test_chapter_content_update_recounts_words(client: TestClient) -> None:
 
     assert updated["word_count"] == 5
     assert updated["origin"] == "written"
+
+
+def test_chapter_move_and_delete_keep_positions_contiguous(
+    client: TestClient,
+) -> None:
+    project = create_project(client)
+    ids = [
+        client.post(
+            f"/api/projects/{project['id']}/chapters", json={"title": title}
+        ).json()["id"]
+        for title in ("One", "Two", "Three")
+    ]
+
+    for _ in range(2):
+        moved = client.post(f"/api/chapters/{ids[2]}/move", json={"direction": "up"})
+        assert moved.status_code == 200, moved.text
+
+    tree = client.get(f"/api/projects/{project['id']}/tree").json()
+    assert [(chapter["title"], chapter["position"]) for chapter in tree["chapters"]] == [
+        ("Three", 1),
+        ("One", 2),
+        ("Two", 3),
+    ]
+
+    # Moving past the first position is a no-op, not an error.
+    client.post(f"/api/chapters/{ids[2]}/move", json={"direction": "up"})
+    tree = client.get(f"/api/projects/{project['id']}/tree").json()
+    assert [chapter["title"] for chapter in tree["chapters"]] == ["Three", "One", "Two"]
+
+    # Deleting the first chapter must shift the rest without a unique collision.
+    deleted = client.delete(f"/api/chapters/{ids[2]}")
+    assert deleted.status_code == 200
+
+    tree = client.get(f"/api/projects/{project['id']}/tree").json()
+    assert [(chapter["title"], chapter["position"]) for chapter in tree["chapters"]] == [
+        ("One", 1),
+        ("Two", 2),
+    ]
+    manuscript = client.get(f"/api/projects/{project['id']}/manuscript").json()
+    assert [chapter["title"] for chapter in manuscript["chapters"]] == ["One", "Two"]
+
+    invalid = client.post(f"/api/chapters/{ids[1]}/move", json={"direction": "sideways"})
+    assert invalid.status_code == 422
+
+
+def test_scene_move_and_delete_keep_positions_contiguous(
+    client: TestClient,
+) -> None:
+    project = create_project(client)
+    chapter = client.post(
+        f"/api/projects/{project['id']}/chapters", json={"title": "The Vault"}
+    ).json()
+    ids = [
+        client.post(
+            f"/api/chapters/{chapter['id']}/scenes",
+            json={"title": title, "content": f"{title} prose."},
+        ).json()["id"]
+        for title in ("Approach", "Descent", "Vault")
+    ]
+
+    for _ in range(2):
+        moved = client.post(f"/api/scenes/{ids[2]}/move", json={"direction": "up"})
+        assert moved.status_code == 200, moved.text
+
+    tree = client.get(f"/api/projects/{project['id']}/tree").json()
+    scenes = tree["chapters"][0]["scenes"]
+    assert [(scene["title"], scene["position"]) for scene in scenes] == [
+        ("Vault", 1),
+        ("Approach", 2),
+        ("Descent", 3),
+    ]
+
+    # Deleting the first scene must shift the rest without a unique collision.
+    client.delete(f"/api/scenes/{ids[2]}")
+    tree = client.get(f"/api/projects/{project['id']}/tree").json()
+    scenes = tree["chapters"][0]["scenes"]
+    assert [(scene["title"], scene["position"]) for scene in scenes] == [
+        ("Approach", 1),
+        ("Descent", 2),
+    ]
+
+    after = client.get(f"/api/chapters/{chapter['id']}/scenes").json()
+    assert [scene["title"] for scene in after] == ["Approach", "Descent"]
 
 
 def test_style_guide_analysis_reads_the_manuscript(client: TestClient) -> None:

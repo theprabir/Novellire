@@ -50,16 +50,24 @@ export function renderSettings(ctx) {
       el(
         'div',
         {},
-        el('h1', {}, 'Settings'),
+        el('h1', {}, 'App settings'),
         el(
           'div',
           { class: 'sub' },
-          'Appearance is stored per installation. Writing defaults are stored in the project database.'
+          'These settings apply to this installation: appearance, the local model connection, and data locations. Novel details live in Project settings.'
         )
       ),
       el(
         'div',
         { class: 'actions' },
+        state.activeProjectId
+          ? el(
+              'a',
+              { class: 'btn btn-sm', href: '#/project/settings' },
+              icon('book'),
+              'Project settings'
+            )
+          : null,
         el(
           'button',
           {
@@ -378,7 +386,7 @@ function modelCard(ctx) {
   );
   body.append(future);
 
-  return settingsCard('layers', 'Writing model', 'Ollama connection and generation defaults.', body);
+  return settingsCard('layers', 'Writing model', 'Ollama connection and app-wide generation defaults.', body);
 }
 
 /* -- data and privacy ----------------------------------------------------- */
@@ -411,7 +419,7 @@ function privacyCard(ctx) {
     )
   );
 
-  return settingsCard('shield', 'Data and privacy', 'Where the project lives.', body);
+  return settingsCard('shield', 'Data and privacy', 'Where this installation keeps its data.', body);
 }
 
 function aboutCard(state) {

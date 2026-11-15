@@ -1,6 +1,7 @@
 import { api } from '../api.js';
 import {
   closeModal,
+  confirmDialog,
   count,
   el,
   emptyState,
@@ -66,6 +67,12 @@ export function renderWorkspace(ctx) {
       el(
         'div',
         { class: 'actions' },
+        el(
+          'a',
+          { class: 'btn btn-sm', href: '#/project/settings' },
+          icon('settings'),
+          'Project settings'
+        ),
         project.genre ? el('span', { class: 'chip' }, project.genre) : null,
         project.target_word_count
           ? el('span', { class: 'chip' }, `${count(project.target_word_count)} target`)
@@ -344,6 +351,10 @@ function chapterEditor(ctx, chapter) {
   }
 
   const imported = chapter.origin === 'imported';
+  const chapters = ctx.state.manuscript?.chapters || [];
+  const index = chapters.findIndex((item) => item.id === chapter.id);
+  const scenes =
+    ctx.state.tree?.chapters?.find((item) => item.id === chapter.id)?.scenes || [];
   const title = input({ value: chapter.title, maxlength: '200', placeholder: 'Chapter title' });
   const content = textarea({
     value: chapter.content,
@@ -422,11 +433,179 @@ function chapterEditor(ctx, chapter) {
         'div',
         { class: 'actions' },
         imported ? el('span', { class: 'chip soon' }, 'Pre-written') : null,
+        el(
+          'div',
+          { class: 'icon-row' },
+          el(
+            'button',
+            {
+              class: 'icon-btn',
+              type: 'button',
+              title: 'Move chapter up',
+              'aria-label': 'Move chapter up',
+              disabled: index <= 0,
+              onClick: () => moveChapter(ctx, chapter.id, 'up'),
+            },
+            icon('arrow-up')
+          ),
+          el(
+            'button',
+            {
+              class: 'icon-btn',
+              type: 'button',
+              title: 'Move chapter down',
+              'aria-label': 'Move chapter down',
+              disabled: index < 0 || index >= chapters.length - 1,
+              onClick: () => moveChapter(ctx, chapter.id, 'down'),
+            },
+            icon('arrow-down')
+          ),
+          el(
+            'button',
+            {
+              class: 'icon-btn danger',
+              type: 'button',
+              title: 'Delete chapter',
+              'aria-label': 'Delete chapter',
+              onClick: () => deleteChapter(ctx, chapter),
+            },
+            icon('trash')
+          )
+        ),
         el('a', { class: 'btn btn-sm', href: `#/preview/${chapter.id}` }, icon('book'), 'Read')
       )
     ),
-    form
+    form,
+    scenes.length ? scenesCard(ctx, scenes) : null
   );
+}
+
+function scenesCard(ctx, scenes) {
+  const rows = el('div', { class: 'scene-stack' });
+  scenes.forEach((scene, index) => {
+    rows.append(
+      el(
+        'div',
+        { class: 'scene-row' },
+        el('span', { class: 'index' }, String(scene.position).padStart(2, '0')),
+        el('span', { class: 'name' }, scene.title || 'Untitled scene'),
+        el('span', { class: 'meta' }, `${count(scene.word_count)} words`),
+        el(
+          'div',
+          { class: 'scene-actions' },
+          el(
+            'button',
+            {
+              class: 'icon-btn tiny',
+              type: 'button',
+              title: 'Move scene up',
+              'aria-label': 'Move scene up',
+              disabled: index === 0,
+              onClick: () => moveScene(ctx, scene.id, 'up'),
+            },
+            icon('arrow-up')
+          ),
+          el(
+            'button',
+            {
+              class: 'icon-btn tiny',
+              type: 'button',
+              title: 'Move scene down',
+              'aria-label': 'Move scene down',
+              disabled: index === scenes.length - 1,
+              onClick: () => moveScene(ctx, scene.id, 'down'),
+            },
+            icon('arrow-down')
+          ),
+          el(
+            'button',
+            {
+              class: 'icon-btn tiny danger',
+              type: 'button',
+              title: 'Delete scene',
+              'aria-label': 'Delete scene',
+              onClick: () => deleteScene(ctx, scene),
+            },
+            icon('trash')
+          )
+        )
+      )
+    );
+  });
+
+  return el(
+    'section',
+    { class: 'card form-card' },
+    el(
+      'div',
+      { class: 'editor-head' },
+      el(
+        'div',
+        {},
+        el('h2', { class: 'section-title' }, 'Scenes'),
+        el(
+          'p',
+          { class: 'hint' },
+          'Legacy scene records inside this chapter. Their prose was folded into the chapter text; reorder or remove them here.'
+        )
+      )
+    ),
+    rows
+  );
+}
+
+async function moveChapter(ctx, chapterId, direction) {
+  try {
+    await api.post(`/api/chapters/${chapterId}/move`, { direction });
+    await ctx.refresh();
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+function deleteChapter(ctx, chapter) {
+  confirmDialog({
+    title: 'Delete chapter',
+    message: `“${chapter.title}” and its scene records will be deleted permanently. This cannot be undone.`,
+    confirmLabel: 'Delete chapter',
+    onConfirm: async () => {
+      try {
+        await api.del(`/api/chapters/${chapter.id}`);
+        ctx.state.selectedId = null;
+        syncHash('#/workspace/chapters');
+        await ctx.refresh();
+        toast('Chapter deleted.', 'success');
+      } catch (error) {
+        toast(error.message, 'error');
+      }
+    },
+  });
+}
+
+async function moveScene(ctx, sceneId, direction) {
+  try {
+    await api.post(`/api/scenes/${sceneId}/move`, { direction });
+    await ctx.refresh();
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+function deleteScene(ctx, scene) {
+  confirmDialog({
+    title: 'Delete scene',
+    message: `“${scene.title || 'Untitled scene'}” will be deleted permanently. This cannot be undone.`,
+    confirmLabel: 'Delete scene',
+    onConfirm: async () => {
+      try {
+        await api.del(`/api/scenes/${scene.id}`);
+        await ctx.refresh();
+        toast('Scene deleted.', 'success');
+      } catch (error) {
+        toast(error.message, 'error');
+      }
+    },
+  });
 }
 
 function openChapterDialog(ctx) {

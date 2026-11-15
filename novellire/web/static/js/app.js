@@ -6,13 +6,16 @@ import {
   initials,
   toast,
 } from './ui.js';
-import { openProjectForm, renderProjects } from './views/projects.js';
+import { renderHome } from './views/home.js';
+import { openProjectForm } from './views/projects.js';
+import { renderProjectSettings } from './views/project-settings.js';
 import { renderWorkspace } from './views/workspace.js';
 import { renderPreview } from './views/preview.js';
 import { renderSettings } from './views/settings.js';
 import { renderChat, renderScope } from './views/scopes.js';
 
 const NAV = [
+  { key: 'home', label: 'Home', icon: 'home' },
   { key: 'workspace', label: 'Workspace', icon: 'layers' },
   { key: 'preview', label: 'Preview', icon: 'book' },
   { key: 'chat', label: 'Chat', icon: 'message', pill: 'Phase 4' },
@@ -44,7 +47,7 @@ export const state = {
   documents: [],
   settings: null,
   ollama: null,
-  route: { name: 'projects', a: null, b: null },
+  route: { name: 'home', a: null, b: null },
   workspaceType: 'docs',
   selectedDoc: 'master_bible',
   selectedId: null,
@@ -90,7 +93,7 @@ async function boot() {
 function parseHash() {
   const raw = window.location.hash.replace(/^#\/?/, '');
   const parts = raw.split('/').filter(Boolean).map(decodeURIComponent);
-  return { name: parts[0] || 'projects', a: parts[1] || null, b: parts[2] || null };
+  return { name: parts[0] || 'home', a: parts[1] || null, b: parts[2] || null };
 }
 
 function applyRouteDefaults() {
@@ -256,8 +259,15 @@ function render() {
   view.replaceChildren();
   let node;
   switch (state.route.name) {
+    case 'home':
+    case 'projects':
+      node = renderHome(context);
+      break;
     case 'workspace':
       node = renderWorkspace(context);
+      break;
+    case 'project':
+      node = renderProjectSettings(context);
       break;
     case 'preview':
       node = renderPreview(context);
@@ -273,9 +283,8 @@ function render() {
     case 'export':
       node = renderScope(context, state.route.name);
       break;
-    case 'projects':
     default:
-      node = renderProjects(context);
+      node = renderHome(context);
       break;
   }
   view.append(node);
@@ -370,6 +379,12 @@ function treeGroup(label, key, items, renderItem) {
 }
 
 function renderFileTree() {
+  const section = document.getElementById('files-section');
+  if (section) {
+    // Home is the library overview; project files belong to a project surface.
+    const onHome = state.route.name === 'home' || state.route.name === 'projects';
+    section.style.display = onHome ? 'none' : '';
+  }
   const host = document.getElementById('file-tree');
   if (!host) return;
   host.replaceChildren();
@@ -444,6 +459,30 @@ function renderFooter() {
       title: available ? 'Ollama connected' : 'Ollama offline',
     }),
     el('span', { class: 'model-name' }, available ? model : 'Ollama offline'),
+    el(
+      'a',
+      {
+        class: 'icon-btn',
+        href: 'https://github.com/theprabir',
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        title: 'GitHub profile',
+        'aria-label': 'GitHub profile',
+      },
+      icon('github')
+    ),
+    el(
+      'a',
+      {
+        class: 'icon-btn',
+        href: 'https://instagram.com/prabir.exe',
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        title: 'Instagram profile',
+        'aria-label': 'Instagram profile',
+      },
+      icon('instagram')
+    ),
     el('a', { class: 'icon-btn', href: '#/settings', title: 'Settings', 'aria-label': 'Settings' }, icon('settings'))
   );
 }
@@ -454,11 +493,14 @@ function renderTopbar() {
   if (!crumbs || !actions) return;
   crumbs.replaceChildren();
   const project = state.projects.find((item) => item.id === state.activeProjectId);
-  const label = NAV.find((item) => item.key === state.route.name)?.label || 'Projects';
-  if (state.route.name === 'projects') {
-    crumbs.append(el('span', { class: 'crumb current' }, 'Projects'));
+  const label =
+    state.route.name === 'project'
+      ? 'Project settings'
+      : NAV.find((item) => item.key === state.route.name)?.label || 'Home';
+  if (state.route.name === 'home' || state.route.name === 'projects') {
+    crumbs.append(el('span', { class: 'crumb current' }, 'Home'));
   } else {
-    crumbs.append(el('a', { class: 'crumb', href: '#/projects' }, 'Projects'));
+    crumbs.append(el('a', { class: 'crumb', href: '#/home' }, 'Home'));
     if (project) {
       crumbs.append(icon('chevron-right'), el('span', { class: 'crumb' }, project.name));
     }

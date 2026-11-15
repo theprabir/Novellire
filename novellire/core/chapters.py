@@ -20,6 +20,7 @@ from .validation import (
     clean_optional_text,
     clean_required_text,
     clean_word_target,
+    validate_direction,
 )
 from .work_status import validate_work_status
 
@@ -167,6 +168,16 @@ class ChapterService:
                 "Chapter origin must be 'written' or 'imported'."
             )
         return cleaned
+
+    def move_chapter(self, chapter_id: int, direction: str) -> ChapterRecord:
+        """Move a chapter one position up or down within its project."""
+        validate_direction(direction)
+        self.require_chapter(chapter_id)
+        return self._repository.move(chapter_id, direction)
+
+    def delete_chapter(self, chapter_id: int) -> None:
+        self.require_chapter(chapter_id)
+        self._repository.delete(chapter_id)
 
     def manuscript_text(self, project_id: int) -> str:
         """Return every chapter's prose, in order, for analysis."""

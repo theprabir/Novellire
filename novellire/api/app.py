@@ -162,6 +162,10 @@ class ChapterUpdateRequest(BaseModel):
     content: str | None = None
 
 
+class MoveRequest(BaseModel):
+    direction: Literal["up", "down"]
+
+
 class DocumentUpdateRequest(BaseModel):
     content: str = ""
 
@@ -539,6 +543,15 @@ def _build_router(services: ApiServices) -> APIRouter:
                     "status": chapter.status,
                     "word_count": chapter.word_count,
                     "origin": chapter.origin,
+                    "scenes": [
+                        {
+                            "id": scene.id,
+                            "position": scene.position,
+                            "title": scene.title,
+                            "word_count": scene.word_count,
+                        }
+                        for scene in services.scenes.list_scenes(chapter.id)
+                    ],
                 }
             )
         return {
@@ -721,6 +734,15 @@ def _build_router(services: ApiServices) -> APIRouter:
             kwargs["target_word_count"] = data["target_word_count"]
         return asdict(services.chapters.update_chapter(chapter_id, **kwargs))
 
+    @router.post("/chapters/{chapter_id}/move")
+    def move_chapter(chapter_id: int, payload: MoveRequest) -> dict[str, Any]:
+        return asdict(services.chapters.move_chapter(chapter_id, payload.direction))
+
+    @router.delete("/chapters/{chapter_id}")
+    def delete_chapter(chapter_id: int) -> dict[str, Any]:
+        services.chapters.delete_chapter(chapter_id)
+        return {"deleted": True}
+
     # -- scenes --------------------------------------------------------
 
     @router.get("/chapters/{chapter_id}/scenes")
@@ -746,6 +768,15 @@ def _build_router(services: ApiServices) -> APIRouter:
     def update_scene(scene_id: int, payload: SceneUpdateRequest) -> dict[str, Any]:
         data = payload.model_dump(exclude_unset=True)
         return asdict(services.scenes.update_scene(scene_id, **data))
+
+    @router.post("/scenes/{scene_id}/move")
+    def move_scene(scene_id: int, payload: MoveRequest) -> dict[str, Any]:
+        return asdict(services.scenes.move_scene(scene_id, payload.direction))
+
+    @router.delete("/scenes/{scene_id}")
+    def delete_scene(scene_id: int) -> dict[str, Any]:
+        services.scenes.delete_scene(scene_id)
+        return {"deleted": True}
 
     # -- generation ----------------------------------------------------
 

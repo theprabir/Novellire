@@ -9,7 +9,7 @@ from ..storage.story_repositories import (
     SceneRepository,
 )
 from .text import count_words
-from .validation import clean_optional_text
+from .validation import clean_optional_text, validate_direction
 from .work_status import validate_work_status
 
 TITLE_MAX_LENGTH = 200
@@ -101,6 +101,16 @@ class SceneService:
             fields["status"] = validate_work_status(status)
 
         return self._repository.update(scene_id, **fields)
+
+    def move_scene(self, scene_id: int, direction: str) -> SceneRecord:
+        """Move a scene one position up or down within its chapter."""
+        validate_direction(direction)
+        self.require_scene(scene_id)
+        return self._repository.move(scene_id, direction)
+
+    def delete_scene(self, scene_id: int) -> None:
+        self.require_scene(scene_id)
+        self._repository.delete(scene_id)
 
     def total_words(self, chapter_id: int) -> int:
         return self._repository.total_words(chapter_id)

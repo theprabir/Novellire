@@ -89,9 +89,12 @@ The default host is loopback and the default port is `8000`.
 
 The interface has these surfaces:
 
-- **Projects** — create, open, edit, and archive novels; word counts, generation
-  counts, and target progress per project.
-- **Workspace** — four documents plus the chapter list:
+- **Home** — the library overview: every project with word counts, generation
+  counts, and target progress, plus a continue-writing card and the author's
+  GitHub and Instagram links. Home is not the workspace; opening a project moves
+  into that novel's workspace.
+- **Workspace** — a project's writing surface, with four documents plus the
+  chapter list:
   - *Master Story Bible* — complete storyline, themes and metaphysics, historical
     background, world rules, and important events.
   - *Character Bible* — personalities and motivations, physical descriptions,
@@ -106,17 +109,22 @@ The interface has these surfaces:
   *Chapters* holds the manuscript itself. Add a chapter with a title and paste its
   full text: Novellire counts and displays words and marks it pre-written, and
   the AI never rewrites it. New chapters can be drafted from the documents, and
-  drafts are editable before insertion.
+  drafts are editable before insertion. Chapters, and the legacy scene records
+  inside them, can be moved up or down and deleted; positions are renumbered in
+  the same transaction so the order stays contiguous in the database.
   Generation receives the four documents plus the story bible entries and
   character profiles that match the request. Matching uses names, aliases,
   titles, categories, and shared words, and the chapter's viewpoint character,
   so established canon reaches the model without flooding its context window.
+- **Project settings** — details for one novel: title, premise, genre, narrative
+  style, and word target, plus archiving. Reached from Home or the Workspace
+  header.
 - **Preview** — the reading surface. Cream paper in both themes, a Garamond-first
   serif stack, drop caps, chapter navigation, and live reading size and measure
   controls.
-- **Settings** — appearance (theme, accent, interface and reading fonts, sizes,
-  reading width), the Ollama connection and generation defaults, data locations,
-  and build information.
+- **App settings** — installation-wide preferences: appearance (theme, accent,
+  interface and reading fonts, sizes, reading width), the Ollama connection and
+  generation defaults, data locations, and build information.
 - **Chat, Memory, Continuity, Export** — designed scopes. Their layout, filters,
   and detail panes are reserved and labelled with the phase that will connect
   them; they show no project data yet.
@@ -131,7 +139,7 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-120 tests run fully offline. All inference is stubbed, so no model or Ollama
+122 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence, and
@@ -150,7 +158,8 @@ novellire/
     static/js/app.js       Boot, routing, state, appearance, sidebar chrome
     static/js/api.js       JSON fetch wrapper and error mapping
     static/js/ui.js        DOM helpers, modal, toasts, prose rendering
-    static/js/views/       projects, workspace, preview, settings, scopes
+    static/js/views/       home, project-settings, projects, workspace,
+                           preview, settings, scopes
   config.py                Settings model, TOML loading, env overrides
   errors.py                User-facing error hierarchy
   logging_setup.py         Logging (never logs prompts or prose)
@@ -241,12 +250,12 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.2.3** (schema version 3). `v0.2.3` adds relevance-ranked
-story bible entries and character profiles to the generation prompt, so drafts
-respect canon that lives outside the four workspace documents. It builds on
-`v0.2.2`, which restructured the Workspace, added chapter import with word counts
-and pre-written protection, and learned a style guide from the manuscript when
-none was written.
+Current release: **v0.2.4** (schema version 3). `v0.2.4` separates Home from the
+project Workspace, gives Project settings and App settings their own pages, and
+adds reordering and deletion for chapters and scenes with contiguous database
+positions. It builds on `v0.2.3`, which added relevance-ranked canon to the
+generation prompt, and `v0.2.2`, which restructured the Workspace around four
+documents and added chapter import with word counts and pre-written protection.
 
 The Phase 1 foundation and the Phase 2 narrative data model are complete, and the
 interface is a browser harness. Still missing: event extraction, chapter

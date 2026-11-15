@@ -1300,3 +1300,101 @@ input[type="range"]::-webkit-slider-thumb {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
 }
+
+/* -- home, project settings, ordering controls ---------------------------- */
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 24px 0 12px;
+}
+.section-head h2 { font-size: var(--fs-lg); letter-spacing: -0.01em; }
+
+.home-continue {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 18px;
+  margin-bottom: 20px;
+}
+.continue-cover {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+}
+.continue-copy { min-width: 0; }
+.continue-copy .eyebrow {
+  font-size: 10px;
+  font-weight: 640;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.continue-copy h2 { font-size: var(--fs-lg); margin: 2px 0 4px; }
+.home-continue .actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.profile-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 18px;
+  margin-top: 24px;
+}
+.profile-mark {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.profile-copy { min-width: 0; }
+.profile-copy h2 { font-size: var(--fs-sm); }
+.profile-card .actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.icon-row { display: flex; align-items: center; gap: 2px; }
+.icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.icon-btn.danger:hover {
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.1);
+}
+.scene-actions { margin-left: auto; display: flex; gap: 2px; }
+.scene-row .index { min-width: 20px; }
+.section-title { font-size: var(--fs-lg); }
+.danger-card { border-color: rgba(220, 38, 38, 0.22); }
+
+@media (max-width: 720px) {
+  .home-continue .actions,
+  .profile-card .actions {
+    margin-left: 0;
+    width: 100%;
+  }
+}

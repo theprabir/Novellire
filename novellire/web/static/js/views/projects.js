@@ -4,9 +4,7 @@ import {
   confirmDialog,
   count,
   el,
-  emptyState,
   field,
-  icon,
   initials,
   input,
   openModal,
@@ -14,61 +12,7 @@ import {
   toast,
 } from '../ui.js';
 
-export function renderProjects(ctx) {
-  const { state } = ctx;
-  const wrap = el('div', { class: 'view-inner' });
-
-  wrap.append(
-    el(
-      'div',
-      { class: 'page-head' },
-      el(
-        'div',
-        {},
-        el('h1', {}, 'Projects'),
-        el(
-          'div',
-          { class: 'sub' },
-          'Each project keeps its own story bible, cast, chapter map, and generation history. Nothing is shared between projects.'
-        )
-      ),
-      el(
-        'div',
-        { class: 'actions' },
-        el(
-          'button',
-          { class: 'btn btn-primary', type: 'button', onClick: () => openProjectForm(ctx) },
-          icon('plus'),
-          'New project'
-        )
-      )
-    )
-  );
-
-  if (!state.projects.length) {
-    wrap.append(
-      emptyState({
-        iconName: 'feather',
-        title: 'No projects yet',
-        body: 'Create a project to begin a novel. Novellire keeps the chapter map, story bible, and character profiles separate for every book.',
-        action: el(
-          'button',
-          { class: 'btn btn-primary', type: 'button', onClick: () => openProjectForm(ctx) },
-          icon('plus'),
-          'Create your first project'
-        ),
-      })
-    );
-    return wrap;
-  }
-
-  const grid = el('div', { class: 'project-grid' });
-  for (const project of state.projects) grid.append(projectCard(ctx, project));
-  wrap.append(grid);
-  return wrap;
-}
-
-function projectCard(ctx, project) {
+export function projectCard(ctx, project) {
   const active = project.id === ctx.state.activeProjectId;
   const target = Number(project.target_word_count || 0);
   const percent = target ? Math.min(100, Math.round((project.words_generated / target) * 100)) : 0;

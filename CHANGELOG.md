@@ -3,6 +3,35 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.2.4] — 2026-11-15
+
+Navigation, ordering, and settings separation. Schema stays at 3.
+
+### Added
+
+- Home is a separate overview route with its own nav item: the library of
+  projects, a continue-writing card, and the author's GitHub and Instagram
+  links. Opening a project moves to its Workspace, so the overview and the
+  writing surface are no longer the same screen.
+- Project settings is its own page (`#/project/settings`), reached from Home and
+  from the Workspace header. It edits the novel's title, premise, genre,
+  narrative style, and target, and holds the archive action.
+- Chapters and scenes can be moved one position up or down and deleted from the
+  Workspace. Moves swap neighbours inside a transaction and deletes renumber the
+  remaining positions, so `(project_id, position)` and `(chapter_id, position)`
+  stay unique and contiguous. Endpoints: `POST /api/chapters/{id}/move`,
+  `DELETE /api/chapters/{id}`, `POST /api/scenes/{id}/move`,
+  `DELETE /api/scenes/{id}`.
+- GitHub (<https://github.com/theprabir>) and Instagram
+  (<https://instagram.com/prabir.exe>) buttons in the sidebar footer and on Home.
+
+### Changed
+
+- Settings is now "App settings" and states plainly that it covers this
+  installation (appearance, model connection, data paths), while novel details
+  live in Project settings.
+- The sidebar breadcrumb starts at Home and includes Project settings.
+
 ## [0.2.3] — 2026-11-15
 
 Canon-aware generation on the 0.2 line. Schema stays at 3.

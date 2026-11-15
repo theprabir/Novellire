@@ -535,6 +535,65 @@ class ChapterRepository:
 
         return _require(self.get(chapter_id), "chapter")
 
+    def move(self, chapter_id: int, direction: str) -> ChapterRecord:
+        """Swap a chapter with its neighbour, keeping positions contiguous."""
+        with self._database.transaction() as connection:
+            row = connection.execute(
+                "SELECT project_id, position FROM chapters WHERE id = ?",
+                (chapter_id,),
+            ).fetchone()
+            if row is None:
+                raise RecordNotFoundError("That chapter no longer exists.")
+            project_id = int(row["project_id"])
+            position = int(row["position"])
+            target = position - 1 if direction == "up" else position + 1
+            neighbour = connection.execute(
+                "SELECT id FROM chapters WHERE project_id = ? AND position = ?",
+                (project_id, target),
+            ).fetchone()
+            if neighbour is not None:
+                now = utc_now_iso()
+                # Position 0 is unused, so it can hold the row during the swap.
+                connection.execute(
+                    "UPDATE chapters SET position = 0, updated_at = ? WHERE id = ?",
+                    (now, chapter_id),
+                )
+                connection.execute(
+                    "UPDATE chapters SET position = ?, updated_at = ? WHERE id = ?",
+                    (position, now, int(neighbour["id"])),
+                )
+                connection.execute(
+                    "UPDATE chapters SET position = ?, updated_at = ? WHERE id = ?",
+                    (target, now, chapter_id),
+                )
+
+        return _require(self.get(chapter_id), "chapter")
+
+    def delete(self, chapter_id: int) -> None:
+        """Delete a chapter and close the gap in the project's order."""
+        with self._database.transaction() as connection:
+            row = connection.execute(
+                "SELECT project_id, position FROM chapters WHERE id = ?",
+                (chapter_id,),
+            ).fetchone()
+            if row is None:
+                raise RecordNotFoundError("That chapter no longer exists.")
+            project_id = int(row["project_id"])
+            position = int(row["position"])
+            connection.execute("DELETE FROM chapters WHERE id = ?", (chapter_id,))
+            # Move through negative positions so the unique constraint never sees
+            # two rows claim the same position mid-update.
+            connection.execute(
+                "UPDATE chapters SET position = -position "
+                "WHERE project_id = ? AND position > ?",
+                (project_id, position),
+            )
+            connection.execute(
+                "UPDATE chapters SET position = (-position) - 1 "
+                "WHERE project_id = ? AND position < 0",
+                (project_id,),
+            )
+
 
 class SceneRepository:
     """CRUD for scenes, appended in order within a chapter."""
@@ -621,6 +680,62 @@ class SceneRepository:
                 raise RecordNotFoundError("That scene no longer exists.")
 
         return _require(self.get(scene_id), "scene")
+
+    def move(self, scene_id: int, direction: str) -> SceneRecord:
+        """Swap a scene with its neighbour, keeping positions contiguous."""
+        with self._database.transaction() as connection:
+            row = connection.execute(
+                "SELECT chapter_id, position FROM scenes WHERE id = ?",
+                (scene_id,),
+            ).fetchone()
+            if row is None:
+                raise RecordNotFoundError("That scene no longer exists.")
+            chapter_id = int(row["chapter_id"])
+            position = int(row["position"])
+            target = position - 1 if direction == "up" else position + 1
+            neighbour = connection.execute(
+                "SELECT id FROM scenes WHERE chapter_id = ? AND position = ?",
+                (chapter_id, target),
+            ).fetchone()
+            if neighbour is not None:
+                now = utc_now_iso()
+                connection.execute(
+                    "UPDATE scenes SET position = 0, updated_at = ? WHERE id = ?",
+                    (now, scene_id),
+                )
+                connection.execute(
+                    "UPDATE scenes SET position = ?, updated_at = ? WHERE id = ?",
+                    (position, now, int(neighbour["id"])),
+                )
+                connection.execute(
+                    "UPDATE scenes SET position = ?, updated_at = ? WHERE id = ?",
+                    (target, now, scene_id),
+                )
+
+        return _require(self.get(scene_id), "scene")
+
+    def delete(self, scene_id: int) -> None:
+        """Delete a scene and close the gap in its chapter's order."""
+        with self._database.transaction() as connection:
+            row = connection.execute(
+                "SELECT chapter_id, position FROM scenes WHERE id = ?",
+                (scene_id,),
+            ).fetchone()
+            if row is None:
+                raise RecordNotFoundError("That scene no longer exists.")
+            chapter_id = int(row["chapter_id"])
+            position = int(row["position"])
+            connection.execute("DELETE FROM scenes WHERE id = ?", (scene_id,))
+            connection.execute(
+                "UPDATE scenes SET position = -position "
+                "WHERE chapter_id = ? AND position > ?",
+                (chapter_id, position),
+            )
+            connection.execute(
+                "UPDATE scenes SET position = (-position) - 1 "
+                "WHERE chapter_id = ? AND position < 0",
+                (chapter_id,),
+            )
 
     def total_words(self, chapter_id: int) -> int:
         with self._database.connection() as connection:
