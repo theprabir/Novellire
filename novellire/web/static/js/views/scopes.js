@@ -121,19 +121,6 @@ const SCOPES = {
       { title: 'Unresolved threads', body: 'Planted mysteries and promises still waiting to pay off.' },
     ],
   },
-  export: {
-    title: 'Export',
-    icon: 'download',
-    phase: 'Phase 6',
-    subtitle:
-      'Compile the manuscript, project bibles, and backups without leaving the workspace.',
-    cards: [
-      { title: 'Markdown manuscript', body: 'Chapters and scenes compiled in order with a table of contents.' },
-      { title: 'DOCX manuscript', body: 'Typeset manuscript for editors and beta readers.' },
-      { title: 'Project backup', body: 'A portable archive of the database and project documents.' },
-      { title: 'Restore', body: 'Bring a backup back into this installation.' },
-    ],
-  },
 };
 
 export function renderScope(ctx, key) {

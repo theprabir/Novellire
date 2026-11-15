@@ -125,9 +125,12 @@ The interface has these surfaces:
 - **App settings** — installation-wide preferences: appearance (theme, accent,
   interface and reading fonts, sizes, reading width), the Ollama connection and
   generation defaults, data locations, and build information.
-- **Chat, Memory, Continuity, Export** — designed scopes. Their layout, filters,
-  and detail panes are reserved and labelled with the phase that will connect
-  them; they show no project data yet.
+- **Export** — compile the manuscript into Markdown or plain text, with an
+  optional appendix of the four project documents. The file is previewed and can
+  be downloaded or copied; only chapters with text are included.
+- **Chat, Memory, Continuity** — designed scopes. Their layout, filters, and
+  detail panes are reserved and labelled with the phase that will connect them;
+  they show no project data yet.
 
 Appearance choices are stored in the database (`app_settings`, key
 `appearance.settings`) and mirrored to `localStorage`, so the workspace reopens
@@ -139,7 +142,7 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-122 tests run fully offline. All inference is stubbed, so no model or Ollama
+128 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence, and
@@ -159,7 +162,7 @@ novellire/
     static/js/api.js       JSON fetch wrapper and error mapping
     static/js/ui.js        DOM helpers, modal, toasts, prose rendering
     static/js/views/       home, project-settings, projects, workspace,
-                           preview, settings, scopes
+                           preview, export, settings, scopes
   config.py                Settings model, TOML loading, env overrides
   errors.py                User-facing error hierarchy
   logging_setup.py         Logging (never logs prompts or prose)
@@ -172,6 +175,7 @@ novellire/
     story_bible.py         Categorised story bible entries (legacy API)
     characters.py          Character profiles and aliases (legacy API)
     context.py             Relevance-ranked canon context for generation
+    export.py              Markdown and text manuscript compilation
     chapters.py            Ordered chapters with pasted or drafted text
     scenes.py              Ordered scenes and scene drafts (legacy API)
     work_status.py         Shared planned/drafting/drafted/approved values
@@ -250,17 +254,16 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.2.4** (schema version 3). `v0.2.4` separates Home from the
-project Workspace, gives Project settings and App settings their own pages, and
-adds reordering and deletion for chapters and scenes with contiguous database
-positions. It builds on `v0.2.3`, which added relevance-ranked canon to the
-generation prompt, and `v0.2.2`, which restructured the Workspace around four
-documents and added chapter import with word counts and pre-written protection.
+Current release: **v0.2.5** (schema version 3). `v0.2.5` adds manuscript export
+as Markdown or plain text, with an optional documents appendix. It builds on
+`v0.2.4`, which separated Home from the project Workspace and added reordering
+and deletion for chapters and scenes, and on `v0.2.3`, which added
+relevance-ranked canon to the generation prompt.
 
 The Phase 1 foundation and the Phase 2 narrative data model are complete, and the
 interface is a browser harness. Still missing: event extraction, chapter
-summaries, retrieval and narrative memory, continuity validation, export, and
-cloud API providers. Chat, Memory, Continuity, and Export exist as designed UI
+summaries, retrieval and narrative memory, continuity validation, and cloud API
+providers. Chat, Memory, Continuity, and Export exist as designed UI
 scopes only. Chapters cannot yet be reordered or deleted. The older story bible
 entry, character, and scene endpoints remain for compatibility but are no longer
 part of the Workspace.

@@ -43,7 +43,7 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
 
     assert payload["status"] == "ok"
     assert payload["schema_version"] == 3
-    assert payload["version"] == "0.2.4"
+    assert payload["version"] == "0.2.5"
 
 
 def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:
@@ -472,6 +472,39 @@ def test_generation_validation_error_is_reported(client: TestClient) -> None:
 
     assert response.status_code == 400
     assert "Describe" in response.json()["detail"]
+
+
+def test_export_returns_a_manuscript_file(client: TestClient) -> None:
+    project = create_project(client)
+    client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={"title": "The Gate", "content": "Mira opened the gate."},
+    )
+    client.put(
+        f"/api/projects/{project['id']}/documents/master_bible",
+        json={"content": "The gate is sealed with iron."},
+    )
+
+    response = client.get(
+        f"/api/projects/{project['id']}/export?format=markdown&include_documents=true"
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["filename"] == "ashfall-with-documents.md"
+    assert "## Chapter 1 — The Gate" in payload["content"]
+    assert "Mira opened the gate." in payload["content"]
+    assert "The gate is sealed with iron." in payload["content"]
+    assert payload["word_count"] == 4
+
+
+def test_export_requires_chapter_text(client: TestClient) -> None:
+    project = create_project(client)
+
+    response = client.get(f"/api/projects/{project['id']}/export")
+
+    assert response.status_code == 400
+    assert "at least one chapter" in response.json()["detail"]
 
 
 def test_missing_project_returns_not_found(client: TestClient) -> None:

@@ -1398,3 +1398,32 @@ input[type="range"]::-webkit-slider-thumb {
     width: 100%;
   }
 }
+
+/* -- export ---------------------------------------------------------------- */
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 10px;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+  cursor: pointer;
+}
+.checkbox-row input { accent-color: var(--accent); }
+.checkbox-row.is-disabled { opacity: 0.45; cursor: not-allowed; }
+
+.export-preview {
+  margin: 0 0 14px;
+  padding: 14px;
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--text);
+  font-family: var(--reading-font);
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}

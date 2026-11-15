@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -23,6 +23,7 @@ from ..core.characters import FIELD_LABELS as CHARACTER_FIELD_LABELS
 from ..core.characters import PROFILE_FIELDS, CharacterService
 from ..core.context import GenerationContextBuilder
 from ..core.documents import ProjectDocumentService, WORKSPACE_DOCUMENTS
+from ..core.export import ExportService
 from ..core.generation import GenerationService
 from ..core.projects import ProjectService
 from ..core.scenes import SceneService
@@ -227,6 +228,7 @@ class ApiServices:
     chapters: ChapterService
     scenes: SceneService
     documents: ProjectDocumentService
+    export: ExportService
     context: GenerationContextBuilder
     style_guide: StyleGuideService
     generations: GenerationRepository
@@ -264,6 +266,9 @@ def build_services(
         chapters=chapter_service,
         scenes=SceneService(SceneRepository(database), chapter_repository),
         documents=document_service,
+        export=ExportService(
+            project_repository, chapter_service, document_service
+        ),
         context=GenerationContextBuilder(
             document_service,
             bible_repository,
@@ -613,6 +618,29 @@ def _build_router(services: ApiServices) -> APIRouter:
             "word_count": outcome.word_count,
             "duration_ms": outcome.duration_ms,
             "derived": True,
+        }
+
+    # -- export --------------------------------------------------------
+
+    @router.get("/projects/{project_id}/export")
+    def export_project(
+        project_id: int,
+        export_format: Literal["markdown", "text"] = Query(
+            default="markdown", alias="format"
+        ),
+        include_documents: bool = False,
+    ) -> dict[str, Any]:
+        result = services.export.build(
+            project_id,
+            file_format=export_format,
+            include_documents=include_documents,
+        )
+        return {
+            "filename": result.filename,
+            "content": result.content,
+            "format": result.file_format,
+            "content_type": result.content_type,
+            "word_count": result.word_count,
         }
 
     # -- story bible ---------------------------------------------------

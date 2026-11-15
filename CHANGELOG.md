@@ -3,6 +3,22 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.2.5] — 2026-11-15
+
+Manuscript export. Schema stays at 3.
+
+### Added
+
+- The Export surface compiles every chapter with text, in order, into Markdown
+  (`.md`) or plain text (`.txt`). Markdown can append the four project documents
+  as an appendix. Files are previewed, downloaded, or copied in the browser; no
+  prose is rewritten and nothing leaves the machine.
+- `GET /api/projects/{id}/export?format=markdown|text&include_documents=true`
+  returns the filename, content, content type, and word count. An empty
+  manuscript is rejected with a 400 rather than producing a blank file.
+- `novellire/core/export.py` builds exports from stored chapter text and
+  documents; the Export page no longer shows the Phase 6 placeholder.
+
 ## [0.2.4] — 2026-11-15
 
 Navigation, ordering, and settings separation. Schema stays at 3.

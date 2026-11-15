@@ -11,6 +11,7 @@ import { openProjectForm } from './views/projects.js';
 import { renderProjectSettings } from './views/project-settings.js';
 import { renderWorkspace } from './views/workspace.js';
 import { renderPreview } from './views/preview.js';
+import { renderExport } from './views/export.js';
 import { renderSettings } from './views/settings.js';
 import { renderChat, renderScope } from './views/scopes.js';
 
@@ -21,7 +22,7 @@ const NAV = [
   { key: 'chat', label: 'Chat', icon: 'message', pill: 'Phase 4' },
   { key: 'memory', label: 'Memory', icon: 'database', pill: 'Phase 3' },
   { key: 'continuity', label: 'Continuity', icon: 'shield', pill: 'Phase 5' },
-  { key: 'export', label: 'Export', icon: 'download', pill: 'Phase 6' },
+  { key: 'export', label: 'Export', icon: 'download' },
   { key: 'settings', label: 'Settings', icon: 'sliders' },
 ];
 
@@ -275,12 +276,14 @@ function render() {
     case 'settings':
       node = renderSettings(context);
       break;
+    case 'export':
+      node = renderExport(context);
+      break;
     case 'chat':
       node = renderChat(context);
       break;
     case 'memory':
     case 'continuity':
-    case 'export':
       node = renderScope(context, state.route.name);
       break;
     default:
