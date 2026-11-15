@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Novellire local data: databases, drafts, exports, backups
+data/
+projects/
+exports/
+backups/
+*.db
+*.db-wal
+*.db-shm
+*.novellire/
+
+# Local configuration and secrets
+config.toml
+.env
+.env.*
+
+# Model weights
+*.gguf
+
+# Freebuff workspace metadata
+.freebuff/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/

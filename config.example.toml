@@ -1,0 +1,31 @@
+# Novellire configuration example.
+# Copy this file to `config.toml` in the repository root and adjust as needed.
+# Relative `data_dir` values resolve against the repository root.
+#
+# Environment overrides:
+#   NOVELLIRE_CONFIG      path to an alternative configuration file
+#   NOVELLIRE_DATA_DIR    overrides `data_dir`
+#   NOVELLIRE_OLLAMA_URL  overrides `ollama.base_url`
+
+data_dir = "data"
+log_level = "INFO"
+
+[ollama]
+# Ollama must be running locally. Start it with `ollama serve`.
+base_url = "http://localhost:11434"
+# Wall-clock limit for a single generation request, in seconds.
+request_timeout_seconds = 180.0
+# Limit for establishing the connection, in seconds.
+connect_timeout_seconds = 5.0
+# How long Ollama keeps the model in memory after a request.
+keep_alive = "5m"
+
+[generation]
+# Empty model means "choose the first model Ollama reports".
+model = "qwen2.5:1.5b"
+temperature = 0.8
+top_p = 0.9
+# Maximum tokens to generate. Keep low on 8 GB machines.
+num_predict = 700
+# Model context window. Larger values cost RAM.
+context_window = 4096

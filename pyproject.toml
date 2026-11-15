@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "novellire"
+version = "0.1.0"
+description = "Local-first AI narrative intelligence and novel writing environment"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "TBD" }
+dependencies = [
+    "streamlit>=1.37,<2",
+    "requests>=2.31,<3",
+    "pydantic>=2.6,<3",
+    "jinja2>=3.1,<4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0,<9"]
+
+[tool.setuptools.packages.find]
+include = ["novellire*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["."]
