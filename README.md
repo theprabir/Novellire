@@ -2,19 +2,44 @@
 
 Local-first AI narrative intelligence and novel writing environment.
 
-Novellire is an LLM orchestration harness for long-form fiction. Phase 1 (`v0.1`)
-establishes the foundation: projects stored in SQLite, a provider abstraction
-over a local Ollama server, and a Streamlit workspace where an author can create
-a project, describe a scene, generate prose with a local model, and find every
-attempt saved back in the project.
+Novellire is an LLM orchestration harness for long-form fiction. It keeps a
+project's story bible, cast, chapter map, scene drafts, and generation history in
+one SQLite database, and writes prose with a model running on your own machine.
 
-No cloud service is contacted. No project text leaves the machine.
+`v0.2.0` replaces the Streamlit prototype with a browser interface: a FastAPI
+server exposes a small JSON API and serves a static client written in HTML, CSS,
+and vanilla JavaScript. No build step, no frontend framework, and no external
+assets — the interface loads from the same loopback process that owns the data.
+
+## Privacy and network use
+
+Novellire is **local-first**, and what leaves the machine depends on the provider
+you choose.
+
+- **Local models (the only mode implemented today).** Inference goes to an Ollama
+  server on `http://localhost:11434`. Prompts, story bibles, and prose stay on
+  this machine. Novellire sends no telemetry and loads no remote fonts, scripts,
+  or stylesheets.
+- **Cloud API providers (planned).** A later release adds hosted providers next
+  to local models. They will be opt-in: you configure a provider and its key, and
+  you select it explicitly. While a cloud provider is selected, the prompt and
+  the project context needed for that request are sent to that provider under its
+  own terms. Novellire will label the active provider in the interface and
+  document each provider's data flow before it ships.
+- **Never silent.** Novellire does not enable cloud inference, analytics, or
+  background uploads on its own, and it will not switch providers behind your
+  back.
+
+The server has no authentication and binds `127.0.0.1` by default. Do not expose
+it to a network interface you do not trust.
 
 ## Requirements
 
 - Windows 11 (developed and tested there), macOS, or Linux
 - Python 3.11 or newer
-- [Ollama](https://ollama.com) installed and reachable on `http://localhost:11434`
+- A modern browser (the client is plain ES modules; no bundler)
+- [Ollama](https://ollama.com) for generation, reachable on
+  `http://localhost:11434`
 - A model small enough for the machine. On 8 GB RAM, start with:
 
   ```bash
@@ -49,18 +74,38 @@ ollama serve
 Start Novellire in another:
 
 ```bash
-streamlit run app.py
+novellire
+# or: python -m novellire
 ```
 
-Then open <http://localhost:8501>. The interface has four pages:
+Then open <http://127.0.0.1:8000>. Options: `--host`, `--port`, `--log-level`.
+The default host is loopback and the default port is `8000`.
 
-- **Projects** — create, select, and archive novel projects; see word counts.
-- **Workspace** — story bible entries by category, character profiles with
-  aliases, and the chapter map with ordered scenes and scene drafts.
-- **Writing** — choose a model, describe a scene, set generation parameters,
-  generate, and browse saved generations.
-- **Settings** — Ollama connection status, installed models, and default
-  generation parameters.
+The interface has these surfaces:
+
+- **Projects** — create, open, edit, and archive novels; word counts, generation
+  counts, and target progress per project.
+- **Workspace** — three sections sharing one editor layout:
+  - *Story bible* — categorised canon entries.
+  - *Characters* — identity profile, aliases, and eleven profile fields.
+  - *Chapters* — ordered chapter map with part/act, summary, objectives,
+    viewpoint, status, target words, plus the scene list and scene prose editor.
+  Every section has a searchable list, and the scene editor opens the generation
+  dialog: choose a model, describe what happens, edit the draft, then insert or
+  append it into the scene.
+- **Preview** — the reading surface. Cream paper in both themes, a Garamond-first
+  serif stack, drop caps, scene ornaments, chapter navigation, and live reading
+  size and measure controls.
+- **Settings** — appearance (theme, accent, interface and reading fonts, sizes,
+  reading width), the Ollama connection and generation defaults, data locations,
+  and build information.
+- **Chat, Memory, Continuity, Export** — designed scopes. Their layout, filters,
+  and detail panes are reserved and labelled with the phase that will connect
+  them; they show no project data yet.
+
+Appearance choices are stored in the database (`app_settings`, key
+`appearance.settings`) and mirrored to `localStorage`, so the workspace reopens
+with the same look with no flash of the wrong theme.
 
 ## Tests
 
@@ -68,20 +113,31 @@ Then open <http://localhost:8501>. The interface has four pages:
 pytest
 ```
 
-Tests run fully offline. All inference is stubbed, so no model or Ollama server
-is needed.
+109 tests run fully offline. All inference is stubbed, so no model or Ollama
+server is needed. `tests/test_api.py` drives the real FastAPI app with a test
+client and covers project scoping, error mapping, generation persistence, and
+appearance round-trips.
 
 ## Architecture
 
 ```
-app.py                     Streamlit entry point
 novellire/
+  __main__.py              CLI entry point (--host, --port, --log-level)
+  api/
+    app.py                 Application factory, JSON API, static client serving
+  web/                     Browser client (no build step)
+    index.html             Shell, icon sprite, theme bootstrap, modal, toasts
+    static/app.css         Design tokens, layout, reader, settings, scopes
+    static/js/app.js       Boot, routing, state, appearance, sidebar chrome
+    static/js/api.js       JSON fetch wrapper and error mapping
+    static/js/ui.js        DOM helpers, modal, toasts, prose rendering
+    static/js/views/       projects, workspace, preview, settings, scopes
   config.py                Settings model, TOML loading, env overrides
   errors.py                User-facing error hierarchy
   logging_setup.py         Logging (never logs prompts or prose)
   core/
     projects.py            Project validation and use cases
-    settings_service.py    Persisted model/parameter preferences
+    settings_service.py    Persisted generation and appearance preferences
     generation.py          Prompt -> provider -> saved record
     story_bible.py         Categorised story bible entries
     characters.py          Character profiles and aliases
@@ -100,27 +156,32 @@ novellire/
     database.py            Connection handling, PRAGMAs, migration runner
     repositories.py        SQL access for projects, generations, settings
     story_repositories.py  SQL access for story bible, characters, chapters, scenes
-  ui/
-    app.py                 Shell and sidebar navigation
-    projects_page.py       Project dashboard
-    workspace_page.py      Story bible, characters, chapter map, scenes
-    writing_page.py        Scene generation workspace
-    settings_page.py       Model and application settings
-    runtime.py             Cached context, provider probes
-    components.py          Shared widgets
 tests/                     Pytest suite with a fake provider
 ```
 
+The API is a transport layer, not a second implementation. Validation, prompt
+construction, storage, and inference all live in the existing services, so the
+browser client and the CLI share exactly the same rules.
+
 Rules that hold throughout the codebase:
 
-- UI components render; they never run SQL or build prompts.
+- Browser code renders and calls the JSON API; it never runs SQL or builds
+  prompts, and all author text is inserted as text rather than markup.
 - All inference goes through `novellire.llm.base.LLMProvider`.
-- Every schema change is a new numbered migration; applied versions are never edited.
+- Every schema change is a new numbered migration; applied versions are never
+  edited.
 - Generation logs are append-only, so failed attempts remain visible.
 - Story records are project-scoped through foreign keys; chapters and scenes keep
   their own order and never share narrative memory across projects.
 - Character profiles hold identity information only. Evolving state (location,
   knowledge, relationships) is a separate concern reserved for a later phase.
+
+## API
+
+FastAPI publishes interactive docs at <http://127.0.0.1:8000/api/docs> and the
+OpenAPI document at `/api/openapi.json`. Errors return a JSON `detail` string with
+a matching status: `400` validation, `404` missing project or record, `409`
+duplicate, `422` schema, `502` provider failure.
 
 ## Configuration
 
@@ -156,12 +217,14 @@ database is upgraded in place without losing projects or generations.
 
 ## Status
 
-Current release: **v0.1.1** (schema version 2).
+Current release: **v0.2.0** (schema version 2).
 
-Phase 1 is complete (`v0.1.0`). Phase 2's narrative data model ships in
-`v0.1.1`: story bible entries, character profiles with aliases, and an ordered
-chapter and scene structure with scene drafts. The full Phase 2 milestone
-(`v0.2`) still needs document import, event extraction, and chapter summaries;
-retrieval, memory, continuity validation, and export remain unimplemented.
+The Phase 1 foundation and the Phase 2 narrative data model are complete, and the
+interface has been rebuilt as a browser harness. Still missing: document import,
+event extraction, chapter summaries, retrieval and narrative memory, continuity
+validation, export, and cloud API providers. Chat, Memory, Continuity, and Export
+exist as designed UI scopes only. Chapters and scenes cannot yet be reordered or
+deleted, and generation does not yet feed the story bible or character profiles
+into the prompt.
 
 License: to be determined.

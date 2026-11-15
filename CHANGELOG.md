@@ -3,6 +3,73 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.2.0] — 2026-11-15
+
+The interface is rewritten as a browser harness served by a small FastAPI
+application. Streamlit is gone, the data model and services are unchanged, and
+schema version stays at 2.
+
+### Changed
+
+- Frontend stack replaced: the Streamlit pages were removed and the app now
+  serves a static HTML/CSS/vanilla-JavaScript client from a FastAPI application
+  factory (`novellire.api.app:create_app`). A `novellire` console script and
+  `python -m novellire` start it on `127.0.0.1:8000` with `--host`, `--port`,
+  and `--log-level`.
+- `AGENTS.md` records HTML, CSS, and vanilla JavaScript as the interface stack;
+  nothing else in that document changed.
+- Appearance preferences (theme, accent, interface and reading fonts, sizes,
+  reading width) moved into `app_settings` under `appearance.settings`, with a
+  `localStorage` mirror and a pre-paint theme bootstrap.
+- README rewritten for the new stack. The local-only privacy guarantee is now
+  scoped to local models; cloud providers are documented as planned, explicit,
+  opt-in additions.
+
+### Added
+
+- Application shell: sidebar with project switcher, navigation, and a collapsible
+  project file tree; breadcrumb topbar with theme toggle and data reload; modal
+  and toast primitives; responsive and collapsed-sidebar layouts.
+- Projects page with per-project cards (words, generations, target progress) and
+  create, edit, and archive dialogs.
+- Workspace with a section switcher for story bible, characters, and chapters:
+  searchable lists, a story bible entry editor, a character editor covering
+  aliases and all eleven profile fields, a chapter editor with viewpoint, status,
+  and target words, and a scene list with a full prose editor.
+- Generation dialog inside the scene editor: model selection from the local
+  Ollama server, target length, context notes, temperature, top-p, output limit,
+  and context window, followed by an editable result that is inserted or
+  appended into the scene. The saved generation log remains immutable.
+- Preview reader: chapter navigation, cream paper surface in both themes, a
+  Garamond-first serif stack, drop caps, scene ornaments, colophon, and live
+  reading size and measure controls.
+- Settings page: theme (system/light/dark), five accents, interface and reading
+  fonts, both type sizes, reading width, Ollama status and generation defaults,
+  data locations, build information, and a disabled "cloud API providers —
+  planned" card so the future provider switch already has a home.
+- Designed UI scopes for Chat, Memory, Continuity, and Export, each labelled with
+  the phase that will connect it, so later backend features need no redesign.
+- JSON API for appearance and generation settings, Ollama status, project tree,
+  manuscript, story bible, characters with aliases, chapters, scenes, generation,
+  and generation history, with errors mapped to `400`, `404`, `409`, `422`, and
+  `502`.
+- Tests: 17 HTTP tests driving the FastAPI app with a stub provider, plus two
+  appearance service tests. 109 tests total.
+
+### Removed
+
+- Streamlit interface (`novellire/ui/`, root `app.py`) and the `streamlit`,
+  `pandas`, `pyarrow`, `altair`, and `pydeck` dependencies.
+
+### Known limitations
+
+- Chat, Memory, Continuity, and Export are layout scopes; they display no data.
+- Cloud API providers are not implemented yet.
+- Generation prompts still use project metadata and author notes only; story
+  bible entries, character profiles, and prior prose are not yet included.
+- Chapters and scenes cannot be reordered or deleted.
+- Scene drafts are plain text with no revision history, and there is no import.
+
 ## [0.1.1] — 2026-11-15
 
 Phase 2 data model, released on the Phase 1 line. The complete Phase 2 milestone

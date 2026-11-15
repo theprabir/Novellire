@@ -7,6 +7,7 @@ import json
 from novellire.core.settings_service import (
     ACTIVE_PROJECT_KEY,
     GENERATION_SETTINGS_KEY,
+    AppearanceSettings,
     AppSettingsService,
     GenerationSettings,
 )
@@ -82,3 +83,29 @@ def test_non_numeric_active_project_is_ignored(database) -> None:
     service = AppSettingsService(repository)
 
     assert service.active_project_id() is None
+
+
+def test_appearance_defaults_and_round_trip(
+    app_settings_service: AppSettingsService,
+) -> None:
+    defaults = app_settings_service.appearance()
+    assert defaults.theme == "system"
+    assert defaults.accent == "violet"
+    assert defaults.reading_font == "garamond"
+
+    app_settings_service.save_appearance(
+        AppearanceSettings(theme="dark", accent="rose", reading_width="wide")
+    )
+    saved = app_settings_service.appearance()
+
+    assert saved.theme == "dark"
+    assert saved.accent == "rose"
+    assert saved.reading_width == "wide"
+
+
+def test_invalid_stored_appearance_falls_back(database) -> None:
+    repository = AppSettingsRepository(database)
+    repository.set("appearance.settings", '{"theme": "neon"}')
+    service = AppSettingsService(repository)
+
+    assert service.appearance().theme == "system"

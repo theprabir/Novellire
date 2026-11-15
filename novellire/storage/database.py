@@ -1,7 +1,8 @@
 """SQLite database lifecycle and connection handling.
 
 Connections are opened per operation and closed immediately, which keeps
-memory flat and avoids sharing a connection across Streamlit's worker threads.
+memory flat and avoids sharing a connection across the web server's worker
+threads.
 """
 
 from __future__ import annotations

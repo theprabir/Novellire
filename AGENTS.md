@@ -9,7 +9,7 @@
 * **Primary Language:** Python
 * **Initial Platform:** Windows 11
 * **Primary Inference Backend:** Ollama
-* **Initial Interface:** Streamlit
+* **Initial Interface:** HTML, CSS, and vanilla JavaScript (browser client)
 * **Database:** SQLite with FTS5
 * **Architecture:** Modular monolith
 
@@ -67,7 +67,7 @@ Keep the following responsibilities separate:
 * Database persistence
 * Import and export
 
-Do not place business logic inside Streamlit page components.
+Do not place business logic inside browser UI code.
 
 #### 2.5 Human-controlled canon
 * The AI must never silently modify established narrative canon.
@@ -114,7 +114,7 @@ Do not place business logic inside Streamlit page components.
 | Purpose | Technology |
 | :--- | :--- |
 | Core language | Python 3.11+ |
-| UI | Streamlit |
+| UI | HTML, CSS, vanilla JavaScript |
 | Local inference | Ollama API |
 | Database | SQLite |
 | Full-text search | SQLite FTS5 |
