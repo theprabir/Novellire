@@ -43,7 +43,7 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
 
     assert payload["status"] == "ok"
     assert payload["schema_version"] == 3
-    assert payload["version"] == "0.2.2"
+    assert payload["version"] == "0.2.3"
 
 
 def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:
@@ -266,6 +266,59 @@ def test_generation_prompt_includes_workspace_documents(
     prompt = fake_provider.requests[0].prompt
     assert "The city lies beneath a dimming star." in prompt
     assert "Master story bible" in prompt
+
+
+def test_generation_prompt_includes_relevant_canon(
+    client: TestClient, fake_provider
+) -> None:
+    project = create_project(client)
+    mira = client.post(
+        f"/api/projects/{project['id']}/characters",
+        json={
+            "name": "Mira Voss",
+            "aliases": ["the Courier"],
+            "personality": "Watchful",
+            "secrets": "She broke the seal once.",
+        },
+    ).json()
+    client.post(
+        f"/api/projects/{project['id']}/bible",
+        json={
+            "category": "premise",
+            "title": "The sealed gate",
+            "content": "The gate is bound with iron.",
+        },
+    )
+    client.post(
+        f"/api/projects/{project['id']}/bible",
+        json={
+            "category": "geography",
+            "title": "The Southern Isles",
+            "content": "A warm archipelago with no gates.",
+        },
+    )
+    chapter = client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={"title": "Arrival", "viewpoint_character_id": mira["id"]},
+    ).json()
+
+    response = client.post(
+        f"/api/projects/{project['id']}/generate",
+        json={
+            "instructions": "Mira reaches the gate.",
+            "model": "fake-model",
+            "chapter_id": chapter["id"],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    prompt = fake_provider.requests[-1].prompt
+    assert "Relevant story bible entries:" in prompt
+    assert "The gate is bound with iron." in prompt
+    assert "Southern Isles" not in prompt
+    assert "Relevant character profiles:" in prompt
+    assert "Mira Voss (also: the Courier)" in prompt
+    assert "Secrets: She broke the seal once." in prompt
 
 
 def test_story_bible_update_and_scoping(client: TestClient) -> None:

@@ -3,6 +3,23 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.2.3] — 2026-11-15
+
+Canon-aware generation on the 0.2 line. Schema stays at 3.
+
+### Added
+
+- Generation prompts now carry relevance-ranked story bible entries and character
+  profiles alongside the four workspace documents. Matching uses names, aliases,
+  titles, categories, and words shared with the instructions, chapter title,
+  scene title, context notes, and the chapter's summary and objectives. The
+  chapter's viewpoint character is always included.
+- Canon context is bounded (at most 6 entries and 5 profiles, 3,000 characters
+  each) so local context windows stay usable. A cast of two or fewer is included
+  whole; larger casts only appear when a name or alias matches.
+- `novellire/core/context.py` builds a `GenerationContext` that
+  `GenerationService` consumes, keeping prompt assembly out of the API layer.
+
 ## [0.2.2] — 2026-11-15
 
 Workspace restructure and chapter import on the 0.2 line. Schema version 3 adds

@@ -21,6 +21,7 @@ from ..config import Settings, load_settings
 from ..core.chapters import ChapterService
 from ..core.characters import FIELD_LABELS as CHARACTER_FIELD_LABELS
 from ..core.characters import PROFILE_FIELDS, CharacterService
+from ..core.context import GenerationContextBuilder
 from ..core.documents import ProjectDocumentService, WORKSPACE_DOCUMENTS
 from ..core.generation import GenerationService
 from ..core.projects import ProjectService
@@ -222,6 +223,7 @@ class ApiServices:
     chapters: ChapterService
     scenes: SceneService
     documents: ProjectDocumentService
+    context: GenerationContextBuilder
     style_guide: StyleGuideService
     generations: GenerationRepository
 
@@ -233,6 +235,7 @@ def build_services(
     generation_repository = GenerationRepository(database)
     character_repository = CharacterRepository(database)
     chapter_repository = ChapterRepository(database)
+    bible_repository = StoryBibleRepository(database)
     chapter_service = ChapterService(
         chapter_repository, project_repository, character_repository
     )
@@ -252,11 +255,17 @@ def build_services(
         app_settings=AppSettingsService(
             AppSettingsRepository(database), settings.generation
         ),
-        story_bible=StoryBibleService(StoryBibleRepository(database), project_repository),
+        story_bible=StoryBibleService(bible_repository, project_repository),
         characters=CharacterService(character_repository, project_repository),
         chapters=chapter_service,
         scenes=SceneService(SceneRepository(database), chapter_repository),
         documents=document_service,
+        context=GenerationContextBuilder(
+            document_service,
+            bible_repository,
+            character_repository,
+            chapter_repository,
+        ),
         style_guide=StyleGuideService(
             provider, project_repository, chapter_service, document_service
         ),
@@ -779,6 +788,15 @@ def _build_router(services: ApiServices) -> APIRouter:
             services.style_guide.analyze(project_id, inference_settings)
             style_guide_inferred = True
 
+        generation_context = services.context.build(
+            project_id,
+            instructions=payload.instructions,
+            chapter_id=payload.chapter_id,
+            chapter_title=chapter_title or "",
+            scene_title=scene_title or "",
+            context_notes=payload.context_notes,
+        )
+
         outcome = services.generation.generate(
             project_id=project_id,
             instructions=payload.instructions,
@@ -787,7 +805,7 @@ def _build_router(services: ApiServices) -> APIRouter:
             scene_title=scene_title,
             context_notes=payload.context_notes,
             target_words=payload.target_words,
-            workspace_context=services.documents.context_for_prompt(project_id),
+            context=generation_context,
         )
         result = generation_payload(outcome.record, include_output=True)
         result["style_guide_inferred"] = style_guide_inferred

@@ -107,6 +107,10 @@ The interface has these surfaces:
   full text: Novellire counts and displays words and marks it pre-written, and
   the AI never rewrites it. New chapters can be drafted from the documents, and
   drafts are editable before insertion.
+  Generation receives the four documents plus the story bible entries and
+  character profiles that match the request. Matching uses names, aliases,
+  titles, categories, and shared words, and the chapter's viewpoint character,
+  so established canon reaches the model without flooding its context window.
 - **Preview** — the reading surface. Cream paper in both themes, a Garamond-first
   serif stack, drop caps, chapter navigation, and live reading size and measure
   controls.
@@ -127,7 +131,7 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-116 tests run fully offline. All inference is stubbed, so no model or Ollama
+120 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence, and
@@ -158,6 +162,7 @@ novellire/
     style_guide.py         Learns a style guide from the manuscript
     story_bible.py         Categorised story bible entries (legacy API)
     characters.py          Character profiles and aliases (legacy API)
+    context.py             Relevance-ranked canon context for generation
     chapters.py            Ordered chapters with pasted or drafted text
     scenes.py              Ordered scenes and scene drafts (legacy API)
     work_status.py         Shared planned/drafting/drafted/approved values
@@ -236,10 +241,12 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.2.2** (schema version 3). `v0.2.2` restructures the
-Workspace around four author-written documents, adds chapter import with word
-counts and pre-written protection, feeds the documents to generation, and learns
-a style guide from the manuscript when none is written.
+Current release: **v0.2.3** (schema version 3). `v0.2.3` adds relevance-ranked
+story bible entries and character profiles to the generation prompt, so drafts
+respect canon that lives outside the four workspace documents. It builds on
+`v0.2.2`, which restructured the Workspace, added chapter import with word counts
+and pre-written protection, and learned a style guide from the manuscript when
+none was written.
 
 The Phase 1 foundation and the Phase 2 narrative data model are complete, and the
 interface is a browser harness. Still missing: event extraction, chapter
