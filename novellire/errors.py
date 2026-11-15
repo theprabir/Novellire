@@ -27,6 +27,14 @@ class DuplicateProjectError(NovellireError):
     """A project with the same name already exists."""
 
 
+class DuplicateEntryError(NovellireError):
+    """A story record with the same identifying name already exists."""
+
+
+class RecordNotFoundError(NovellireError):
+    """The requested story record does not exist."""
+
+
 class InvalidInputError(NovellireError):
     """Author-supplied input failed validation."""
 

@@ -52,9 +52,11 @@ Start Novellire in another:
 streamlit run app.py
 ```
 
-Then open <http://localhost:8501>. The interface has three pages:
+Then open <http://localhost:8501>. The interface has four pages:
 
 - **Projects** — create, select, and archive novel projects; see word counts.
+- **Workspace** — story bible entries by category, character profiles with
+  aliases, and the chapter map with ordered scenes and scene drafts.
 - **Writing** — choose a model, describe a scene, set generation parameters,
   generate, and browse saved generations.
 - **Settings** — Ollama connection status, installed models, and default
@@ -81,6 +83,13 @@ novellire/
     projects.py            Project validation and use cases
     settings_service.py    Persisted model/parameter preferences
     generation.py          Prompt -> provider -> saved record
+    story_bible.py         Categorised story bible entries
+    characters.py          Character profiles and aliases
+    chapters.py            Ordered chapter blueprint
+    scenes.py              Ordered scenes and scene drafts
+    work_status.py         Shared planned/drafting/drafted/approved values
+    validation.py          Shared input validation helpers
+    text.py                Word counting
   llm/
     base.py                Provider-neutral request/result types + protocol
     ollama.py              Ollama HTTP provider and error mapping
@@ -90,9 +99,11 @@ novellire/
     schema.py              Ordered, versioned migrations
     database.py            Connection handling, PRAGMAs, migration runner
     repositories.py        SQL access for projects, generations, settings
+    story_repositories.py  SQL access for story bible, characters, chapters, scenes
   ui/
     app.py                 Shell and sidebar navigation
     projects_page.py       Project dashboard
+    workspace_page.py      Story bible, characters, chapter map, scenes
     writing_page.py        Scene generation workspace
     settings_page.py       Model and application settings
     runtime.py             Cached context, provider probes
@@ -106,6 +117,10 @@ Rules that hold throughout the codebase:
 - All inference goes through `novellire.llm.base.LLMProvider`.
 - Every schema change is a new numbered migration; applied versions are never edited.
 - Generation logs are append-only, so failed attempts remain visible.
+- Story records are project-scoped through foreign keys; chapters and scenes keep
+  their own order and never share narrative memory across projects.
+- Character profiles hold identity information only. Evolving state (location,
+  knowledge, relationships) is a separate concern reserved for a later phase.
 
 ## Configuration
 
@@ -129,10 +144,24 @@ Environment overrides: `NOVELLIRE_CONFIG`, `NOVELLIRE_DATA_DIR`,
 The data directory, databases, `config.toml`, and generated drafts are ignored
 by Git. Never commit a novel project's database.
 
+## Database schema
+
+| Version | Contents |
+| :--- | :--- |
+| 1 | `projects`, `generations`, `app_settings` |
+| 2 | `story_bible_entries`, `characters`, `character_aliases`, `chapters`, `scenes` |
+
+Migrations are applied in order inside transactions; an existing Phase 1
+database is upgraded in place without losing projects or generations.
+
 ## Status
 
-This is `v0.1` — Phase 1 of the roadmap in `PROJECT_SPEC.md`. Narrative memory,
-retrieval, chapter/scene structures, continuity validation, and export are
-deliberately not implemented yet.
+Current release: **v0.1.1** (schema version 2).
+
+Phase 1 is complete (`v0.1.0`). Phase 2's narrative data model ships in
+`v0.1.1`: story bible entries, character profiles with aliases, and an ordered
+chapter and scene structure with scene drafts. The full Phase 2 milestone
+(`v0.2`) still needs document import, event extraction, and chapter summaries;
+retrieval, memory, continuity validation, and export remain unimplemented.
 
 License: to be determined.

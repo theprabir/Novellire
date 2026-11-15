@@ -7,9 +7,13 @@ from pathlib import Path
 import pytest
 
 from novellire.config import GenerationDefaults
+from novellire.core.chapters import ChapterService
+from novellire.core.characters import CharacterService
 from novellire.core.generation import GenerationService
 from novellire.core.projects import ProjectService
+from novellire.core.scenes import SceneService
 from novellire.core.settings_service import AppSettingsService, GenerationSettings
+from novellire.core.story_bible import StoryBibleService
 from novellire.llm.base import GenerationRequest, GenerationResult, ModelInfo
 from novellire.storage.database import Database
 from novellire.storage.repositories import (
@@ -17,6 +21,12 @@ from novellire.storage.repositories import (
     GenerationRepository,
     ProjectRepository,
     Project,
+)
+from novellire.storage.story_repositories import (
+    ChapterRepository,
+    CharacterRepository,
+    SceneRepository,
+    StoryBibleRepository,
 )
 
 
@@ -126,3 +136,31 @@ def generation_settings() -> GenerationSettings:
         num_predict=256,
         context_window=2048,
     )
+
+
+@pytest.fixture()
+def story_bible_service(
+    database: Database, project_repository: ProjectRepository
+) -> StoryBibleService:
+    return StoryBibleService(StoryBibleRepository(database), project_repository)
+
+
+@pytest.fixture()
+def character_service(
+    database: Database, project_repository: ProjectRepository
+) -> CharacterService:
+    return CharacterService(CharacterRepository(database), project_repository)
+
+
+@pytest.fixture()
+def chapter_service(
+    database: Database, project_repository: ProjectRepository
+) -> ChapterService:
+    return ChapterService(
+        ChapterRepository(database), project_repository, CharacterRepository(database)
+    )
+
+
+@pytest.fixture()
+def scene_service(database: Database) -> SceneService:
+    return SceneService(SceneRepository(database), ChapterRepository(database))

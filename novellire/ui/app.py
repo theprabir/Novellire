@@ -9,11 +9,12 @@ from ..logging_setup import get_logger
 from .projects_page import render as render_projects
 from .runtime import AppContext, get_context, ollama_available
 from .settings_page import render as render_settings
+from .workspace_page import render as render_workspace
 from .writing_page import render as render_writing
 
 logger = get_logger("ui.app")
 
-_PAGES = ("Projects", "Writing", "Settings")
+_PAGES = ("Projects", "Workspace", "Writing", "Settings")
 
 
 def main() -> None:
@@ -32,7 +33,9 @@ def main() -> None:
         return
 
     page = _render_sidebar(context)
-    if page == "Writing":
+    if page == "Workspace":
+        render_workspace(context)
+    elif page == "Writing":
         render_writing(context)
     elif page == "Settings":
         render_settings(context)

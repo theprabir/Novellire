@@ -57,6 +57,104 @@ CREATE INDEX idx_generations_project_created
     ON generations (project_id, created_at DESC)
 """
 
+MIGRATION_2_STORY_BIBLE = """
+CREATE TABLE story_bible_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    category TEXT NOT NULL,
+    title TEXT NOT NULL COLLATE NOCASE,
+    content TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (project_id, category, title)
+)
+"""
+
+MIGRATION_2_STORY_BIBLE_INDEX = """
+CREATE INDEX idx_story_bible_project
+    ON story_bible_entries (project_id, category)
+"""
+
+MIGRATION_2_CHARACTERS = """
+CREATE TABLE characters (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL COLLATE NOCASE,
+    physical_description TEXT NOT NULL DEFAULT '',
+    age TEXT NOT NULL DEFAULT '',
+    personality TEXT NOT NULL DEFAULT '',
+    motivations TEXT NOT NULL DEFAULT '',
+    goals TEXT NOT NULL DEFAULT '',
+    fears TEXT NOT NULL DEFAULT '',
+    strengths TEXT NOT NULL DEFAULT '',
+    weaknesses TEXT NOT NULL DEFAULT '',
+    background TEXT NOT NULL DEFAULT '',
+    secrets TEXT NOT NULL DEFAULT '',
+    character_arc TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (project_id, name)
+)
+"""
+
+MIGRATION_2_CHARACTERS_INDEX = """
+CREATE INDEX idx_characters_project ON characters (project_id, name)
+"""
+
+MIGRATION_2_CHARACTER_ALIASES = """
+CREATE TABLE character_aliases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+    alias TEXT NOT NULL COLLATE NOCASE,
+    UNIQUE (character_id, alias)
+)
+"""
+
+MIGRATION_2_CHAPTERS = """
+CREATE TABLE chapters (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    part TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    objectives TEXT NOT NULL DEFAULT '',
+    viewpoint_character_id INTEGER REFERENCES characters(id) ON DELETE SET NULL,
+    target_word_count INTEGER,
+    status TEXT NOT NULL DEFAULT 'planned'
+        CHECK (status IN ('planned', 'drafting', 'drafted', 'approved')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (project_id, position)
+)
+"""
+
+MIGRATION_2_CHAPTERS_INDEX = """
+CREATE INDEX idx_chapters_project ON chapters (project_id, position)
+"""
+
+MIGRATION_2_SCENES = """
+CREATE TABLE scenes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    title TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    objectives TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL DEFAULT '',
+    word_count INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'planned'
+        CHECK (status IN ('planned', 'drafting', 'drafted', 'approved')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (chapter_id, position)
+)
+"""
+
+MIGRATION_2_SCENES_INDEX = """
+CREATE INDEX idx_scenes_chapter ON scenes (chapter_id, position)
+"""
+
 MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
     (
         1,
@@ -65,6 +163,20 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
             MIGRATION_1_APP_SETTINGS,
             MIGRATION_1_GENERATIONS,
             MIGRATION_1_GENERATIONS_INDEX,
+        ),
+    ),
+    (
+        2,
+        (
+            MIGRATION_2_STORY_BIBLE,
+            MIGRATION_2_STORY_BIBLE_INDEX,
+            MIGRATION_2_CHARACTERS,
+            MIGRATION_2_CHARACTERS_INDEX,
+            MIGRATION_2_CHARACTER_ALIASES,
+            MIGRATION_2_CHAPTERS,
+            MIGRATION_2_CHAPTERS_INDEX,
+            MIGRATION_2_SCENES,
+            MIGRATION_2_SCENES_INDEX,
         ),
     ),
 )

@@ -11,9 +11,13 @@ from dataclasses import dataclass
 import streamlit as st
 
 from ..config import Settings, load_settings
+from ..core.chapters import ChapterService
+from ..core.characters import CharacterService
 from ..core.generation import GenerationService
 from ..core.projects import ProjectService
+from ..core.scenes import SceneService
 from ..core.settings_service import AppSettingsService
+from ..core.story_bible import StoryBibleService
 from ..llm.base import ModelInfo
 from ..llm.ollama import OllamaProvider
 from ..logging_setup import configure_logging
@@ -22,6 +26,12 @@ from ..storage.repositories import (
     AppSettingsRepository,
     GenerationRepository,
     ProjectRepository,
+)
+from ..storage.story_repositories import (
+    ChapterRepository,
+    CharacterRepository,
+    SceneRepository,
+    StoryBibleRepository,
 )
 
 
@@ -36,6 +46,10 @@ class AppContext:
     generation: GenerationService
     app_settings: AppSettingsService
     generations: GenerationRepository
+    story_bible: StoryBibleService
+    characters: CharacterService
+    chapters: ChapterService
+    scenes: SceneService
 
 
 @st.cache_resource(show_spinner=False)
@@ -57,6 +71,10 @@ def get_context() -> AppContext:
     project_repository = ProjectRepository(database)
     generation_repository = GenerationRepository(database)
     app_settings_repository = AppSettingsRepository(database)
+    story_bible_repository = StoryBibleRepository(database)
+    character_repository = CharacterRepository(database)
+    chapter_repository = ChapterRepository(database)
+    scene_repository = SceneRepository(database)
 
     return AppContext(
         settings=settings,
@@ -70,6 +88,12 @@ def get_context() -> AppContext:
             app_settings_repository, settings.generation
         ),
         generations=generation_repository,
+        story_bible=StoryBibleService(story_bible_repository, project_repository),
+        characters=CharacterService(character_repository, project_repository),
+        chapters=ChapterService(
+            chapter_repository, project_repository, character_repository
+        ),
+        scenes=SceneService(scene_repository, chapter_repository),
     )
 
 

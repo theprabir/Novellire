@@ -17,6 +17,7 @@ from ..storage.repositories import (
     ProjectRepository,
 )
 from .settings_service import GenerationSettings
+from .text import count_words
 
 logger = get_logger("core.generation")
 
@@ -185,8 +186,3 @@ class GenerationService:
             request.model,
             duration_ms,
         )
-
-
-def count_words(text: str) -> int:
-    """Whitespace-delimited word count; cheap and dependency-free."""
-    return len(text.split())
