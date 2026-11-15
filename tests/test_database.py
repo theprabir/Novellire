@@ -11,6 +11,7 @@ from novellire.errors import DatabaseError
 from novellire.storage.database import Database
 from novellire.storage.repositories import ProjectRepository
 from novellire.storage.schema import LATEST_SCHEMA_VERSION, MIGRATIONS
+from novellire.storage.search_repository import SearchRepository
 from novellire.storage.story_repositories import ChapterRepository
 
 
@@ -124,7 +125,55 @@ def test_migration_3_backfills_chapter_content(tmp_path: Path) -> None:
     assert chapter.content == "First line.\n\nSecond line."
     assert chapter.word_count == 4
     assert chapter.origin == "written"
-    assert database.schema_version() == LATEST_SCHEMA_VERSION == 3
+    assert database.schema_version() == LATEST_SCHEMA_VERSION == 4
+
+
+def test_migration_4_indexes_existing_chapters_and_documents(tmp_path: Path) -> None:
+    """A Phase 3 database gains a populated full-text index."""
+    path = tmp_path / "legacy-v3.db"
+    connection = sqlite3.connect(path)
+    connection.execute(
+        "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
+    )
+    for version, statements in MIGRATIONS[:3]:
+        for statement in statements:
+            connection.execute(statement)
+        connection.execute(
+            "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+            (version, "2026-01-01T00:00:00+00:00"),
+        )
+    stamp = "2026-01-01T00:00:00+00:00"
+    connection.execute(
+        "INSERT INTO projects (name, created_at, updated_at) VALUES (?, ?, ?)",
+        ("Legacy", stamp, stamp),
+    )
+    connection.execute(
+        "INSERT INTO chapters (project_id, position, title, content, word_count, "
+        "created_at, updated_at) VALUES (1, 1, 'The Gate', 'Ash on the square.', 4, ?, ?)",
+        (stamp, stamp),
+    )
+    connection.execute(
+        "INSERT INTO project_documents (project_id, kind, content, derived, "
+        "created_at, updated_at) VALUES (1, 'master_bible', 'The star is dimming.', 0, ?, ?)",
+        (stamp, stamp),
+    )
+    connection.commit()
+    connection.close()
+
+    database = Database(path)
+    database.initialize()
+
+    assert database.schema_version() == LATEST_SCHEMA_VERSION == 4
+    hits = SearchRepository(database).search(1, "ash")
+    assert [hit.source_kind for hit in hits] == ["chapter"]
+    assert "Ash" in hits[0].excerpt
+
+    with database.connection() as connection:
+        kinds = {
+            row["source_kind"]
+            for row in connection.execute("SELECT source_kind FROM search_index")
+        }
+    assert kinds == {"chapter", "master_bible"}
 
 
 def test_migration_2_upgrades_an_existing_v1_database(tmp_path: Path) -> None:
@@ -150,7 +199,7 @@ def test_migration_2_upgrades_an_existing_v1_database(tmp_path: Path) -> None:
     database = Database(path)
     database.initialize()
 
-    assert database.schema_version() == LATEST_SCHEMA_VERSION == 3
+    assert database.schema_version() == LATEST_SCHEMA_VERSION == 4
     assert [project.name for project in ProjectRepository(database).list()] == [
         "Legacy"
     ]

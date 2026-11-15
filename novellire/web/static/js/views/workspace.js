@@ -363,6 +363,11 @@ function chapterEditor(ctx, chapter) {
     placeholder:
       'Write the chapter here, or leave it empty and let Novellire draft it from your documents.',
   });
+  const summary = textarea({
+    value: chapter.summary || '',
+    rows: 3,
+    placeholder: 'A short recap of what happens in this chapter.',
+  });
   const words = el('span', { class: 'hint' }, `${count(chapter.word_count)} words`);
   content.addEventListener('input', () => {
     words.textContent = `${count(countWords(content.value))} words`;
@@ -375,9 +380,30 @@ function chapterEditor(ctx, chapter) {
     el('div', { class: 'span-2' }, content),
     el(
       'div',
+      { class: 'span-2' },
+      field(
+        'Chapter summary',
+        summary,
+        'Stored with the chapter and searchable in Memory.'
+      )
+    ),
+    el(
+      'div',
       { class: 'form-actions span-2' },
       el('button', { class: 'btn btn-primary', type: 'submit' }, 'Save chapter'),
       words,
+      chapter.content.trim()
+        ? el(
+            'button',
+            {
+              class: 'btn btn-ghost',
+              type: 'button',
+              onClick: (event) => summariseChapter(ctx, chapter, event.currentTarget),
+            },
+            icon('sparkles'),
+            'Summarise'
+          )
+        : null,
       imported
         ? el('span', { class: 'chip' }, 'Pre-written')
         : el(
@@ -401,6 +427,7 @@ function chapterEditor(ctx, chapter) {
       await api.patch(`/api/chapters/${chapter.id}`, {
         title: title.value,
         content: content.value,
+        summary: summary.value,
       });
       await ctx.refresh();
       toast('Chapter saved.', 'success');
@@ -478,6 +505,24 @@ function chapterEditor(ctx, chapter) {
     form,
     scenes.length ? scenesCard(ctx, scenes) : null
   );
+}
+
+async function summariseChapter(ctx, chapter, button) {
+  const state = ctx.state;
+  const model =
+    state.settings?.generation?.model || state.ollama?.models?.[0]?.name || '';
+  button.disabled = true;
+  button.replaceChildren(icon('refresh'), 'Summarising…');
+  try {
+    const result = await api.post(`/api/chapters/${chapter.id}/summarize`, { model });
+    const total = countWords(result.summary || '');
+    toast(`Summary saved (${count(total)} words).`, 'success');
+    await ctx.refresh();
+  } catch (error) {
+    toast(error.message, 'error');
+    button.disabled = false;
+    button.replaceChildren(icon('sparkles'), 'Summarise');
+  }
 }
 
 function scenesCard(ctx, scenes) {

@@ -7,6 +7,7 @@ import {
   toast,
 } from './ui.js';
 import { renderHome } from './views/home.js';
+import { renderMemory } from './views/memory.js';
 import { openProjectForm } from './views/projects.js';
 import { renderProjectSettings } from './views/project-settings.js';
 import { renderWorkspace } from './views/workspace.js';
@@ -20,7 +21,7 @@ const NAV = [
   { key: 'workspace', label: 'Workspace', icon: 'layers' },
   { key: 'preview', label: 'Preview', icon: 'book' },
   { key: 'chat', label: 'Chat', icon: 'message', pill: 'Phase 4' },
-  { key: 'memory', label: 'Memory', icon: 'database', pill: 'Phase 3' },
+  { key: 'memory', label: 'Memory', icon: 'database' },
   { key: 'continuity', label: 'Continuity', icon: 'shield', pill: 'Phase 5' },
   { key: 'export', label: 'Export', icon: 'download' },
   { key: 'settings', label: 'Settings', icon: 'sliders' },
@@ -279,10 +280,12 @@ function render() {
     case 'export':
       node = renderExport(context);
       break;
+    case 'memory':
+      node = renderMemory(context);
+      break;
     case 'chat':
       node = renderChat(context);
       break;
-    case 'memory':
     case 'continuity':
       node = renderScope(context, state.route.name);
       break;

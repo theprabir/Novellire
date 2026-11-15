@@ -42,8 +42,8 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
     payload = client.get("/api/health").json()
 
     assert payload["status"] == "ok"
-    assert payload["schema_version"] == 3
-    assert payload["version"] == "0.2.5"
+    assert payload["schema_version"] == 4
+    assert payload["version"] == "0.2.6"
 
 
 def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:
@@ -472,6 +472,67 @@ def test_generation_validation_error_is_reported(client: TestClient) -> None:
 
     assert response.status_code == 400
     assert "Describe" in response.json()["detail"]
+
+
+def test_search_returns_chapter_and_document_hits(client: TestClient) -> None:
+    project = create_project(client)
+    client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={"title": "The Gate", "content": "Mira crossed the ash square."},
+    )
+    client.put(
+        f"/api/projects/{project['id']}/documents/master_bible",
+        json={"content": "The star is dimming."},
+    )
+
+    chapter_hits = client.get(
+        f"/api/projects/{project['id']}/search", params={"q": "ash"}
+    ).json()["results"]
+    assert len(chapter_hits) == 1
+    assert chapter_hits[0]["kind"] == "chapter"
+    assert chapter_hits[0]["title"] == "The Gate"
+    assert "ash" in chapter_hits[0]["excerpt"].lower()
+
+    document_hits = client.get(
+        f"/api/projects/{project['id']}/search", params={"q": "dimming"}
+    ).json()["results"]
+    assert len(document_hits) == 1
+    assert document_hits[0]["kind"] == "master_bible"
+    assert document_hits[0]["title"] == "Master Story Bible"
+
+
+def test_search_rejects_a_blank_query(client: TestClient) -> None:
+    project = create_project(client)
+
+    response = client.get(
+        f"/api/projects/{project['id']}/search", params={"q": "   "}
+    )
+
+    assert response.status_code == 400
+    assert "Enter a word" in response.json()["detail"]
+
+
+def test_summarize_chapter_stores_the_summary(
+    client: TestClient, fake_provider
+) -> None:
+    project = create_project(client)
+    chapter = client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={"title": "The Gate", "content": "Mira pressed the key to her palm."},
+    ).json()
+
+    response = client.post(
+        f"/api/chapters/{chapter['id']}/summarize",
+        json={"model": "fake-model"},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["summary"] == " ".join(["word"] * 120)
+    assert payload["model"] == "fake-model"
+
+    manuscript = client.get(f"/api/projects/{project['id']}/manuscript").json()
+    assert manuscript["chapters"][0]["summary"] == payload["summary"]
 
 
 def test_export_returns_a_manuscript_file(client: TestClient) -> None:

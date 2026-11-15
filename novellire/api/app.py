@@ -25,6 +25,7 @@ from ..core.context import GenerationContextBuilder
 from ..core.documents import ProjectDocumentService, WORKSPACE_DOCUMENTS
 from ..core.export import ExportService
 from ..core.generation import GenerationService
+from ..core.memory import MemoryService
 from ..core.projects import ProjectService
 from ..core.scenes import SceneService
 from ..core.settings_service import (
@@ -42,6 +43,7 @@ from ..core.story_bible import (
     StoryBibleService,
 )
 from ..core.style_guide import StyleGuideService
+from ..core.summaries import ChapterSummaryService
 from ..core.work_status import WORK_STATUSES, WORK_STATUS_LABELS
 from ..errors import (
     DuplicateEntryError,
@@ -57,6 +59,7 @@ from ..llm.ollama import OllamaProvider
 from ..logging_setup import configure_logging
 from ..storage.database import Database
 from ..storage.document_repository import DocumentRepository
+from ..storage.search_repository import SearchRepository
 from ..storage.repositories import (
     AppSettingsRepository,
     GenerationRecord,
@@ -171,6 +174,13 @@ class DocumentUpdateRequest(BaseModel):
     content: str = ""
 
 
+class SummaryRequest(BaseModel):
+    model: str = ""
+    top_p: float = Field(default=0.9, gt=0.0, le=1.0)
+    num_predict: int = Field(default=400, ge=32, le=8192)
+    context_window: int = Field(default=4096, ge=512, le=32768)
+
+
 class StyleGuideRequest(BaseModel):
     model: str = ""
     temperature: float = Field(default=0.3, ge=0.0, le=2.0)
@@ -231,6 +241,8 @@ class ApiServices:
     export: ExportService
     context: GenerationContextBuilder
     style_guide: StyleGuideService
+    summaries: ChapterSummaryService
+    memory: MemoryService
     generations: GenerationRepository
 
 
@@ -269,6 +281,10 @@ def build_services(
         export=ExportService(
             project_repository, chapter_service, document_service
         ),
+        summaries=ChapterSummaryService(
+            provider, project_repository, chapter_service
+        ),
+        memory=MemoryService(SearchRepository(database), project_repository),
         context=GenerationContextBuilder(
             document_service,
             bible_repository,
@@ -620,6 +636,28 @@ def _build_router(services: ApiServices) -> APIRouter:
             "derived": True,
         }
 
+    # -- memory --------------------------------------------------------
+
+    @router.get("/projects/{project_id}/search")
+    def search_project(
+        project_id: int,
+        q: str = Query(min_length=1),
+        limit: int = Query(default=20, ge=1, le=50),
+    ) -> dict[str, Any]:
+        hits = services.memory.search(project_id, q, limit=limit)
+        return {
+            "query": q,
+            "results": [
+                {
+                    "kind": hit.kind,
+                    "title": hit.title,
+                    "source_id": hit.source_id,
+                    "excerpt": hit.excerpt,
+                }
+                for hit in hits
+            ],
+        }
+
     # -- export --------------------------------------------------------
 
     @router.get("/projects/{project_id}/export")
@@ -761,6 +799,27 @@ def _build_router(services: ApiServices) -> APIRouter:
         if "target_word_count" in data:
             kwargs["target_word_count"] = data["target_word_count"]
         return asdict(services.chapters.update_chapter(chapter_id, **kwargs))
+
+    @router.post("/chapters/{chapter_id}/summarize")
+    def summarize_chapter(
+        chapter_id: int, payload: SummaryRequest
+    ) -> dict[str, Any]:
+        defaults = services.app_settings.generation_settings()
+        outcome = services.summaries.summarize(
+            chapter_id,
+            GenerationSettings(
+                model=payload.model or defaults.model,
+                temperature=0.2,
+                top_p=payload.top_p,
+                num_predict=payload.num_predict,
+                context_window=payload.context_window,
+            ),
+        )
+        return {
+            **asdict(outcome.chapter),
+            "model": outcome.model,
+            "duration_ms": outcome.duration_ms,
+        }
 
     @router.post("/chapters/{chapter_id}/move")
     def move_chapter(chapter_id: int, payload: MoveRequest) -> dict[str, Any]:

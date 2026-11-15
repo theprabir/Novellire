@@ -1427,3 +1427,39 @@ input[type="range"]::-webkit-slider-thumb {
   line-height: 1.65;
   white-space: pre-wrap;
 }
+
+/* -- memory --------------------------------------------------------------- */
+
+.search-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.search-bar .input { flex: 1; min-width: 0; }
+.memory-intro { margin-bottom: 14px; }
+.memory-list { display: flex; flex-direction: column; gap: 10px; }
+.memory-hit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  text-decoration: none;
+}
+.memory-hit:hover { border-color: var(--accent-line); background: var(--panel-2); }
+.memory-hit-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.memory-hit-head strong { font-size: var(--fs-sm); }
+.memory-hit-head .icon { margin-left: auto; color: var(--faint); }
+.memory-excerpt {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}

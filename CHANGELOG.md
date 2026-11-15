@@ -3,6 +3,33 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.2.6] — 2026-11-15
+
+Memory phase. Schema version 4 adds the full-text index; existing databases are
+migrated in place.
+
+### Added
+
+- Chapter summaries: `POST /api/chapters/{id}/summarize` reads the saved chapter
+  text, asks the configured model for an 80–150 word recap, and stores it on the
+  chapter. Summaries are editable in the chapter editor and never rewrite prose.
+- `search_index`, an SQLite FTS5 table over chapter titles, summaries, prose,
+  and all four project documents. Insert, update, and delete triggers keep the
+  index aligned with the manuscript, including cascaded deletes; the migration
+  backfills existing chapters and documents.
+- `GET /api/projects/{id}/search?q=…&limit=20` returns ranked hits labelled as a
+  chapter or a document, with a snippet. Author input is tokenised and quoted, so
+  FTS operators cannot be injected.
+- The Memory surface searches this project only, shows source labels and
+  excerpts, and links each hit back to its chapter or document.
+- `novellire/core/summaries.py`, `novellire/core/memory.py`, and
+  `novellire/storage/search_repository.py`.
+
+### Changed
+
+- Memory is a working nav item rather than a Phase 3 placeholder; Chat and
+  Continuity remain designed scopes.
+
 ## [0.2.5] — 2026-11-15
 
 Manuscript export. Schema stays at 3.

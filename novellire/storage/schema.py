@@ -195,6 +195,81 @@ UPDATE chapters SET word_count = COALESCE((
 ), 0)
 """
 
+MIGRATION_4_SEARCH_INDEX = """
+CREATE VIRTUAL TABLE search_index USING fts5(
+    title,
+    body,
+    project_id UNINDEXED,
+    source_kind UNINDEXED,
+    source_id UNINDEXED,
+    tokenize = 'unicode61'
+)
+"""
+
+MIGRATION_4_BACKFILL_CHAPTERS = """
+INSERT INTO search_index (title, body, project_id, source_kind, source_id)
+SELECT title, COALESCE(summary, '') || char(10) || content,
+       project_id, 'chapter', id
+FROM chapters
+"""
+
+MIGRATION_4_BACKFILL_DOCUMENTS = """
+INSERT INTO search_index (title, body, project_id, source_kind, source_id)
+SELECT kind, content, project_id, kind, id
+FROM project_documents
+"""
+
+MIGRATION_4_CHAPTER_TRIGGERS = (
+    """
+    CREATE TRIGGER search_chapters_insert AFTER INSERT ON chapters BEGIN
+        INSERT INTO search_index (title, body, project_id, source_kind, source_id)
+        VALUES (new.title, COALESCE(new.summary, '') || char(10) || new.content,
+                new.project_id, 'chapter', new.id);
+    END
+    """,
+    """
+    CREATE TRIGGER search_chapters_update
+    AFTER UPDATE OF title, content, summary ON chapters BEGIN
+        DELETE FROM search_index
+        WHERE source_kind = 'chapter' AND source_id = old.id;
+        INSERT INTO search_index (title, body, project_id, source_kind, source_id)
+        VALUES (new.title, COALESCE(new.summary, '') || char(10) || new.content,
+                new.project_id, 'chapter', new.id);
+    END
+    """,
+    """
+    CREATE TRIGGER search_chapters_delete AFTER DELETE ON chapters BEGIN
+        DELETE FROM search_index
+        WHERE source_kind = 'chapter' AND source_id = old.id;
+    END
+    """,
+)
+
+MIGRATION_4_DOCUMENT_TRIGGERS = (
+    """
+    CREATE TRIGGER search_documents_insert AFTER INSERT ON project_documents BEGIN
+        INSERT INTO search_index (title, body, project_id, source_kind, source_id)
+        VALUES (new.kind, new.content, new.project_id, new.kind, new.id);
+    END
+    """,
+    """
+    CREATE TRIGGER search_documents_update
+    AFTER UPDATE OF content ON project_documents BEGIN
+        DELETE FROM search_index
+        WHERE source_kind = old.kind AND source_id = old.id;
+        INSERT INTO search_index (title, body, project_id, source_kind, source_id)
+        VALUES (new.kind, new.content, new.project_id, new.kind, new.id);
+    END
+    """,
+    """
+    CREATE TRIGGER search_documents_delete AFTER DELETE ON project_documents BEGIN
+        DELETE FROM search_index
+        WHERE source_kind = old.kind AND source_id = old.id;
+    END
+    """,
+)
+
+
 MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
     (
         1,
@@ -219,17 +294,27 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
             MIGRATION_2_SCENES_INDEX,
         ),
     ),
-    (
-        3,
-        (
-            MIGRATION_3_DOCUMENTS,
-            MIGRATION_3_CHAPTER_CONTENT,
-            MIGRATION_3_CHAPTER_WORDS,
-            MIGRATION_3_CHAPTER_ORIGIN,
-            MIGRATION_3_BACKFILL_CONTENT,
-            MIGRATION_3_BACKFILL_WORDS,
+            (
+            3,
+            (
+                MIGRATION_3_DOCUMENTS,
+                MIGRATION_3_CHAPTER_CONTENT,
+                MIGRATION_3_CHAPTER_WORDS,
+                MIGRATION_3_CHAPTER_ORIGIN,
+                MIGRATION_3_BACKFILL_CONTENT,
+                MIGRATION_3_BACKFILL_WORDS,
+            ),
         ),
-    ),
-)
+        (
+            4,
+            (
+                MIGRATION_4_SEARCH_INDEX,
+                MIGRATION_4_BACKFILL_CHAPTERS,
+                MIGRATION_4_BACKFILL_DOCUMENTS,
+                *MIGRATION_4_CHAPTER_TRIGGERS,
+                *MIGRATION_4_DOCUMENT_TRIGGERS,
+            ),
+        ),
+    )
 
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1][0]

@@ -95,19 +95,6 @@ export function renderChat(ctx) {
 }
 
 const SCOPES = {
-  memory: {
-    title: 'Narrative memory',
-    icon: 'database',
-    phase: 'Phase 3',
-    subtitle:
-      'The memory explorer will browse canon, episodic events, and character state with provenance back to the chapter that produced them.',
-    cards: [
-      { title: 'Canon memory', body: 'Approved world facts and rules, with approval status and source chapter.' },
-      { title: 'Episodic memory', body: 'Event records extracted from scenes, linked to characters and locations.' },
-      { title: 'Narrative state', body: 'Current character location, possessions, injuries, and knowledge.' },
-      { title: 'Retrieval index', body: 'FTS5 search across the manuscript with entity and alias matching.' },
-    ],
-  },
   continuity: {
     title: 'Continuity',
     icon: 'shield',
@@ -124,7 +111,7 @@ const SCOPES = {
 };
 
 export function renderScope(ctx, key) {
-  const scope = SCOPES[key] || SCOPES.memory;
+  const scope = SCOPES[key] || SCOPES.continuity;
   const wrap = el('div', { class: 'view-inner' });
 
   wrap.append(
