@@ -132,7 +132,9 @@ The interface has these surfaces:
   controls.
 - **App settings** — installation-wide preferences: appearance (theme, accent,
   interface and reading fonts, sizes, reading width), the Ollama connection and
-  generation defaults, data locations, and build information.
+  generation defaults, data locations, build information, and backup/restore.
+  Backups are consistent SQLite snapshots; a restore validates the file, keeps a
+  pre-restore safety copy, migrates older schemas, and requires confirmation.
 - **Export** — compile the manuscript into Markdown or plain text, with an
   optional appendix of the four project documents. The file is previewed and can
   be downloaded or copied; only chapters with text are included.
@@ -158,12 +160,12 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-155 tests run fully offline. All inference is stubbed, so no model or Ollama
+164 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
 summary storage, full-text search, event extraction, event-aware generation,
-export, and appearance round-trips.
+backup/restore, export, and appearance round-trips.
 
 ## Architecture
 
@@ -185,6 +187,7 @@ novellire/
   logging_setup.py         Logging (never logs prompts or prose)
   core/
     projects.py            Project validation and use cases
+    backup.py              Snapshot, validation, and safe database restore
     settings_service.py    Persisted generation and appearance preferences
     generation.py          Prompt -> provider -> saved record
     documents.py           Workspace document definitions and save/read service
@@ -278,13 +281,13 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.3.0** (schema version 5). `v0.3.0` makes generation
-retrieve extracted episodic events as well as earlier chapters, ranked against
-the request and shown in the draft dialog. It builds on `v0.2.9`, which added
-structured event extraction and storage; `v0.2.8`, which made generation retrieve
-earlier chapters; `v0.2.7`, sequential bulk summaries; `v0.2.6`, the FTS5 Memory
-index; `v0.2.5`, manuscript export; and `v0.2.4`, which separated Home from the
-Workspace and added chapter and scene ordering.
+Current release: **v0.3.1** (schema version 5). `v0.3.1` adds validated database
+backup and restore with automatic pre-restore safety copies. It builds on
+`v0.3.0`, which made generation retrieve extracted events alongside earlier
+chapters; `v0.2.9`, structured event extraction and storage; `v0.2.8`, earlier
+chapter retrieval in generation; `v0.2.7`, sequential bulk summaries; `v0.2.6`,
+the FTS5 Memory index; `v0.2.5`, manuscript export; and `v0.2.4`, which separated
+Home from the Workspace and added chapter and scene ordering.
 
 The Phase 1 foundation, the Phase 2 narrative data model, and local manuscript
 memory are complete, and the interface is a browser harness. Still missing:

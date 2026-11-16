@@ -3,6 +3,27 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.3.1] — 2026-11-16
+
+Backup and restore. Schema stays at 5.
+
+### Added
+
+- `GET /api/backup` creates a consistent snapshot with SQLite's backup API
+  (including committed WAL content) and downloads it as `novellire-backup-*.db`.
+  The temporary download file is removed after the response.
+- `POST /api/backup/restore` accepts a raw SQLite upload, verifies its header,
+  `PRAGMA integrity_check`, Novellire tables, and schema history, and rejects
+  backups created by a newer schema with a clear error. Valid older backups are
+  migrated to the current schema after restore.
+- A pre-restore safety copy is written to `data/backups/pre-restore-*.db` before
+  the database is replaced. If migration of the restored file fails, the previous
+  database is restored automatically.
+- App settings now has **Download backup** and **Restore backup** controls. Restore
+  requires confirmation, reports restored project and chapter counts, and reloads
+  the client.
+- `novellire/core/backup.py`.
+
 ## [0.3.0] — 2026-11-16
 
 Event-aware generation. Schema stays at 5.

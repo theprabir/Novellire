@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import {
+  confirmDialog,
   el,
   field,
   icon,
@@ -419,7 +420,73 @@ function privacyCard(ctx) {
     )
   );
 
+  const download = el(
+    'a',
+    { class: 'btn btn-sm', href: '/api/backup', download: '' },
+    icon('download'),
+    'Download backup'
+  );
+  const filePicker = input({
+    type: 'file',
+    accept: '.db,application/vnd.sqlite3,application/octet-stream',
+  });
+  filePicker.style.display = 'none';
+  filePicker.addEventListener('change', () => {
+    const file = filePicker.files?.[0];
+    filePicker.value = '';
+    if (file) openRestoreDialog(file);
+  });
+  const restore = el(
+    'label',
+    { class: 'btn btn-sm' },
+    icon('refresh'),
+    'Restore backup',
+    filePicker
+  );
+
+  body.append(
+    row(
+      'Backups',
+      'A snapshot includes every project, chapter, document, summary, event, and setting. Safety copies are kept in the data directory under backups.',
+      el('div', { class: 'actions' }, download, restore)
+    )
+  );
+
   return settingsCard('shield', 'Data and privacy', 'Where this installation keeps its data.', body);
+}
+
+function openRestoreDialog(file) {
+  confirmDialog({
+    title: 'Restore backup',
+    message: `“${file.name}” will replace every project and memory record in this installation. A safety copy of the current database is kept in the backups folder before anything changes.`,
+    confirmLabel: 'Restore backup',
+    onConfirm: async () => {
+      let response;
+      try {
+        response = await fetch('/api/backup/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: file,
+        });
+      } catch (error) {
+        toast('Cannot reach the Novellire server. Is it still running?', 'error');
+        return;
+      }
+      let payload = null;
+      try {
+        payload = await response.json();
+      } catch (error) { /* fall through to the status */ }
+      if (!response.ok) {
+        toast(payload?.detail || `Restore failed (${response.status}).`, 'error');
+        return;
+      }
+      toast(
+        `Backup restored: ${payload.projects} projects, ${payload.chapters} chapters.`,
+        'success'
+      );
+      window.setTimeout(() => window.location.reload(), 900);
+    },
+  });
 }
 
 function aboutCard(state) {

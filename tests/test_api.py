@@ -46,7 +46,7 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
 
     assert payload["status"] == "ok"
     assert payload["schema_version"] == 5
-    assert payload["version"] == "0.3.0"
+    assert payload["version"] == "0.3.1"
 
 
 def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:
@@ -680,6 +680,49 @@ def test_event_extraction_stores_and_lists_events(
 
     listing = client.get(f"/api/projects/{project['id']}/events").json()
     assert listing == payload["events"]
+
+
+def test_backup_download_and_restore(client: TestClient) -> None:
+    create_project(client, name="Original")
+    download = client.get("/api/backup")
+
+    assert download.status_code == 200
+    assert download.content.startswith(b"SQLite format 3\x00")
+    assert "novellire-backup-" in download.headers["content-disposition"]
+
+    create_project(client, name="Later")
+    restored = client.post(
+        "/api/backup/restore",
+        content=download.content,
+        headers={"Content-Type": "application/octet-stream"},
+    )
+
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["projects"] == 1
+    assert restored.json()["safety_backup"].startswith("pre-restore-")
+    names = [
+        project["name"]
+        for project in client.get("/api/projects").json()["projects"]
+    ]
+    assert names == ["Original"]
+
+
+def test_restore_rejects_a_non_backup_file(client: TestClient) -> None:
+    create_project(client, name="Original")
+
+    response = client.post(
+        "/api/backup/restore",
+        content=b"not a database",
+        headers={"Content-Type": "application/octet-stream"},
+    )
+
+    assert response.status_code == 400
+    assert "not a Novellire" in response.json()["detail"]
+    names = [
+        project["name"]
+        for project in client.get("/api/projects").json()["projects"]
+    ]
+    assert names == ["Original"]
 
 
 def test_export_returns_a_manuscript_file(client: TestClient) -> None:

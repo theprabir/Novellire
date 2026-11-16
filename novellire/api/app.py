@@ -13,13 +13,15 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import APIRouter, FastAPI, HTTPException, Query
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from starlette.background import BackgroundTask
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .. import __version__
 from ..config import Settings, load_settings
+from ..core.backup import BackupService
 from ..core.chapters import ChapterService
 from ..core.characters import FIELD_LABELS as CHARACTER_FIELD_LABELS
 from ..core.characters import PROFILE_FIELDS, CharacterService
@@ -249,6 +251,7 @@ class ApiServices:
     memory: MemoryService
     events: EventExtractionService
     event_repository: EventRepository
+    backup: BackupService
     generations: GenerationRepository
 
 
@@ -296,6 +299,7 @@ def build_services(
             provider, project_repository, chapter_service, event_repository
         ),
         event_repository=event_repository,
+        backup=BackupService(database),
         context=GenerationContextBuilder(
             document_service,
             bible_repository,
@@ -972,6 +976,28 @@ def _build_router(services: ApiServices) -> APIRouter:
     def delete_scene(scene_id: int) -> dict[str, Any]:
         services.scenes.delete_scene(scene_id)
         return {"deleted": True}
+
+    # -- backup and restore --------------------------------------------
+
+    @router.get("/backup")
+    def download_backup() -> FileResponse:
+        path, filename = services.backup.snapshot()
+        return FileResponse(
+            path,
+            media_type="application/vnd.sqlite3",
+            filename=filename,
+            background=BackgroundTask(path.unlink, missing_ok=True),
+        )
+
+    @router.post("/backup/restore")
+    async def restore_backup(request: Request) -> dict[str, Any]:
+        outcome = services.backup.restore(await request.body())
+        return {
+            "restored": True,
+            "projects": outcome.projects,
+            "chapters": outcome.chapters,
+            "safety_backup": outcome.safety_backup,
+        }
 
     # -- generation ----------------------------------------------------
 
