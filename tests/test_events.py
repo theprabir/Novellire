@@ -130,6 +130,83 @@ def test_extraction_stores_events_with_chapter_provenance(
     assert "Between 1 and 8 events" in fake_provider.requests[0].prompt
 
 
+def test_stopword_names_require_a_full_match(
+    event_service: EventExtractionService,
+    event_repository: EventRepository,
+    character_service,
+    chapter_service,
+    sample_project,
+) -> None:
+    keeper = character_service.create_character(
+        project_id=sample_project.id, name="The Keeper"
+    )
+    chapter = chapter_service.create_chapter(
+        project_id=sample_project.id,
+        title="The Gate",
+        content="The gate opens at dawn.",
+    )
+    event_repository.replace_for_chapter(
+        sample_project.id,
+        chapter.id,
+        [
+            EventDraft(
+                summary="The gate opens at dawn.", characters=("a guard",)
+            ),
+            EventDraft(
+                summary="The Keeper arrives.", characters=("The Keeper",)
+            ),
+            EventDraft(summary="A storm gathers.", characters=()),
+        ],
+        model="fake-model",
+    )
+
+    event_service.ensure_links(sample_project.id)
+
+    events = event_repository.list_for_chapter(chapter.id)
+    assert events[0].character_ids == ()
+    assert events[1].character_ids == (keeper.id,)
+    assert events[2].character_ids == ()
+
+
+def test_shared_first_names_are_not_linked_by_first_name(
+    event_service: EventExtractionService,
+    event_repository: EventRepository,
+    character_service,
+    chapter_service,
+    sample_project,
+) -> None:
+    voss = character_service.create_character(
+        project_id=sample_project.id, name="Mira Voss"
+    )
+    chen = character_service.create_character(
+        project_id=sample_project.id, name="Mira Chen"
+    )
+    chapter = chapter_service.create_chapter(
+        project_id=sample_project.id,
+        title="The Gate",
+        content="Mira enters the archive.",
+    )
+    event_repository.replace_for_chapter(
+        sample_project.id,
+        chapter.id,
+        [
+            EventDraft(summary="Mira enters the archive.", characters=("Mira",)),
+            EventDraft(
+                summary="Mira Voss signs the ledger.",
+                characters=("Mira Voss",),
+            ),
+        ],
+        model="fake-model",
+    )
+
+    event_service.ensure_links(sample_project.id)
+
+    events = event_repository.list_for_chapter(chapter.id)
+    assert events[0].character_ids == ()
+    assert events[1].character_ids == (voss.id,)
+    assert chen.id not in events[1].character_ids
+
+
 def test_links_character_profiles_by_name_and_alias(
     event_service: EventExtractionService,
     event_repository: EventRepository,

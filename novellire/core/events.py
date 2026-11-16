@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
@@ -32,6 +33,28 @@ EVENT_MAX_ITEMS = 12
 EVENT_DETAIL_LIMIT = 200
 EVENT_LIST_LIMIT = 8
 EVENT_SUMMARY_EDIT_LIMIT = 1_000
+
+# Never use these as a first-name fallback. They are too common to identify a
+# character on their own, even though they are valid words in a full name.
+NAME_STOPWORDS = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "das",
+        "de",
+        "der",
+        "die",
+        "el",
+        "la",
+        "le",
+        "of",
+        "or",
+        "the",
+        "van",
+        "von",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -168,31 +191,52 @@ def match_event_characters(
     mentions = {_normalize(value) for value in event.characters}
     summary = _normalize(event.summary)
     links: dict[int, str] = {}
+
     for character in characters:
-        matched = _matched_name(character, mentions, summary)
+        matched = _matched_full_name(character, mentions, summary)
         if matched:
             links[character.id] = matched
+
+    # Only use a first name when exactly one profile owns it. Two Mira
+    # profiles and an event that says only "Mira" is ambiguous, so neither
+    # profile is linked by the fallback.
+    first_name_counts = Counter(
+        first
+        for character in characters
+        if (first := _first_name_token(character))
+    )
+    for character in characters:
+        if character.id in links:
+            continue
+        first = _first_name_token(character)
+        if not first or first_name_counts[first] != 1:
+            continue
+        if first in mentions or _contains_phrase(summary, first):
+            links[character.id] = first
     return links
 
 
-def _matched_name(
+def _matched_full_name(
     character: CharacterRecord, mentions: set[str], summary: str
 ) -> str:
     for name in (character.name, *character.aliases):
         cleaned = name.strip()
         normalized = _normalize(cleaned)
-        if len(normalized) < 3:
+        if len(normalized) < 3 or normalized in NAME_STOPWORDS:
             continue
         if normalized in mentions or _contains_phrase(summary, normalized):
             return cleaned
-    first = character.name.strip().split(" ")[0]
-    normalized_first = _normalize(first)
-    if len(normalized_first) >= 3 and (
-        normalized_first in mentions
-        or _contains_phrase(summary, normalized_first)
-    ):
-        return first
     return ""
+
+
+def _first_name_token(character: CharacterRecord) -> str:
+    tokens = character.name.strip().split()
+    if not tokens:
+        return ""
+    first = _normalize(tokens[0])
+    if len(first) < 3 or first in NAME_STOPWORDS:
+        return ""
+    return first
 
 
 def _normalize(value: str) -> str:

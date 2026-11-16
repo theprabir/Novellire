@@ -15,6 +15,9 @@ Event-to-character links, character filtering, and event editing. Schema 6 adds
   backfilled for older events when Memory loads them.
 - Character name and alias changes invalidate the project's event links so the
   next Memory load resolves them against the updated profiles.
+- First-name matching is conservative: stopwords such as “the” are never used
+  as a first name, and a first name shared by multiple profiles does not link
+  any of them. Full names and aliases still match exactly.
 - Memory shows linked character names on each event and has an **All characters**
   filter that narrows events to one profile, with a visible match count.
 - Events can be edited from Memory: summary, characters, locations, objects, and
