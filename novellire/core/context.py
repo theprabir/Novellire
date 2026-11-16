@@ -13,6 +13,10 @@ import re
 from dataclasses import dataclass
 
 from ..storage.event_repository import EventRepository, NarrativeEvent
+from ..storage.relationship_repository import (
+    RelationshipRecord,
+    RelationshipRepository,
+)
 from ..storage.search_repository import SearchRepository
 from ..storage.story_repositories import (
     ChapterRecord,
@@ -24,6 +28,7 @@ from ..storage.story_repositories import (
 )
 from .characters import FIELD_LABELS, PROFILE_FIELDS
 from .documents import ProjectDocumentService
+from .relationships import RELATIONSHIP_TYPE_LABELS
 from .story_bible import CATEGORY_LABELS
 
 STORY_BIBLE_MAX_ENTRIES = 6
@@ -43,6 +48,9 @@ MEMORY_EVENT_CHAR_LIMIT = 2_000
 MEMORY_EVENT_SUMMARY_LIMIT = 400
 MEMORY_EVENT_FIELD_LIMIT = 200
 MEMORY_PREFERRED_CHAPTER_BOOST = 5
+RELATIONSHIP_MAX_RECORDS = 6
+RELATIONSHIP_CHAR_LIMIT = 1_200
+RELATIONSHIP_DESCRIPTION_LIMIT = 300
 
 # Canon basics worth carrying even when the request names nothing specific.
 FOUNDATIONAL_CATEGORIES = (
@@ -111,6 +119,7 @@ class GenerationContext:
     style_guide: str = ""
     bible_entries: str = ""
     character_profiles: str = ""
+    relationship_records: str = ""
     memory_chapters: tuple[MemoryChapter, ...] = ()
     memory_events: tuple[MemoryEvent, ...] = ()
 
@@ -150,6 +159,7 @@ class GenerationContextBuilder:
         chapters: ChapterRepository,
         search: SearchRepository,
         events: EventRepository,
+        relationships: RelationshipRepository,
     ) -> None:
         self._documents = documents
         self._bible_entries = bible_entries
@@ -157,6 +167,7 @@ class GenerationContextBuilder:
         self._chapters = chapters
         self._search = search
         self._events = events
+        self._relationships = relationships
 
     def build(
         self,
@@ -201,6 +212,9 @@ class GenerationContextBuilder:
             current=chapter,
             preferred_chapter_ids={item.id for item in memory},
         )
+        relationships = self._approved_relationships(
+            project_id, {profile.id for profile in profiles}
+        )
 
         return GenerationContext(
             master_bible=documents.get("master_bible", ""),
@@ -214,6 +228,10 @@ class GenerationContextBuilder:
             character_profiles=_join_with_budget(
                 [_format_character(character) for character in profiles],
                 CHARACTER_CHAR_LIMIT,
+            ),
+            relationship_records=_join_with_budget(
+                [_format_relationship(record) for record in relationships],
+                RELATIONSHIP_CHAR_LIMIT,
             ),
             memory_chapters=tuple(memory),
             memory_events=tuple(memory_events),
@@ -310,6 +328,31 @@ class GenerationContextBuilder:
             )
             for _, _, _, event in scored[:MEMORY_MAX_EVENTS]
         ]
+
+    def _approved_relationships(
+        self, project_id: int, profile_ids: set[int]
+    ) -> list[RelationshipRecord]:
+        """Include approved records connected to selected character profiles."""
+        if not profile_ids:
+            return []
+        relevant = [
+            record
+            for record in self._relationships.list_for_project(project_id)
+            if record.status == "approved"
+            and (
+                record.character_a_id in profile_ids
+                or record.character_b_id in profile_ids
+            )
+        ]
+        relevant.sort(
+            key=lambda record: (
+                (record.character_a_id in profile_ids)
+                + (record.character_b_id in profile_ids),
+                record.updated_at,
+            ),
+            reverse=True,
+        )
+        return relevant[:RELATIONSHIP_MAX_RECORDS]
 
     def _ranked_entries(
         self, project_id: int, query_text: str, query_tokens: set[str]
@@ -413,6 +456,16 @@ def _format_character(character: CharacterRecord) -> str:
         if value:
             lines.append(f"{FIELD_LABELS[field]}: {value}")
     return "\n".join(lines)
+
+
+def _format_relationship(record: RelationshipRecord) -> str:
+    label = RELATIONSHIP_TYPE_LABELS.get(
+        record.relation_type, record.relation_type
+    )
+    line = f"{record.character_a_name} — {record.character_b_name}: {label}"
+    if record.description:
+        line += f" — {_trim(record.description, RELATIONSHIP_DESCRIPTION_LIMIT)}"
+    return line
 
 
 def _memory_terms(text: str) -> list[str]:

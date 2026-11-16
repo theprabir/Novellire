@@ -3,6 +3,20 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.3.5] — 2026-11-16
+
+Approved relationship records now reach generation context. Schema stays at 7.
+
+### Added
+
+- Approved relationship records are included in the generation prompt when at
+  least one of their characters is selected for the context, with the type and
+  author note. At most six records are included in a 1,200-character block.
+- Proposed and rejected records never enter context. Derived co-occurrence
+  associations remain excluded.
+- The prompt labels the block **Approved character relationships** and the system
+  prompt names approved relationships as reference material.
+
 ## [0.3.4] — 2026-11-16
 
 Typed, author-approved relationship records. Schema 7 adds

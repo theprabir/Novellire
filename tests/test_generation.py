@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from novellire.core.context import GenerationContext
 from novellire.core.generation import GenerationService, count_words
 from novellire.core.settings_service import GenerationSettings
 from novellire.errors import (
@@ -76,6 +77,28 @@ def test_generate_builds_prompt_from_project_and_instructions(
     assert request.model == "fake-model"
     assert request.temperature == 0.7
     assert request.context_window == 2048
+
+
+def test_prompt_includes_approved_relationship_records(
+    generation_service: GenerationService,
+    fake_provider,
+    sample_project: Project,
+    generation_settings: GenerationSettings,
+) -> None:
+    generation_service.generate(
+        project_id=sample_project.id,
+        instructions="Mira meets Orin.",
+        settings=generation_settings,
+        context=GenerationContext(
+            relationship_records=(
+                "Mira Voss — Orin Vale: Ally — They guard the archive."
+            )
+        ),
+    )
+
+    prompt = fake_provider.requests[-1].prompt
+    assert "Approved character relationships:" in prompt
+    assert "Mira Voss — Orin Vale: Ally" in prompt
 
 
 def test_generate_uses_default_target_when_omitted(

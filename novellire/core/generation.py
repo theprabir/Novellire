@@ -115,6 +115,7 @@ class GenerationService:
             earlier_events=narrative.earlier_events,
             bible_entries=narrative.bible_entries,
             character_profiles=narrative.character_profiles,
+            relationship_records=narrative.relationship_records,
         )
 
         request = GenerationRequest(

@@ -151,7 +151,9 @@ The interface has these surfaces:
   author-controlled typed records and derived associations. Records are
   proposed, approved, rejected, edited, or deleted in place; only approved
   records count as canon, while derived co-occurrence stays clearly marked as
-  non-canon with event provenance.
+  non-canon with event provenance. Approved records are included in generation
+  context when their characters are selected; proposed, rejected, and derived
+  associations are never injected.
 - **Chat, Continuity** — designed scopes. Their layout, filters, and detail panes
   are reserved and labelled with the phase that will connect them; they show no
   project data yet.
@@ -166,7 +168,7 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-182 tests run fully offline. All inference is stubbed, so no model or Ollama
+185 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
@@ -289,10 +291,11 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.3.4** (schema version 7). `v0.3.4` adds typed,
-author-approved relationship records with optional event provenance, kept
-separate from derived associations. It builds on `v0.3.3`, relationship
-discovery from shared events; `v0.3.2`, event-to-character linking with
+Current release: **v0.3.5** (schema version 7). `v0.3.5` feeds approved
+relationship records into generation context, excluding proposed, rejected, and
+derived associations. It builds on `v0.3.4`, typed author-approved relationship
+records with optional event provenance; `v0.3.3`, relationship discovery from
+shared events; `v0.3.2`, event-to-character linking with
 conservative name/alias matching and event editing; `v0.3.1`, validated backup
 and restore with pre-restore safety copies; `v0.3.0`, event-aware generation;
 `v0.2.9`, structured event extraction; `v0.2.8`, earlier chapter retrieval in

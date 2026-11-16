@@ -11,6 +11,7 @@ from novellire.core.context import (
 from novellire.core.documents import ProjectDocumentService
 from novellire.storage.document_repository import DocumentRepository
 from novellire.storage.event_repository import EventDraft, EventRepository
+from novellire.storage.relationship_repository import RelationshipRepository
 from novellire.storage.search_repository import SearchRepository
 from novellire.storage.story_repositories import (
     ChapterRepository,
@@ -35,6 +36,7 @@ def context_builder(
         ChapterRepository(database),
         SearchRepository(database),
         event_repository,
+        RelationshipRepository(database),
     )
 
 
@@ -88,6 +90,79 @@ def test_build_selects_matching_canon_only(
     assert "the Courier" in context.character_profiles
     assert "Secrets: She broke the seal once." in context.character_profiles
     assert "Orin Vale" not in context.character_profiles
+
+
+def test_build_includes_only_approved_relationships_for_selected_profiles(
+    context_builder: GenerationContextBuilder,
+    database,
+    sample_project,
+    character_service,
+) -> None:
+    mira = character_service.create_character(
+        project_id=sample_project.id, name="Mira Voss"
+    )
+    orin = character_service.create_character(
+        project_id=sample_project.id, name="Orin Vale"
+    )
+    keeper = character_service.create_character(
+        project_id=sample_project.id, name="The Keeper"
+    )
+    relationships = RelationshipRepository(database)
+    relationships.create(
+        project_id=sample_project.id,
+        character_a_id=mira.id,
+        character_b_id=orin.id,
+        relation_type="ally",
+        description="They guard the archive together.",
+        status="approved",
+        source_event_id=None,
+    )
+    relationships.create(
+        project_id=sample_project.id,
+        character_a_id=mira.id,
+        character_b_id=keeper.id,
+        relation_type="rival",
+        description="An uneasy truce.",
+        status="proposed",
+        source_event_id=None,
+    )
+
+    context = context_builder.build(
+        sample_project.id, instructions="Mira meets Orin at the gate."
+    )
+
+    assert "Mira Voss — Orin Vale: Ally" in context.relationship_records
+    assert "They guard the archive together." in context.relationship_records
+    assert "The Keeper" not in context.relationship_records
+
+
+def test_build_omits_rejected_relationships(
+    context_builder: GenerationContextBuilder,
+    database,
+    sample_project,
+    character_service,
+) -> None:
+    mira = character_service.create_character(
+        project_id=sample_project.id, name="Mira Voss"
+    )
+    orin = character_service.create_character(
+        project_id=sample_project.id, name="Orin Vale"
+    )
+    RelationshipRepository(database).create(
+        project_id=sample_project.id,
+        character_a_id=mira.id,
+        character_b_id=orin.id,
+        relation_type="family",
+        description="Rejected in review.",
+        status="rejected",
+        source_event_id=None,
+    )
+
+    context = context_builder.build(
+        sample_project.id, instructions="Mira meets Orin at the gate."
+    )
+
+    assert context.relationship_records == ""
 
 
 def test_build_retrieves_only_earlier_matching_chapters(

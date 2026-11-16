@@ -349,6 +349,7 @@ def build_services(
             chapter_repository,
             SearchRepository(database),
             event_repository,
+            relationship_repository,
         ),
         style_guide=StyleGuideService(
             provider, project_repository, chapter_service, document_service
