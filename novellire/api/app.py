@@ -180,6 +180,14 @@ class DocumentUpdateRequest(BaseModel):
     content: str = ""
 
 
+class EventUpdateRequest(BaseModel):
+    summary: str
+    characters: list[str] = Field(default_factory=list)
+    locations: list[str] = Field(default_factory=list)
+    objects: list[str] = Field(default_factory=list)
+    threads: list[str] = Field(default_factory=list)
+
+
 class SummaryRequest(BaseModel):
     model: str = ""
     top_p: float = Field(default=0.9, gt=0.0, le=1.0)
@@ -296,7 +304,11 @@ def build_services(
         ),
         memory=MemoryService(SearchRepository(database), project_repository),
         events=EventExtractionService(
-            provider, project_repository, chapter_service, event_repository
+            provider,
+            project_repository,
+            chapter_service,
+            event_repository,
+            character_repository,
         ),
         event_repository=event_repository,
         backup=BackupService(database),
@@ -768,6 +780,7 @@ def _build_router(services: ApiServices) -> APIRouter:
             aliases=data.pop("aliases"),
             **{field: data[field] for field in PROFILE_FIELDS},
         )
+        services.event_repository.reset_links(character.project_id)
         return asdict(character)
 
     @router.patch("/characters/{character_id}")
@@ -780,11 +793,16 @@ def _build_router(services: ApiServices) -> APIRouter:
             name=data.pop("name", None),
             **{field: data[field] for field in PROFILE_FIELDS if field in data},
         )
+        services.event_repository.reset_links(character.project_id)
         return asdict(character)
 
     @router.put("/characters/{character_id}/aliases")
     def set_aliases(character_id: int, payload: AliasesRequest) -> dict[str, Any]:
-        return asdict(services.characters.set_aliases(character_id, payload.aliases))
+        character = services.characters.set_aliases(
+            character_id, payload.aliases
+        )
+        services.event_repository.reset_links(character.project_id)
+        return asdict(character)
 
     # -- chapters ------------------------------------------------------
 
@@ -928,10 +946,30 @@ def _build_router(services: ApiServices) -> APIRouter:
     @router.get("/projects/{project_id}/events")
     def list_events(project_id: int) -> list[dict[str, Any]]:
         services.projects.require_project(project_id)
+        services.events.ensure_links(project_id)
         return [
             asdict(event)
             for event in services.event_repository.list_for_project(project_id)
         ]
+
+    @router.patch("/events/{event_id}")
+    def update_event(
+        event_id: int, payload: EventUpdateRequest
+    ) -> dict[str, Any]:
+        event = services.events.update_event(
+            event_id,
+            summary=payload.summary,
+            characters=payload.characters,
+            locations=payload.locations,
+            objects=payload.objects,
+            threads=payload.threads,
+        )
+        return asdict(event)
+
+    @router.delete("/events/{event_id}")
+    def delete_event(event_id: int) -> dict[str, Any]:
+        services.events.delete_event(event_id)
+        return {"deleted": True}
 
     @router.post("/chapters/{chapter_id}/move")
     def move_chapter(chapter_id: int, payload: MoveRequest) -> dict[str, Any]:

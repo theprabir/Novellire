@@ -1517,6 +1517,10 @@ input[type="range"]::-webkit-slider-thumb {
 
 .memory-events { margin-bottom: 18px; }
 .memory-events-list { display: flex; flex-direction: column; gap: 8px; }
+.memory-events-title { display: flex; align-items: baseline; gap: 12px; }
+.memory-events .section-head .select { width: 210px; flex: none; }
+.event-actions { display: flex; gap: 4px; margin-left: auto; }
+.event-actions .btn { padding: 4px 8px; }
 .event-list { display: flex; flex-direction: column; gap: 8px; }
 .event-card {
   padding: 12px 14px;

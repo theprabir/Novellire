@@ -16,7 +16,9 @@ from .database import Database, utc_now_iso
 _COLUMNS = (
     "e.id, e.project_id, e.chapter_id, e.summary, e.characters, e.locations, "
     "e.objects, e.threads, e.model, e.created_at, "
-    "c.title AS chapter_title, c.position AS chapter_position"
+    "c.title AS chapter_title, c.position AS chapter_position, "
+    "COALESCE((SELECT group_concat(ec.character_id) FROM event_characters ec "
+    "WHERE ec.event_id = e.id), '') AS character_ids"
 )
 
 
@@ -45,6 +47,7 @@ class NarrativeEvent:
     created_at: str
     chapter_title: str
     chapter_position: int
+    character_ids: tuple[int, ...] = ()
 
 
 class EventRepository:
@@ -87,6 +90,99 @@ class EventRepository:
                     ),
                 )
         return self.list_for_chapter(chapter_id)
+
+    def list_unresolved(self, project_id: int) -> list[NarrativeEvent]:
+        with self._database.connection() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT {_COLUMNS}
+                FROM narrative_events e
+                JOIN chapters c ON c.id = e.chapter_id
+                WHERE e.project_id = ? AND e.links_resolved = 0
+                ORDER BY c.position, e.id
+                """,
+                (project_id,),
+            ).fetchall()
+        return [_row_to_event(row) for row in rows]
+
+    def get(self, event_id: int) -> NarrativeEvent | None:
+        with self._database.connection() as connection:
+            row = connection.execute(
+                f"""
+                SELECT {_COLUMNS}
+                FROM narrative_events e
+                JOIN chapters c ON c.id = e.chapter_id
+                WHERE e.id = ?
+                """,
+                (event_id,),
+            ).fetchone()
+        return _row_to_event(row) if row is not None else None
+
+    def reset_links(self, project_id: int) -> None:
+        with self._database.transaction() as connection:
+            connection.execute(
+                """
+                UPDATE narrative_events SET links_resolved = 0
+                WHERE project_id = ?
+                """,
+                (project_id,),
+            )
+
+    def set_character_links(
+        self, event_id: int, links: dict[int, str]
+    ) -> None:
+        with self._database.transaction() as connection:
+            connection.execute(
+                "DELETE FROM event_characters WHERE event_id = ?", (event_id,)
+            )
+            for character_id, mention in links.items():
+                connection.execute(
+                    """
+                    INSERT INTO event_characters (event_id, character_id, mention)
+                    VALUES (?, ?, ?)
+                    """,
+                    (event_id, character_id, mention),
+                )
+            connection.execute(
+                "UPDATE narrative_events SET links_resolved = 1 WHERE id = ?",
+                (event_id,),
+            )
+
+    def update(
+        self,
+        event_id: int,
+        *,
+        summary: str,
+        characters: Sequence[str],
+        locations: Sequence[str],
+        objects: Sequence[str],
+        threads: Sequence[str],
+    ) -> NarrativeEvent | None:
+        with self._database.transaction() as connection:
+            connection.execute(
+                """
+                UPDATE narrative_events SET
+                    summary = ?, characters = ?, locations = ?, objects = ?,
+                    threads = ?, links_resolved = 0
+                WHERE id = ?
+                """,
+                (
+                    summary,
+                    _encode(characters),
+                    _encode(locations),
+                    _encode(objects),
+                    _encode(threads),
+                    event_id,
+                ),
+            )
+        return self.get(event_id)
+
+    def delete(self, event_id: int) -> bool:
+        with self._database.transaction() as connection:
+            cursor = connection.execute(
+                "DELETE FROM narrative_events WHERE id = ?", (event_id,)
+            )
+            return cursor.rowcount > 0
 
     def list_for_chapter(self, chapter_id: int) -> list[NarrativeEvent]:
         with self._database.connection() as connection:
@@ -145,4 +241,9 @@ def _row_to_event(row) -> NarrativeEvent:  # noqa: ANN001 - sqlite3.Row
         created_at=str(row["created_at"]),
         chapter_title=str(row["chapter_title"]),
         chapter_position=int(row["chapter_position"]),
+        character_ids=tuple(
+            int(value)
+            for value in str(row["character_ids"] or "").split(",")
+            if value
+        ),
     )

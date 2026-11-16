@@ -125,7 +125,7 @@ def test_migration_3_backfills_chapter_content(tmp_path: Path) -> None:
     assert chapter.content == "First line.\n\nSecond line."
     assert chapter.word_count == 4
     assert chapter.origin == "written"
-    assert database.schema_version() == LATEST_SCHEMA_VERSION == 5
+    assert database.schema_version() == LATEST_SCHEMA_VERSION == 6
 
 
 def test_migration_4_indexes_existing_chapters_and_documents(tmp_path: Path) -> None:
@@ -163,7 +163,7 @@ def test_migration_4_indexes_existing_chapters_and_documents(tmp_path: Path) -> 
     database = Database(path)
     database.initialize()
 
-    assert database.schema_version() == LATEST_SCHEMA_VERSION == 5
+    assert database.schema_version() == LATEST_SCHEMA_VERSION == 6
     hits = SearchRepository(database).search(1, "ash")
     assert [hit.source_kind for hit in hits] == ["chapter"]
     assert "Ash" in hits[0].excerpt
@@ -199,7 +199,7 @@ def test_migration_2_upgrades_an_existing_v1_database(tmp_path: Path) -> None:
     database = Database(path)
     database.initialize()
 
-    assert database.schema_version() == LATEST_SCHEMA_VERSION == 5
+    assert database.schema_version() == LATEST_SCHEMA_VERSION == 6
     assert [project.name for project in ProjectRepository(database).list()] == [
         "Legacy"
     ]

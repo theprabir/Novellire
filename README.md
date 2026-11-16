@@ -145,7 +145,9 @@ The interface has these surfaces:
   project sequentially, skips chapters that already have a summary (and ones
   without text), and streams per-chapter progress into the page. **Episodic
   memory** shows extracted events with their characters, locations, objects,
-  unresolved threads, and the chapter that produced them.
+  unresolved threads, and the chapter that produced them. Events are linked to
+  character profiles by name or alias, can be filtered by character, and can be
+  edited or deleted in place.
 - **Chat, Continuity** — designed scopes. Their layout, filters, and detail panes
   are reserved and labelled with the phase that will connect them; they show no
   project data yet.
@@ -160,12 +162,12 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-164 tests run fully offline. All inference is stubbed, so no model or Ollama
+170 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
-summary storage, full-text search, event extraction, event-aware generation,
-backup/restore, export, and appearance round-trips.
+summary storage, full-text search, event extraction, character linking,
+event-aware generation, backup/restore, export, and appearance round-trips.
 
 ## Architecture
 
@@ -196,7 +198,7 @@ novellire/
     characters.py          Character profiles and aliases (legacy API)
     context.py             Ranked canon and earlier-chapter context for generation
     summaries.py           Chapter summary generation and storage
-    events.py              Structured event extraction and JSON parsing
+    events.py              Event extraction, character linking, and editing
     memory.py              Search results labelled by chapter or document
     export.py              Markdown and text manuscript compilation
     chapters.py            Ordered chapters with pasted or drafted text
@@ -281,13 +283,14 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.3.1** (schema version 5). `v0.3.1` adds validated database
-backup and restore with automatic pre-restore safety copies. It builds on
-`v0.3.0`, which made generation retrieve extracted events alongside earlier
-chapters; `v0.2.9`, structured event extraction and storage; `v0.2.8`, earlier
-chapter retrieval in generation; `v0.2.7`, sequential bulk summaries; `v0.2.6`,
-the FTS5 Memory index; `v0.2.5`, manuscript export; and `v0.2.4`, which separated
-Home from the Workspace and added chapter and scene ordering.
+Current release: **v0.3.2** (schema version 6). `v0.3.2` links extracted events
+to character profiles and aliases, filters Memory by character, and lets events
+be edited or deleted. It builds on `v0.3.1`, validated backup and restore with
+pre-restore safety copies; `v0.3.0`, event-aware generation; `v0.2.9`, structured
+event extraction; `v0.2.8`, earlier chapter retrieval in generation; `v0.2.7`,
+sequential bulk summaries; `v0.2.6`, the FTS5 Memory index; `v0.2.5`, manuscript
+export; and `v0.2.4`, which separated Home from the Workspace and added chapter
+and scene ordering.
 
 The Phase 1 foundation, the Phase 2 narrative data model, and local manuscript
 memory are complete, and the interface is a browser harness. Still missing:

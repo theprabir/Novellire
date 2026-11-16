@@ -45,8 +45,8 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
     payload = client.get("/api/health").json()
 
     assert payload["status"] == "ok"
-    assert payload["schema_version"] == 5
-    assert payload["version"] == "0.3.1"
+    assert payload["schema_version"] == 6
+    assert payload["version"] == "0.3.2"
 
 
 def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:
@@ -680,6 +680,94 @@ def test_event_extraction_stores_and_lists_events(
 
     listing = client.get(f"/api/projects/{project['id']}/events").json()
     assert listing == payload["events"]
+
+
+def test_events_link_profiles_and_support_edit_and_delete(
+    client: TestClient, fake_provider
+) -> None:
+    project = create_project(client)
+    mira = client.post(
+        f"/api/projects/{project['id']}/characters",
+        json={"name": "Mira Voss", "aliases": ["the Courier"]},
+    ).json()
+    orin = client.post(
+        f"/api/projects/{project['id']}/characters",
+        json={"name": "Orin Vale"},
+    ).json()
+    chapter = client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={"title": "The Gate", "content": "The Courier enters."},
+    ).json()
+    fake_provider.result = GenerationResult(
+        text=(
+            '{"events":[{"summary":"The Courier enters the archive.",'
+            '"characters":["the Courier"],"locations":["archive"],'
+            '"objects":[],"threads":[]}]}'
+        ),
+        model="fake-model",
+        duration_ms=12,
+    )
+
+    extracted = client.post(
+        f"/api/chapters/{chapter['id']}/events/extract",
+        json={"model": "fake-model"},
+    ).json()
+    event = extracted["events"][0]
+    assert event["character_ids"] == [mira["id"]]
+
+    updated = client.patch(
+        f"/api/events/{event['id']}",
+        json={
+            "summary": "Orin takes the ledger instead.",
+            "characters": ["Orin"],
+            "locations": ["keep"],
+            "objects": ["ledger"],
+            "threads": [],
+        },
+    )
+
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["summary"] == "Orin takes the ledger instead."
+    assert updated.json()["character_ids"] == [orin["id"]]
+
+    deleted = client.delete(f"/api/events/{event['id']}")
+    assert deleted.status_code == 200
+    assert client.get(f"/api/projects/{project['id']}/events").json() == []
+
+
+def test_adding_an_alias_relinks_existing_events(
+    client: TestClient, fake_provider
+) -> None:
+    project = create_project(client)
+    mira = client.post(
+        f"/api/projects/{project['id']}/characters", json={"name": "Mira Voss"}
+    ).json()
+    chapter = client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={"title": "The Gate", "content": "The Courier enters."},
+    ).json()
+    fake_provider.result = GenerationResult(
+        text=(
+            '{"events":[{"summary":"The Courier enters.",'
+            '"characters":["the Courier"],"locations":[],'
+            '"objects":[],"threads":[]}]}'
+        ),
+        model="fake-model",
+        duration_ms=5,
+    )
+    events = client.post(
+        f"/api/chapters/{chapter['id']}/events/extract",
+        json={"model": "fake-model"},
+    ).json()["events"]
+    assert events[0]["character_ids"] == []
+
+    client.put(
+        f"/api/characters/{mira['id']}/aliases",
+        json={"aliases": ["the Courier"]},
+    )
+
+    listing = client.get(f"/api/projects/{project['id']}/events").json()
+    assert listing[0]["character_ids"] == [mira["id"]]
 
 
 def test_backup_download_and_restore(client: TestClient) -> None:

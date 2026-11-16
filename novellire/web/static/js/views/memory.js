@@ -1,5 +1,17 @@
 import { api } from '../api.js';
-import { count, el, emptyState, icon, input, toast } from '../ui.js';
+import {
+  confirmDialog,
+  count,
+  el,
+  emptyState,
+  field,
+  icon,
+  input,
+  openModal,
+  select,
+  textarea,
+  toast,
+} from '../ui.js';
 
 export function renderMemory(ctx) {
   const { state } = ctx;
@@ -111,24 +123,37 @@ function eventsSection(projectId) {
     { class: 'memory-events-list' },
     el('p', { class: 'hint' }, 'Loading episodic memory…')
   );
+  const filter = select(
+    [{ value: '', label: 'All characters' }],
+    { value: '', disabled: true, 'aria-label': 'Filter events by character' }
+  );
   const section = el(
     'section',
     { class: 'memory-events' },
     el(
       'div',
       { class: 'section-head' },
-      el('h2', {}, 'Episodic memory'),
-      el('span', { class: 'hint' }, 'Extracted events with chapter provenance')
+      el(
+        'div',
+        { class: 'memory-events-title' },
+        el('h2', {}, 'Episodic memory'),
+        el('span', { class: 'hint' }, 'Extracted events with chapter provenance')
+      ),
+      filter
     ),
     list
   );
-  loadEvents(projectId, list);
-  return section;
-}
 
-async function loadEvents(projectId, list) {
-  try {
-    const events = await api.get(`/api/projects/${projectId}/events`);
+  let events = [];
+  let characters = [];
+
+  const render = () => {
+    const selected = filter.value ? Number(filter.value) : null;
+    const visible = selected
+      ? events.filter((event) =>
+          (event.character_ids || []).includes(selected)
+        )
+      : events;
     if (!events.length) {
       list.replaceChildren(
         el(
@@ -143,24 +168,73 @@ async function loadEvents(projectId, list) {
       );
       return;
     }
+    const characterName = characters.find(
+      (character) => character.id === selected
+    )?.name;
     list.replaceChildren(
-      el(
-        'div',
-        { class: 'event-list' },
-        ...events.map((event) => eventCard(event))
-      ),
+      visible.length
+        ? el(
+            'div',
+            { class: 'event-list' },
+            ...visible.map((event) =>
+              eventCard(event, characters, refresh)
+            )
+          )
+        : el(
+            'div',
+            { class: 'card card-pad' },
+            el(
+              'p',
+              { class: 'hint' },
+              `No events are linked to ${characterName || 'that character'}.`
+            )
+          ),
       el(
         'p',
         { class: 'hint' },
-        `${count(events.length)} event${events.length === 1 ? '' : 's'} stored.`
+        selected
+          ? `${count(visible.length)} of ${count(events.length)} events linked to ${characterName}.`
+          : `${count(events.length)} event${events.length === 1 ? '' : 's'} stored.`
       )
     );
-  } catch (error) {
-    list.replaceChildren(el('p', { class: 'hint' }, error.message));
+  };
+
+  async function refresh() {
+    try {
+      events = await api.get(`/api/projects/${projectId}/events`);
+      if (!characters.length) {
+        characters = await api
+          .get(`/api/projects/${projectId}/characters`)
+          .catch(() => []);
+      }
+      const options = [
+        { value: '', label: 'All characters' },
+        ...characters.map((character) => ({
+          value: character.id,
+          label: character.name,
+        })),
+      ];
+      const selected = filter.value;
+      filter.replaceChildren(
+        ...options.map((option) => {
+          const node = el('option', { value: option.value }, option.label);
+          if (String(option.value) === String(selected)) node.selected = true;
+          return node;
+        })
+      );
+      filter.disabled = characters.length === 0;
+      render();
+    } catch (error) {
+      list.replaceChildren(el('p', { class: 'hint' }, error.message));
+    }
   }
+
+  filter.addEventListener('change', render);
+  refresh();
+  return section;
 }
 
-function eventCard(event) {
+function eventCard(event, characters, refresh) {
   const tags = [
     ['Characters', event.characters],
     ['Locations', event.locations],
@@ -170,6 +244,39 @@ function eventCard(event) {
     .map(([label, values]) =>
       el('span', { class: 'chip' }, `${label}: ${values.join(', ')}`)
     );
+  const linked = (event.character_ids || [])
+    .map((id) => characters.find((character) => character.id === id)?.name)
+    .filter(Boolean);
+  if (linked.length) {
+    tags.push(
+      el('span', { class: 'chip accent' }, `Linked: ${linked.join(', ')}`)
+    );
+  }
+
+  const actions = el(
+    'div',
+    { class: 'event-actions' },
+    el(
+      'button',
+      {
+        class: 'btn btn-ghost btn-sm',
+        type: 'button',
+        onClick: () => openEventEditor(event, refresh),
+      },
+      icon('pencil'),
+      'Edit'
+    ),
+    el(
+      'button',
+      {
+        class: 'btn btn-ghost btn-sm',
+        type: 'button',
+        onClick: () => deleteEvent(event, refresh),
+      },
+      icon('trash'),
+      'Delete'
+    )
+  );
 
   return el(
     'article',
@@ -182,7 +289,8 @@ function eventCard(event) {
         { class: 'chip accent' },
         `Chapter ${event.chapter_position} — ${event.chapter_title}`
       ),
-      event.model ? el('span', { class: 'hint' }, event.model) : null
+      event.model ? el('span', { class: 'hint' }, event.model) : null,
+      actions
     ),
     el('p', { class: 'event-summary' }, event.summary),
     tags.length ? el('div', { class: 'event-tags' }, ...tags) : null,
@@ -199,6 +307,94 @@ function eventCard(event) {
         )
       : null
   );
+}
+
+function splitList(value) {
+  return String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function openEventEditor(event, refresh) {
+  const summary = textarea({ rows: 3, value: event.summary });
+  const characters = input({
+    value: (event.characters || []).join(', '),
+  });
+  const locations = input({ value: (event.locations || []).join(', ') });
+  const objects = input({ value: (event.objects || []).join(', ') });
+  const threads = input({ value: (event.threads || []).join(', ') });
+
+  const save = el(
+    'button',
+    { class: 'btn btn-primary', type: 'button' },
+    'Save event'
+  );
+  const modal = openModal({
+    title: 'Edit event',
+    wide: true,
+    body: [
+      field('Summary', summary),
+      field(
+        'Characters',
+        characters,
+        'Comma-separated names or aliases. Links update when you save.'
+      ),
+      field('Locations', locations, 'Comma-separated.'),
+      field('Objects', objects, 'Comma-separated.'),
+      field('Unresolved threads', threads, 'Comma-separated questions.'),
+    ],
+    footer: [
+      el(
+        'button',
+        { class: 'btn btn-ghost', type: 'button', onClick: () => modal.close() },
+        'Cancel'
+      ),
+      save,
+    ],
+  });
+
+  save.addEventListener('click', async () => {
+    if (!summary.value.trim()) {
+      toast('An event needs a summary.', 'error');
+      summary.focus();
+      return;
+    }
+    modal.setBusy(true);
+    try {
+      await api.patch(`/api/events/${event.id}`, {
+        summary: summary.value.trim(),
+        characters: splitList(characters.value),
+        locations: splitList(locations.value),
+        objects: splitList(objects.value),
+        threads: splitList(threads.value),
+      });
+      modal.close();
+      toast('Event updated.', 'success');
+      await refresh();
+    } catch (error) {
+      toast(error.message, 'error');
+    } finally {
+      modal.setBusy(false);
+    }
+  });
+}
+
+function deleteEvent(event, refresh) {
+  confirmDialog({
+    title: 'Delete event',
+    message: `Remove “${event.summary}” from episodic memory? This cannot be undone.`,
+    confirmLabel: 'Delete event',
+    onConfirm: async () => {
+      try {
+        await api.del(`/api/events/${event.id}`);
+        toast('Event deleted.', 'success');
+        await refresh();
+      } catch (error) {
+        toast(error.message, 'error');
+      }
+    },
+  });
 }
 
 function bulkSummaryCard(ctx, pending) {

@@ -3,6 +3,26 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.3.2] — 2026-11-16
+
+Event-to-character links, character filtering, and event editing. Schema 6 adds
+`event_characters` and `narrative_events.links_resolved`.
+
+### Added
+
+- Extracted events are linked to character profiles by character name, first
+  name, or alias. Links are written when extraction completes and lazily
+  backfilled for older events when Memory loads them.
+- Character name and alias changes invalidate the project's event links so the
+  next Memory load resolves them against the updated profiles.
+- Memory shows linked character names on each event and has an **All characters**
+  filter that narrows events to one profile, with a visible match count.
+- Events can be edited from Memory: summary, characters, locations, objects, and
+  unresolved threads. Saving relinks the edited event. Events can also be
+  deleted after confirmation.
+- `PATCH /api/events/{id}` and `DELETE /api/events/{id}`.
+- `novellire/core/events.py` now owns matching and link maintenance.
+
 ## [0.3.1] — 2026-11-16
 
 Backup and restore. Schema stays at 5.

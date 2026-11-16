@@ -291,6 +291,27 @@ CREATE INDEX idx_narrative_events_project_chapter
 """
 
 
+MIGRATION_6_EVENT_LINKS = """
+ALTER TABLE narrative_events
+    ADD COLUMN links_resolved INTEGER NOT NULL DEFAULT 0
+    CHECK (links_resolved IN (0, 1))
+"""
+
+MIGRATION_6_EVENT_CHARACTERS = """
+CREATE TABLE event_characters (
+    event_id INTEGER NOT NULL REFERENCES narrative_events(id) ON DELETE CASCADE,
+    character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+    mention TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (event_id, character_id)
+)
+"""
+
+MIGRATION_6_EVENT_CHARACTERS_INDEX = """
+CREATE INDEX idx_event_characters_character
+    ON event_characters (character_id, event_id)
+"""
+
+
 MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
     (
         1,
@@ -341,6 +362,14 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
             (
                 MIGRATION_5_EVENTS,
                 MIGRATION_5_EVENTS_INDEX,
+            ),
+        ),
+        (
+            6,
+            (
+                MIGRATION_6_EVENT_LINKS,
+                MIGRATION_6_EVENT_CHARACTERS,
+                MIGRATION_6_EVENT_CHARACTERS_INDEX,
             ),
         ),
     )
