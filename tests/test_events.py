@@ -190,6 +190,67 @@ def test_relationships_are_derived_from_shared_events(
     assert pairs[(mira.id, keeper.id)].shared_events == 1
 
 
+def test_relationship_latest_follows_chapter_order_not_insertion(
+    event_service: EventExtractionService,
+    event_repository: EventRepository,
+    character_service,
+    chapter_service,
+    sample_project,
+) -> None:
+    character_service.create_character(
+        project_id=sample_project.id, name="Mira Voss"
+    )
+    character_service.create_character(
+        project_id=sample_project.id, name="Orin Vale"
+    )
+    first = chapter_service.create_chapter(
+        project_id=sample_project.id,
+        title="Part One",
+        content="Mira and Orin meet.",
+    )
+    second = chapter_service.create_chapter(
+        project_id=sample_project.id,
+        title="Part Two",
+        content="Mira and Orin return.",
+    )
+
+    # Extract the later chapter first, then the earlier one. The earlier
+    # chapter's event gets the higher insertion id but is not the latest
+    # event in narrative order.
+    event_repository.replace_for_chapter(
+        sample_project.id,
+        second.id,
+        [
+            EventDraft(
+                summary="Mira and Orin return to the gate.",
+                characters=("Mira", "Orin"),
+            )
+        ],
+        model="fake-model",
+    )
+    event_repository.replace_for_chapter(
+        sample_project.id,
+        first.id,
+        [
+            EventDraft(
+                summary="Mira and Orin first meet.",
+                characters=("Mira", "Orin"),
+            )
+        ],
+        model="fake-model",
+    )
+
+    relationships = event_service.relationships(sample_project.id)
+
+    assert len(relationships) == 1
+    assert relationships[0].shared_events == 2
+    assert relationships[0].latest_summary == (
+        "Mira and Orin return to the gate."
+    )
+    assert relationships[0].latest_chapter_title == "Part Two"
+    assert relationships[0].latest_chapter_position == 2
+
+
 def test_stopword_names_require_a_full_match(
     event_service: EventExtractionService,
     event_repository: EventRepository,

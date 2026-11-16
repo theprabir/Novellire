@@ -164,7 +164,7 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-174 tests run fully offline. All inference is stubbed, so no model or Ollama
+175 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,

@@ -17,6 +17,9 @@ Character relationship discovery from episodic memory. Schema stays at 6.
   deleted.
 - Relationships are explicitly derived, not canon, and carry event/chapter
   provenance. No relationship data is stored separately yet.
+- Latest relationship provenance follows chapter position rather than event
+  insertion id, so extracting an earlier chapter later does not misreport it as
+  the newest event. Event id breaks ties within one chapter.
 
 ## [0.3.2] — 2026-11-16
 

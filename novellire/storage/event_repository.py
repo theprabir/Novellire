@@ -121,35 +121,46 @@ class EventRepository:
     def list_character_pairs(
         self, project_id: int
     ) -> list[tuple[int, int, int, int]]:
-        """Return character pairs that share events, with counts and provenance."""
+        """Return character pairs with shared-event counts and narrative order.
+
+        Latest provenance follows chapter position, not insertion order, so
+        extracting an earlier chapter later does not make it look newest.
+        Event id breaks ties within the same chapter.
+        """
         with self._database.connection() as connection:
             rows = connection.execute(
                 """
                 SELECT ec_a.character_id AS character_a_id,
                        ec_b.character_id AS character_b_id,
-                       COUNT(DISTINCT ec_a.event_id) AS shared_events,
-                       MAX(ec_a.event_id) AS latest_event_id
+                       ec_a.event_id AS event_id,
+                       c.position AS chapter_position
                 FROM event_characters ec_a
                 JOIN event_characters ec_b
                   ON ec_b.event_id = ec_a.event_id
                  AND ec_b.character_id > ec_a.character_id
                 JOIN narrative_events e ON e.id = ec_a.event_id
+                JOIN chapters c ON c.id = e.chapter_id
                 WHERE e.project_id = ?
-                GROUP BY ec_a.character_id, ec_b.character_id
-                ORDER BY shared_events DESC, latest_event_id DESC,
-                         character_a_id, character_b_id
                 """,
                 (project_id,),
             ).fetchall()
-        return [
+
+        # event_characters has one row per event/character, so the joined
+        # rows are already distinct per event and pair.
+        pairs: dict[tuple[int, int], tuple[int, tuple[int, int]]] = {}
+        for row in rows:
+            key = (int(row["character_a_id"]), int(row["character_b_id"]))
+            count, latest = pairs.get(key, (0, (-1, -1)))
+            candidate = (int(row["chapter_position"]), int(row["event_id"]))
+            pairs[key] = (count + 1, max(latest, candidate))
+
+        return sorted(
             (
-                int(row["character_a_id"]),
-                int(row["character_b_id"]),
-                int(row["shared_events"]),
-                int(row["latest_event_id"]),
-            )
-            for row in rows
-        ]
+                (a_id, b_id, count, latest[1])
+                for (a_id, b_id), (count, latest) in pairs.items()
+            ),
+            key=lambda pair: (-pair[2], pair[0], pair[1]),
+        )
 
     def reset_links(self, project_id: int) -> None:
         with self._database.transaction() as connection:
