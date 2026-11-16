@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from ..storage.event_repository import EventRepository, NarrativeEvent
 from ..storage.search_repository import SearchRepository
 from ..storage.story_repositories import (
     ChapterRecord,
@@ -37,6 +38,11 @@ MEMORY_SUMMARY_LIMIT = 600
 MEMORY_EXCERPT_LIMIT = 500
 MEMORY_SEARCH_LIMIT = 30
 MEMORY_TERMS_LIMIT = 12
+MEMORY_MAX_EVENTS = 8
+MEMORY_EVENT_CHAR_LIMIT = 2_000
+MEMORY_EVENT_SUMMARY_LIMIT = 400
+MEMORY_EVENT_FIELD_LIMIT = 200
+MEMORY_PREFERRED_CHAPTER_BOOST = 5
 
 # Canon basics worth carrying even when the request names nothing specific.
 FOUNDATIONAL_CATEGORIES = (
@@ -81,6 +87,21 @@ class MemoryChapter:
 
 
 @dataclass(frozen=True)
+class MemoryEvent:
+    """One extracted event retrieved for the prompt, with provenance."""
+
+    id: int
+    chapter_id: int
+    chapter_position: int
+    chapter_title: str
+    summary: str
+    characters: tuple[str, ...]
+    locations: tuple[str, ...]
+    objects: tuple[str, ...]
+    threads: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class GenerationContext:
     """Everything the prompt carries outside the request itself."""
 
@@ -91,6 +112,7 @@ class GenerationContext:
     bible_entries: str = ""
     character_profiles: str = ""
     memory_chapters: tuple[MemoryChapter, ...] = ()
+    memory_events: tuple[MemoryEvent, ...] = ()
 
     @property
     def earlier_chapters(self) -> str:
@@ -98,6 +120,14 @@ class GenerationContext:
         return _join_with_budget(
             [_format_memory(chapter) for chapter in self.memory_chapters],
             MEMORY_CHAR_LIMIT,
+        )
+
+    @property
+    def earlier_events(self) -> str:
+        """Prompt block for retrieved episodic events, within their budget."""
+        return _join_with_budget(
+            [_format_event(event) for event in self.memory_events],
+            MEMORY_EVENT_CHAR_LIMIT,
         )
 
     def documents(self) -> dict[str, str]:
@@ -119,12 +149,14 @@ class GenerationContextBuilder:
         characters: CharacterRepository,
         chapters: ChapterRepository,
         search: SearchRepository,
+        events: EventRepository,
     ) -> None:
         self._documents = documents
         self._bible_entries = bible_entries
         self._characters = characters
         self._chapters = chapters
         self._search = search
+        self._events = events
 
     def build(
         self,
@@ -162,6 +194,13 @@ class GenerationContextBuilder:
         memory = self._retrieve_chapters(
             project_id, _memory_terms(query_text), current=chapter
         )
+        memory_events = self._retrieve_events(
+            project_id,
+            query_text,
+            query_tokens,
+            current=chapter,
+            preferred_chapter_ids={item.id for item in memory},
+        )
 
         return GenerationContext(
             master_bible=documents.get("master_bible", ""),
@@ -177,6 +216,7 @@ class GenerationContextBuilder:
                 CHARACTER_CHAR_LIMIT,
             ),
             memory_chapters=tuple(memory),
+            memory_events=tuple(memory_events),
         )
 
     def _retrieve_chapters(
@@ -226,6 +266,50 @@ class GenerationContextBuilder:
             if len(selected) >= MEMORY_MAX_CHAPTERS:
                 break
         return selected
+
+    def _retrieve_events(
+        self,
+        project_id: int,
+        query_text: str,
+        query_tokens: set[str],
+        *,
+        current: ChapterRecord | None,
+        preferred_chapter_ids: set[int],
+    ) -> list[MemoryEvent]:
+        """Rank matching events, preferring chapters already retrieved."""
+        if not query_tokens:
+            return []
+        scored: list[tuple[int, int, int, NarrativeEvent]] = []
+        for event in self._events.list_for_project(project_id):
+            if current is not None and (
+                event.chapter_id == current.id
+                or event.chapter_position >= current.position
+            ):
+                continue
+            score = _event_score(event, query_text, query_tokens)
+            if event.chapter_id in preferred_chapter_ids:
+                score += MEMORY_PREFERRED_CHAPTER_BOOST
+            if score <= 0:
+                continue
+            scored.append(
+                (-score, event.chapter_position, event.id, event)
+            )
+
+        scored.sort(key=lambda item: (item[0], item[1], item[2]))
+        return [
+            MemoryEvent(
+                id=event.id,
+                chapter_id=event.chapter_id,
+                chapter_position=event.chapter_position,
+                chapter_title=event.chapter_title,
+                summary=event.summary,
+                characters=event.characters,
+                locations=event.locations,
+                objects=event.objects,
+                threads=event.threads,
+            )
+            for _, _, _, event in scored[:MEMORY_MAX_EVENTS]
+        ]
 
     def _ranked_entries(
         self, project_id: int, query_text: str, query_tokens: set[str]
@@ -341,6 +425,39 @@ def _memory_terms(text: str) -> list[str]:
         if len(terms) >= MEMORY_TERMS_LIMIT:
             break
     return terms
+
+
+def _event_score(
+    event: NarrativeEvent, query_text: str, query_tokens: set[str]
+) -> int:
+    score = 3 * len(_tokens(event.summary) & query_tokens)
+    for values, weight in (
+        (event.characters, 8),
+        (event.locations, 6),
+        (event.objects, 6),
+        (event.threads, 2),
+    ):
+        for value in values:
+            phrase = value.strip().casefold()
+            if len(phrase) >= 3 and phrase in query_text:
+                score += weight
+            score += 2 * len(_tokens(value) & query_tokens)
+    return score
+
+
+def _format_event(event: MemoryEvent) -> str:
+    lines = [f"Chapter {event.chapter_position} — {event.chapter_title}"]
+    if event.summary:
+        lines.append(f"Event: {_trim(event.summary, MEMORY_EVENT_SUMMARY_LIMIT)}")
+    for label, values in (
+        ("Characters", event.characters),
+        ("Locations", event.locations),
+        ("Objects", event.objects),
+        ("Unresolved", event.threads),
+    ):
+        if values:
+            lines.append(f"{label}: {_trim(', '.join(values), MEMORY_EVENT_FIELD_LIMIT)}")
+    return "\n".join(lines)
 
 
 def _format_memory(chapter: MemoryChapter) -> str:

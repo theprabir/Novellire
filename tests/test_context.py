@@ -10,6 +10,7 @@ from novellire.core.context import (
 )
 from novellire.core.documents import ProjectDocumentService
 from novellire.storage.document_repository import DocumentRepository
+from novellire.storage.event_repository import EventDraft, EventRepository
 from novellire.storage.search_repository import SearchRepository
 from novellire.storage.story_repositories import (
     ChapterRepository,
@@ -19,13 +20,21 @@ from novellire.storage.story_repositories import (
 
 
 @pytest.fixture()
-def context_builder(database, project_repository) -> GenerationContextBuilder:
+def event_repository(database) -> EventRepository:
+    return EventRepository(database)
+
+
+@pytest.fixture()
+def context_builder(
+    database, project_repository, event_repository
+) -> GenerationContextBuilder:
     return GenerationContextBuilder(
         ProjectDocumentService(DocumentRepository(database), project_repository),
         StoryBibleRepository(database),
         CharacterRepository(database),
         ChapterRepository(database),
         SearchRepository(database),
+        event_repository,
     )
 
 
@@ -118,6 +127,68 @@ def test_build_retrieves_only_earlier_matching_chapters(
     assert context.earlier_chapters.count("Mira enters the archive") == 1
 
 
+def test_build_retrieves_matching_events_from_earlier_chapters(
+    context_builder: GenerationContextBuilder,
+    event_repository: EventRepository,
+    sample_project,
+    chapter_service,
+) -> None:
+    earlier = chapter_service.create_chapter(
+        project_id=sample_project.id,
+        title="The Gate",
+        content="Mira crossed the ashen archive.",
+    )
+    current = chapter_service.create_chapter(
+        project_id=sample_project.id, title="Return"
+    )
+    later = chapter_service.create_chapter(
+        project_id=sample_project.id, title="After", content="The archive burns."
+    )
+    event_repository.replace_for_chapter(
+        sample_project.id,
+        earlier.id,
+        [
+            EventDraft(
+                summary="Mira hides the sealed key beneath her coat.",
+                characters=("Mira",),
+                locations=("archive",),
+                objects=("sealed key",),
+                threads=("Who sealed the ledger?",),
+            )
+        ],
+        model="fake-model",
+    )
+    event_repository.replace_for_chapter(
+        sample_project.id,
+        current.id,
+        [EventDraft(summary="Mira returns to the archive.")],
+        model="fake-model",
+    )
+    event_repository.replace_for_chapter(
+        sample_project.id,
+        later.id,
+        [EventDraft(summary="The archive burns in the archive.")],
+        model="fake-model",
+    )
+
+    context = context_builder.build(
+        sample_project.id,
+        instructions="Mira returns to the ashen archive.",
+        chapter_id=current.id,
+    )
+
+    assert len(context.memory_events) == 1
+    event = context.memory_events[0]
+    assert event.chapter_id == earlier.id
+    assert event.chapter_position == 1
+    assert event.characters == ("Mira",)
+    assert "Chapter 1 — The Gate" in context.earlier_events
+    assert "Event: Mira hides the sealed key" in context.earlier_events
+    assert "Characters: Mira" in context.earlier_events
+    assert "Chapter 2 — Return" not in context.earlier_events
+    assert "Chapter 3 — After" not in context.earlier_events
+
+
 def test_build_omits_memory_when_the_request_names_nothing(
     context_builder: GenerationContextBuilder,
     sample_project,
@@ -134,7 +205,9 @@ def test_build_omits_memory_when_the_request_names_nothing(
     )
 
     assert context.memory_chapters == ()
+    assert context.memory_events == ()
     assert context.earlier_chapters == ""
+    assert context.earlier_events == ""
 
 
 def test_build_stays_within_the_story_bible_budget(

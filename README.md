@@ -120,8 +120,10 @@ The interface has these surfaces:
   so established canon reaches the model without flooding its context window.
   It also retrieves earlier chapters through the Memory index and adds their
   summaries and short passages, with chapter numbers and titles, under an
-  **Earlier chapters** prompt section. The draft dialog shows exactly which
-  chapters were given to the model.
+  **Earlier chapters** prompt section. Extracted episodic events are ranked
+  against the same request and added under **Earlier events**, including their
+  characters, locations, objects, and unresolved threads. The draft dialog shows
+  exactly which chapters and events were given to the model.
 - **Project settings** — details for one novel: title, premise, genre, narrative
   style, and word target, plus archiving. Reached from Home or the Workspace
   header.
@@ -156,11 +158,11 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-154 tests run fully offline. All inference is stubbed, so no model or Ollama
+155 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
-summary storage, full-text search, event extraction, memory-aware generation,
+summary storage, full-text search, event extraction, event-aware generation,
 export, and appearance round-trips.
 
 ## Architecture
@@ -276,13 +278,13 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.2.9** (schema version 5). `v0.2.9` adds episodic memory:
-structured events extracted from chapters, stored with character, location,
-object, and unresolved-thread details plus chapter provenance, and shown in
-Memory. It builds on `v0.2.8`, which made generation retrieve earlier chapters;
-`v0.2.7`, sequential bulk summaries; `v0.2.6`, the FTS5 Memory index; `v0.2.5`,
-manuscript export; and `v0.2.4`, which separated Home from the Workspace and
-added chapter and scene ordering.
+Current release: **v0.3.0** (schema version 5). `v0.3.0` makes generation
+retrieve extracted episodic events as well as earlier chapters, ranked against
+the request and shown in the draft dialog. It builds on `v0.2.9`, which added
+structured event extraction and storage; `v0.2.8`, which made generation retrieve
+earlier chapters; `v0.2.7`, sequential bulk summaries; `v0.2.6`, the FTS5 Memory
+index; `v0.2.5`, manuscript export; and `v0.2.4`, which separated Home from the
+Workspace and added chapter and scene ordering.
 
 The Phase 1 foundation, the Phase 2 narrative data model, and local manuscript
 memory are complete, and the interface is a browser harness. Still missing:

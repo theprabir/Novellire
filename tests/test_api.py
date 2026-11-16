@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from novellire.api.app import create_app
 from novellire.config import GenerationDefaults, Settings
 from novellire.llm.base import GenerationResult
+from novellire.storage.event_repository import EventDraft
 from novellire.storage.database import Database
 
 
@@ -45,7 +46,7 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
 
     assert payload["status"] == "ok"
     assert payload["schema_version"] == 5
-    assert payload["version"] == "0.2.9"
+    assert payload["version"] == "0.3.0"
 
 
 def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:
@@ -469,13 +470,27 @@ def test_generation_uses_earlier_chapters_and_reports_them(
     client: TestClient, fake_provider
 ) -> None:
     project = create_project(client)
-    client.post(
+    earlier = client.post(
         f"/api/projects/{project['id']}/chapters",
         json={
             "title": "The Gate",
             "content": "Mira crossed the ashen archive and read the ledger.",
             "summary": "Mira enters the archive and reads the ledger.",
         },
+    ).json()
+    client.app.state.services.event_repository.replace_for_chapter(
+        project["id"],
+        earlier["id"],
+        [
+            EventDraft(
+                summary="Mira hides the sealed key in her coat.",
+                characters=("Mira",),
+                locations=("archive",),
+                objects=("sealed key",),
+                threads=("Who sealed the ledger?",),
+            )
+        ],
+        model="fake-model",
     )
     current = client.post(
         f"/api/projects/{project['id']}/chapters", json={"title": "Return"}
@@ -497,11 +512,21 @@ def test_generation_uses_earlier_chapters_and_reports_them(
     assert sources[0]["position"] == 1
     assert "archive" in sources[0]["excerpt"]
 
+    events = response.json()["context"]["events"]
+    assert [event["summary"] for event in events] == [
+        "Mira hides the sealed key in her coat."
+    ]
+    assert events[0]["chapter_title"] == "The Gate"
+    assert events[0]["threads"] == ["Who sealed the ledger?"]
+
     prompt = fake_provider.requests[-1].prompt
     assert "Earlier chapters:" in prompt
     assert "Chapter 1 — The Gate" in prompt
     assert "Mira enters the archive and reads the ledger." in prompt
     assert "Chapter 2 — Return" not in prompt
+    assert "Earlier events:" in prompt
+    assert "Event: Mira hides the sealed key in her coat." in prompt
+    assert "Characters: Mira" in prompt
 
 
 def test_generation_validation_error_is_reported(client: TestClient) -> None:

@@ -3,6 +3,24 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.3.0] — 2026-11-16
+
+Event-aware generation. Schema stays at 5.
+
+### Added
+
+- Generation context now retrieves extracted episodic events as well as earlier
+  chapters. Events are scored by request-term overlap in their summary and
+  character/location/object/thread fields, with exact name matches weighted
+  highest; events from chapters already retrieved as context receive a boost.
+- Events from the current or later chapters are excluded, as are events with no
+  relevance to the request. Up to 8 events / 2,000 characters are used, separate
+  from the chapter budget.
+- The prompt gains an **Earlier events** section with chapter number and title,
+  event summary, characters, locations, objects, and unresolved threads.
+- The generation response carries `context.events`; the draft dialog groups
+  retrieved sources into Chapters and Events instead of listing chapters only.
+
 ## [0.2.9] — 2026-11-16
 
 Episodic memory extraction. Schema version 5 adds `narrative_events`.

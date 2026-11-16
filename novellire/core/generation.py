@@ -112,6 +112,7 @@ class GenerationService:
             chapter_map=_clip(narrative.chapter_map),
             style_guide=_clip(narrative.style_guide),
             earlier_chapters=narrative.earlier_chapters,
+            earlier_events=narrative.earlier_events,
             bible_entries=narrative.bible_entries,
             character_profiles=narrative.character_profiles,
         )

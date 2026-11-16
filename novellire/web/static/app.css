@@ -1549,3 +1549,13 @@ input[type="range"]::-webkit-slider-thumb {
 }
 .event-threads strong { color: var(--muted); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.04em; }
 .event-threads ul { margin: 4px 0 0; padding-left: 18px; color: var(--muted); }
+
+.context-used-group { display: flex; flex-direction: column; gap: 8px; }
+.context-used-group h4 {
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}

@@ -851,6 +851,7 @@ function openGenerateDialog(ctx, chapter) {
 function showDraft(ctx, record, chapter) {
   const existing = chapter.content || '';
   const used = record.context?.chapters || [];
+  const usedEvents = record.context?.events || [];
   const output = textarea({ value: record.output, rows: 16, class: 'textarea chapter-text' });
   const append = input({ type: 'checkbox' });
   append.checked = Boolean(existing);
@@ -900,7 +901,7 @@ function showDraft(ctx, record, chapter) {
         ),
         el('span', { class: 'hint' }, 'Edit before inserting if needed.')
       ),
-      used.length ? contextUsed(used) : null,
+      used.length || usedEvents.length ? contextUsed(used, usedEvents) : null,
       output,
       existing
         ? el(
@@ -919,27 +920,58 @@ function showDraft(ctx, record, chapter) {
   });
 }
 
-function contextUsed(chapters) {
+function contextUsed(chapters, events) {
+  const parts = [];
+  if (chapters.length) {
+    parts.push(
+      el(
+        'div',
+        { class: 'context-used-group' },
+        el('h4', {}, `Chapters (${count(chapters.length)})`),
+        ...chapters.map((chapter) =>
+          el(
+            'div',
+            { class: 'context-used-item' },
+            el('strong', {}, `Chapter ${chapter.position} — ${chapter.title}`),
+            el('p', { class: 'hint' }, chapter.summary || chapter.excerpt)
+          )
+        )
+      )
+    );
+  }
+  if (events.length) {
+    parts.push(
+      el(
+        'div',
+        { class: 'context-used-group' },
+        el('h4', {}, `Events (${count(events.length)})`),
+        ...events.map((event) =>
+          el(
+            'div',
+            { class: 'context-used-item' },
+            el(
+              'strong',
+              {},
+              `Chapter ${event.chapter_position} — ${event.chapter_title}`
+            ),
+            el('p', { class: 'hint' }, event.summary)
+          )
+        )
+      )
+    );
+  }
+
   return el(
     'details',
     { class: 'card card-pad context-used' },
     el(
       'summary',
       { class: 'hint' },
-      `Earlier chapters given to the model (${count(chapters.length)})`
+      `Earlier context given to the model (${count(chapters.length)} chapter${
+        chapters.length === 1 ? '' : 's'
+      }, ${count(events.length)} event${events.length === 1 ? '' : 's'})`
     ),
-    el(
-      'div',
-      { class: 'context-used-list' },
-      ...chapters.map((chapter) =>
-        el(
-          'div',
-          { class: 'context-used-item' },
-          el('strong', {}, `Chapter ${chapter.position} — ${chapter.title}`),
-          el('p', { class: 'hint' }, chapter.summary || chapter.excerpt)
-        )
-      )
-    )
+    el('div', { class: 'context-used-list' }, ...parts)
   );
 }
 

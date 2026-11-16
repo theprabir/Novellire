@@ -302,6 +302,7 @@ def build_services(
             character_repository,
             chapter_repository,
             SearchRepository(database),
+            event_repository,
         ),
         style_guide=StyleGuideService(
             provider, project_repository, chapter_service, document_service
@@ -1037,7 +1038,10 @@ def _build_router(services: ApiServices) -> APIRouter:
         result["context"] = {
             "chapters": [
                 asdict(source) for source in generation_context.memory_chapters
-            ]
+            ],
+            "events": [
+                asdict(event) for event in generation_context.memory_events
+            ],
         }
         return result
 
