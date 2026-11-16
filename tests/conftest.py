@@ -16,6 +16,8 @@ from novellire.core.settings_service import AppSettingsService, GenerationSettin
 from novellire.core.story_bible import StoryBibleService
 from novellire.llm.base import GenerationRequest, GenerationResult, ModelInfo
 from novellire.storage.database import Database
+from novellire.storage.revision_repository import RevisionRepository
+from novellire.storage.state_repository import CharacterStateRepository
 from novellire.storage.repositories import (
     AppSettingsRepository,
     GenerationRepository,
@@ -157,7 +159,11 @@ def chapter_service(
     database: Database, project_repository: ProjectRepository
 ) -> ChapterService:
     return ChapterService(
-        ChapterRepository(database), project_repository, CharacterRepository(database)
+        ChapterRepository(database),
+        project_repository,
+        CharacterRepository(database),
+        CharacterStateRepository(database),
+        RevisionRepository(database),
     )
 
 

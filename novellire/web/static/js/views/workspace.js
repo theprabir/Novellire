@@ -6,6 +6,7 @@ import {
   el,
   emptyState,
   field,
+  formatDate,
   icon,
   input,
   openModal,
@@ -392,6 +393,16 @@ function chapterEditor(ctx, chapter) {
       { class: 'form-actions span-2' },
       el('button', { class: 'btn btn-primary', type: 'submit' }, 'Save chapter'),
       words,
+      el(
+        'button',
+        {
+          class: 'btn btn-ghost',
+          type: 'button',
+          onClick: () => openChapterHistory(ctx, chapter),
+        },
+        icon('clock'),
+        'History'
+      ),
       chapter.content.trim()
         ? el(
             'button',
@@ -517,6 +528,117 @@ function chapterEditor(ctx, chapter) {
     form,
     scenes.length ? scenesCard(ctx, scenes) : null
   );
+}
+
+async function openChapterHistory(ctx, chapter) {
+  let revisions;
+  try {
+    revisions = await api.get(`/api/chapters/${chapter.id}/revisions`);
+  } catch (error) {
+    toast(error.message, 'error');
+    return;
+  }
+
+  const body = el(
+    'div',
+    { class: 'revision-list' },
+    el(
+      'p',
+      { class: 'hint' },
+      'Revisions are saved automatically when the chapter text changes. Restoring a version first saves the current text here.'
+    )
+  );
+
+  if (!revisions.length) {
+    body.append(
+      emptyState({
+        iconName: 'clock',
+        title: 'No earlier versions yet',
+        body: 'Change and save this chapter’s text, and the previous version will appear here.',
+      })
+    );
+  } else {
+    for (const revision of revisions) {
+      const text = el('pre', { class: 'revision-text' }, 'Loading…');
+      const details = el(
+        'details',
+        { class: 'revision-details' },
+        el('summary', {}, 'Preview text'),
+        text
+      );
+      details.addEventListener('toggle', async () => {
+        if (!details.open || details.dataset.loaded) return;
+        try {
+          const full = await api.get(`/api/chapter-revisions/${revision.id}`);
+          text.textContent = full.content || '(Empty chapter)'; 
+          details.dataset.loaded = 'true';
+        } catch (error) {
+          text.textContent = error.message;
+        }
+      });
+
+      const restore = el(
+        'button',
+        { class: 'btn btn-sm', type: 'button' },
+        icon('refresh'),
+        'Restore'
+      );
+      restore.addEventListener('click', async () => {
+        restore.disabled = true;
+        try {
+          await api.post(
+            `/api/chapters/${chapter.id}/revisions/${revision.id}/restore`
+          );
+          modal.close();
+          await ctx.refresh();
+          toast('Chapter text restored. The previous text is in History.', 'success');
+        } catch (error) {
+          toast(error.message, 'error');
+          restore.disabled = false;
+        }
+      });
+
+      body.append(
+        el(
+          'div',
+          { class: 'revision-row' },
+          el(
+            'div',
+            { class: 'revision-head' },
+            el(
+              'div',
+              {},
+              el('strong', {}, formatDate(revision.created_at)),
+              el(
+                'div',
+                { class: 'revision-meta' },
+                `${count(revision.word_count)} words · ${
+                  revision.source === 'restore'
+                    ? 'before restore'
+                    : 'before edit'
+                }`
+              )
+            ),
+            restore
+          ),
+          details
+        )
+      );
+    }
+  }
+
+  const modal = openModal({
+    title: `History — ${chapter.title}`,
+    wide: true,
+    body,
+    footer: [
+      el(
+        'button',
+        { class: 'btn btn-ghost', type: 'button', onClick: () => modal.close() },
+        'Close'
+      ),
+    ],
+  });
 }
 
 async function summariseChapter(ctx, chapter, button) {

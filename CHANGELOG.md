@@ -3,6 +3,26 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.3.7] — 2026-11-16
+
+Chapter revision history. Schema 9 adds `chapter_revisions`.
+
+### Added
+
+- Saving changed chapter text automatically snapshots the previous version with
+  its title, word count, source, and timestamp. Identical saves and empty
+  initial text do not create snapshots.
+- The chapter editor has a **History** dialog with timestamps, word counts,
+  lazy-loaded full text previews, and restore. Restoring first snapshots the
+  current text, so every restore can be undone from history.
+- `GET /api/chapters/{id}/revisions`, `GET /api/chapter-revisions/{id}`, and
+  `POST /api/chapters/{id}/revisions/{id}/restore`.
+
+### Deferred
+
+- Revision pruning or a revision-count limit.
+- Revision labels, comparisons, and an approval workflow for drafts.
+
 ## [0.3.6] — 2026-11-16
 
 Narrative state memory. Schema 8 adds `character_states`.
@@ -20,6 +40,11 @@ Narrative state memory. Schema 8 adds `character_states`.
   `DELETE /api/character-states/{id}`.
 - Current state for selected character profiles is included in generation context
   as a **Current character state** prompt block.
+
+### Fixed
+
+- Deleting a chapter no longer silently cascades its authored character-state
+  snapshots. Chapter deletion is blocked until those snapshots are removed.
 
 ### Deferred
 

@@ -10,6 +10,8 @@ from ..errors import (
     RecordNotFoundError,
 )
 from ..storage.repositories import ProjectRepository
+from ..storage.revision_repository import ChapterRevision, RevisionRepository
+from ..storage.state_repository import CharacterStateRepository
 from ..storage.story_repositories import (
     ChapterRecord,
     ChapterRepository,
@@ -42,10 +44,14 @@ class ChapterService:
         repository: ChapterRepository,
         projects: ProjectRepository,
         characters: CharacterRepository,
+        states: CharacterStateRepository,
+        revisions: RevisionRepository,
     ) -> None:
         self._repository = repository
         self._projects = projects
         self._characters = characters
+        self._states = states
+        self._revisions = revisions
 
     def create_chapter(
         self,
@@ -159,7 +165,57 @@ class ChapterService:
             fields["content"] = cleaned
             fields["word_count"] = count_words(cleaned)
 
-        return self._repository.update(chapter_id, **fields)
+        updated = self._repository.update(chapter_id, **fields)
+        if (
+            "content" in fields
+            and chapter.content.strip()
+            and chapter.content != fields["content"]
+        ):
+            self._snapshot(chapter, source="edit")
+        return updated
+
+    def list_revisions(self, chapter_id: int) -> list[ChapterRevision]:
+        self.require_chapter(chapter_id)
+        return self._revisions.list_for_chapter(chapter_id)
+
+    def get_revision_by_id(self, revision_id: int) -> ChapterRevision:
+        revision = self._revisions.get(revision_id)
+        if revision is None:
+            raise RecordNotFoundError("That revision no longer exists.")
+        return revision
+
+    def get_revision(
+        self, chapter_id: int, revision_id: int
+    ) -> ChapterRevision:
+        self.require_chapter(chapter_id)
+        revision = self.get_revision_by_id(revision_id)
+        if revision.chapter_id != chapter_id:
+            raise RecordNotFoundError("That revision no longer exists.")
+        return revision
+
+    def restore_revision(
+        self, chapter_id: int, revision_id: int
+    ) -> ChapterRecord:
+        chapter = self.require_chapter(chapter_id)
+        revision = self.get_revision(chapter_id, revision_id)
+        if revision.content == chapter.content:
+            return chapter
+        if chapter.content.strip():
+            self._snapshot(chapter, source="restore")
+        return self._repository.update(
+            chapter.id,
+            content=revision.content,
+            word_count=revision.word_count,
+        )
+
+    def _snapshot(self, chapter: ChapterRecord, *, source: str) -> None:
+        self._revisions.create(
+            chapter_id=chapter.id,
+            title=chapter.title,
+            content=chapter.content,
+            word_count=chapter.word_count,
+            source=source,
+        )
 
     def _validate_origin(self, origin: str) -> str:
         cleaned = (origin or "written").strip().lower()
@@ -177,6 +233,11 @@ class ChapterService:
 
     def delete_chapter(self, chapter_id: int) -> None:
         self.require_chapter(chapter_id)
+        if self._states.count_for_chapter(chapter_id):
+            raise InvalidInputError(
+                "This chapter has character state snapshots. Delete those "
+                "snapshots before deleting the chapter."
+            )
         self._repository.delete(chapter_id)
 
     def manuscript_text(self, project_id: int) -> str:

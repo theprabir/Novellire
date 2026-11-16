@@ -45,8 +45,8 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
     payload = client.get("/api/health").json()
 
     assert payload["status"] == "ok"
-    assert payload["schema_version"] == 8
-    assert payload["version"] == "0.3.6"
+    assert payload["schema_version"] == 9
+    assert payload["version"] == "0.3.7"
 
 
 def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:
@@ -888,6 +888,72 @@ def test_character_state_snapshots_support_create_edit_and_delete(
     assert client.get(
         f"/api/projects/{project['id']}/character-states"
     ).json() == []
+
+
+def test_chapter_revisions_list_previews_and_restore(
+    client: TestClient,
+) -> None:
+    project = create_project(client)
+    chapter = client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={"title": "The Gate", "content": "Original text."},
+    ).json()
+    client.patch(
+        f"/api/chapters/{chapter['id']}", json={"content": "Changed text."}
+    )
+
+    listing = client.get(f"/api/chapters/{chapter['id']}/revisions").json()
+
+    assert len(listing) == 1
+    assert listing[0]["source"] == "edit"
+    assert listing[0]["excerpt"] == "Original text."
+    assert "content" not in listing[0]
+
+    detail = client.get(
+        f"/api/chapter-revisions/{listing[0]['id']}"
+    ).json()
+    assert detail["content"] == "Original text."
+
+    restored = client.post(
+        f"/api/chapters/{chapter['id']}/revisions/{listing[0]['id']}/restore"
+    )
+
+    assert restored.status_code == 200
+    assert restored.json()["content"] == "Original text."
+    assert len(
+        client.get(f"/api/chapters/{chapter['id']}/revisions").json()
+    ) == 2
+
+
+def test_chapter_with_state_snapshots_cannot_be_deleted(
+    client: TestClient,
+) -> None:
+    project = create_project(client)
+    mira = client.post(
+        f"/api/projects/{project['id']}/characters", json={"name": "Mira Voss"}
+    ).json()
+    chapter = client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={"title": "The Gate"},
+    ).json()
+    state = client.post(
+        f"/api/projects/{project['id']}/character-states",
+        json={
+            "character_id": mira["id"],
+            "chapter_id": chapter["id"],
+            "location": "The archive",
+        },
+    ).json()
+
+    blocked = client.delete(f"/api/chapters/{chapter['id']}")
+
+    assert blocked.status_code == 400
+    assert "character state snapshots" in blocked.json()["detail"]
+    chapters = client.get(f"/api/projects/{project['id']}/chapters").json()
+    assert [item["id"] for item in chapters] == [chapter["id"]]
+
+    assert client.delete(f"/api/character-states/{state['id']}").status_code == 200
+    assert client.delete(f"/api/chapters/{chapter['id']}").status_code == 200
 
 
 def test_adding_an_alias_relinks_existing_events(

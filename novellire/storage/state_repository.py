@@ -108,6 +108,14 @@ class CharacterStateRepository:
         record = _row_to_state(row)
         return _with_current(record, latest is not None and int(latest["id"]) == state_id)
 
+    def count_for_chapter(self, chapter_id: int) -> int:
+        with self._database.connection() as connection:
+            row = connection.execute(
+                "SELECT COUNT(*) AS total FROM character_states WHERE chapter_id = ?",
+                (chapter_id,),
+            ).fetchone()
+        return int(row["total"])
+
     def list_for_project(self, project_id: int) -> list[CharacterStateRecord]:
         with self._database.connection() as connection:
             rows = connection.execute(

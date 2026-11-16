@@ -109,8 +109,11 @@ The interface has these surfaces:
   *Chapters* holds the manuscript itself. Add a chapter with a title and paste its
   full text: Novellire counts and displays words and marks it pre-written, and
   the AI never rewrites it. New chapters can be drafted from the documents, and
-  drafts are editable before insertion. A chapter with text can be summarised or
-  have its **events extracted** into episodic memory. Chapters, and the legacy
+  drafts are editable before insertion. Saving changed chapter text keeps the
+  previous version in **History**, where full drafts can be previewed and
+  restored; restoring also saves the current text first. A chapter with text can
+  be summarised or have its **events extracted** into episodic memory. Chapters,
+  and the legacy
   scene records inside them, can be moved up or down and deleted; positions are
   renumbered in the same transaction so the order stays contiguous in the
   database.
@@ -171,12 +174,13 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-191 tests run fully offline. All inference is stubbed, so no model or Ollama
+196 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
 summary storage, full-text search, event extraction, character linking,
-event-aware generation, backup/restore, export, and appearance round-trips.
+event-aware generation, backup/restore, export, chapter revisions, and
+appearance round-trips.
 
 ## Architecture
 
@@ -290,15 +294,21 @@ by Git. Never commit a novel project's database.
 | 3 | `project_documents`; chapter `content`, `word_count`, `origin` |
 | 4 | `search_index` (FTS5) with triggers over chapters and documents |
 | 5 | `narrative_events` with chapter provenance and entity lists |
+| 6 | `event_characters` links between extracted events and character profiles |
+| 7 | `character_relationships` author records |
+| 8 | `character_states` authored snapshots tied to chapters |
+| 9 | `chapter_revisions` snapshots of earlier chapter text |
 
 Migrations are applied in order inside transactions; an existing database is
 upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.3.6** (schema version 8). `v0.3.6` adds author-recorded
-character state snapshots with current/history views and generation context. It
-builds on `v0.3.5`, approved relationship records in generation context;
+Current release: **v0.3.7** (schema version 9). `v0.3.7` adds automatic chapter
+revision history with preview and restore; schema 9 stores the snapshots. It
+builds on `v0.3.6`, author-recorded character state snapshots with
+current/history views and generation context; `v0.3.5`, approved relationship
+records in generation context;
 `v0.3.4`, typed author-approved relationship records with optional event
 provenance; `v0.3.3`, relationship discovery from shared events; `v0.3.2`,
 event-to-character linking with

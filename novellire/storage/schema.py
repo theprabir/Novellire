@@ -362,6 +362,24 @@ CREATE INDEX idx_character_states_project
 """
 
 
+MIGRATION_9_CHAPTER_REVISIONS = """
+CREATE TABLE chapter_revisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    word_count INTEGER NOT NULL DEFAULT 0,
+    source TEXT NOT NULL DEFAULT 'edit',
+    created_at TEXT NOT NULL
+)
+"""
+
+MIGRATION_9_CHAPTER_REVISIONS_INDEX = """
+CREATE INDEX idx_chapter_revisions_chapter
+    ON chapter_revisions (chapter_id, id)
+"""
+
+
 MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
     (
         1,
@@ -435,6 +453,13 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
             (
                 MIGRATION_8_CHARACTER_STATES,
                 MIGRATION_8_CHARACTER_STATES_INDEX,
+            ),
+        ),
+        (
+            9,
+            (
+                MIGRATION_9_CHAPTER_REVISIONS,
+                MIGRATION_9_CHAPTER_REVISIONS_INDEX,
             ),
         ),
     )

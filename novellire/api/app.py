@@ -72,6 +72,7 @@ from ..storage.document_repository import DocumentRepository
 from ..storage.event_repository import EventRepository
 from ..storage.search_repository import SearchRepository
 from ..storage.relationship_repository import RelationshipRepository
+from ..storage.revision_repository import RevisionRepository
 from ..storage.state_repository import CharacterStateRepository
 from ..storage.repositories import (
     AppSettingsRepository,
@@ -317,7 +318,11 @@ def build_services(
     relationship_repository = RelationshipRepository(database)
     state_repository = CharacterStateRepository(database)
     chapter_service = ChapterService(
-        chapter_repository, project_repository, character_repository
+        chapter_repository,
+        project_repository,
+        character_repository,
+        state_repository,
+        RevisionRepository(database),
     )
     document_service = ProjectDocumentService(
         DocumentRepository(database), project_repository
@@ -908,6 +913,34 @@ def _build_router(services: ApiServices) -> APIRouter:
         if "target_word_count" in data:
             kwargs["target_word_count"] = data["target_word_count"]
         return asdict(services.chapters.update_chapter(chapter_id, **kwargs))
+
+    @router.get("/chapters/{chapter_id}/revisions")
+    def list_chapter_revisions(chapter_id: int) -> list[dict[str, Any]]:
+        return [
+            {
+                "id": revision.id,
+                "chapter_id": revision.chapter_id,
+                "title": revision.title,
+                "word_count": revision.word_count,
+                "source": revision.source,
+                "created_at": revision.created_at,
+                "excerpt": " ".join(revision.content.split())[:240],
+            }
+            for revision in services.chapters.list_revisions(chapter_id)
+        ]
+
+    @router.get("/chapter-revisions/{revision_id}")
+    def get_chapter_revision(revision_id: int) -> dict[str, Any]:
+        revision = services.chapters.get_revision_by_id(revision_id)
+        return asdict(revision)
+
+    @router.post("/chapters/{chapter_id}/revisions/{revision_id}/restore")
+    def restore_chapter_revision(
+        chapter_id: int, revision_id: int
+    ) -> dict[str, Any]:
+        return asdict(
+            services.chapters.restore_revision(chapter_id, revision_id)
+        )
 
     @router.post("/projects/{project_id}/summaries")
     def summarize_project(
