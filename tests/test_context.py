@@ -10,6 +10,7 @@ from novellire.core.context import (
 )
 from novellire.core.documents import ProjectDocumentService
 from novellire.storage.document_repository import DocumentRepository
+from novellire.storage.search_repository import SearchRepository
 from novellire.storage.story_repositories import (
     ChapterRepository,
     CharacterRepository,
@@ -24,6 +25,7 @@ def context_builder(database, project_repository) -> GenerationContextBuilder:
         StoryBibleRepository(database),
         CharacterRepository(database),
         ChapterRepository(database),
+        SearchRepository(database),
     )
 
 
@@ -77,6 +79,62 @@ def test_build_selects_matching_canon_only(
     assert "the Courier" in context.character_profiles
     assert "Secrets: She broke the seal once." in context.character_profiles
     assert "Orin Vale" not in context.character_profiles
+
+
+def test_build_retrieves_only_earlier_matching_chapters(
+    context_builder: GenerationContextBuilder,
+    sample_project,
+    chapter_service,
+) -> None:
+    earlier = chapter_service.create_chapter(
+        project_id=sample_project.id,
+        title="The Gate",
+        content="Mira crossed the ashen archive and read the ledger.",
+        summary="Mira enters the archive and reads the ledger.",
+    )
+    current = chapter_service.create_chapter(
+        project_id=sample_project.id, title="Return"
+    )
+    chapter_service.create_chapter(
+        project_id=sample_project.id,
+        title="Later",
+        content="The archive burns.",
+    )
+
+    context = context_builder.build(
+        sample_project.id,
+        instructions="Mira returns to the ashen archive.",
+        chapter_id=current.id,
+    )
+
+    assert [chapter.id for chapter in context.memory_chapters] == [earlier.id]
+    assert context.memory_chapters[0].summary == (
+        "Mira enters the archive and reads the ledger."
+    )
+    assert "archive" in context.memory_chapters[0].excerpt
+    assert "Chapter 1 — The Gate" in context.earlier_chapters
+    assert "Summary: Mira enters the archive" in context.earlier_chapters
+    assert "Chapter 3 — Later" not in context.earlier_chapters
+    assert context.earlier_chapters.count("Mira enters the archive") == 1
+
+
+def test_build_omits_memory_when_the_request_names_nothing(
+    context_builder: GenerationContextBuilder,
+    sample_project,
+    chapter_service,
+) -> None:
+    chapter_service.create_chapter(
+        project_id=sample_project.id,
+        title="The Gate",
+        content="Mira crossed the archive.",
+    )
+
+    context = context_builder.build(
+        sample_project.id, instructions="Continue the chapter."
+    )
+
+    assert context.memory_chapters == ()
+    assert context.earlier_chapters == ""
 
 
 def test_build_stays_within_the_story_bible_budget(

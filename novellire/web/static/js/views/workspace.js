@@ -748,6 +748,11 @@ function openGenerateDialog(ctx, chapter) {
     field('Target words', targetWords),
     el('div', { class: 'span-2' }, field('Context notes', notes)),
     el(
+      'p',
+      { class: 'hint span-2' },
+      'Earlier chapters are selected from this project’s Memory and listed with the draft.'
+    ),
+    el(
       'details',
       { class: 'span-2', style: { borderTop: '1px dashed var(--border)', paddingTop: '10px' } },
       el('summary', { class: 'hint', style: { cursor: 'pointer' } }, 'Advanced parameters'),
@@ -808,6 +813,7 @@ function openGenerateDialog(ctx, chapter) {
 
 function showDraft(ctx, record, chapter) {
   const existing = chapter.content || '';
+  const used = record.context?.chapters || [];
   const output = textarea({ value: record.output, rows: 16, class: 'textarea chapter-text' });
   const append = input({ type: 'checkbox' });
   append.checked = Boolean(existing);
@@ -857,6 +863,7 @@ function showDraft(ctx, record, chapter) {
         ),
         el('span', { class: 'hint' }, 'Edit before inserting if needed.')
       ),
+      used.length ? contextUsed(used) : null,
       output,
       existing
         ? el(
@@ -873,6 +880,30 @@ function showDraft(ctx, record, chapter) {
       insert,
     ],
   });
+}
+
+function contextUsed(chapters) {
+  return el(
+    'details',
+    { class: 'card card-pad context-used' },
+    el(
+      'summary',
+      { class: 'hint' },
+      `Earlier chapters given to the model (${count(chapters.length)})`
+    ),
+    el(
+      'div',
+      { class: 'context-used-list' },
+      ...chapters.map((chapter) =>
+        el(
+          'div',
+          { class: 'context-used-item' },
+          el('strong', {}, `Chapter ${chapter.position} — ${chapter.title}`),
+          el('p', { class: 'hint' }, chapter.summary || chapter.excerpt)
+        )
+      )
+    )
+  );
 }
 
 /* -- helpers -------------------------------------------------------------- */

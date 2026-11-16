@@ -8,6 +8,7 @@ cannot inject operators or malformed syntax.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from .database import Database
@@ -36,6 +37,24 @@ class SearchRepository:
         expression = match_expression(query)
         if expression is None:
             return []
+        return self._search(project_id, expression, limit=limit)
+
+    def search_terms(
+        self, project_id: int, terms: Sequence[str], *, limit: int = 20
+    ) -> list[SearchHit]:
+        """Match any supplied term, ranked by bm25.
+
+        Used for automatic context retrieval, where a request contains several
+        useful words rather than a precise author query.
+        """
+        expression = terms_expression(terms)
+        if expression is None:
+            return []
+        return self._search(project_id, expression, limit=limit)
+
+    def _search(
+        self, project_id: int, expression: str, *, limit: int
+    ) -> list[SearchHit]:
         bounded = max(1, min(int(limit), MAX_LIMIT))
         with self._database.connection() as connection:
             rows = connection.execute(
@@ -65,6 +84,19 @@ class SearchRepository:
 def match_expression(query: str) -> str | None:
     """Turn author input into a quoted AND query, or None when unusable."""
     tokens = _TOKEN.findall((query or "").lower())[:MAX_QUERY_TOKENS]
+    return _expression(tokens, "AND")
+
+
+def terms_expression(terms: Sequence[str]) -> str | None:
+    """Quote and OR explicit retrieval terms."""
+    cleaned: list[str] = []
+    for term in terms:
+        if term not in cleaned:
+            cleaned.append(term)
+    return _expression(cleaned[:MAX_QUERY_TOKENS], "OR")
+
+
+def _expression(tokens: list[str], operator: str) -> str | None:
     if not tokens:
         return None
-    return " AND ".join(f'"{token}"' for token in tokens)
+    return f" {operator} ".join(f'"{token}"' for token in tokens)

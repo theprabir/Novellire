@@ -1496,3 +1496,19 @@ input[type="range"]::-webkit-slider-thumb {
   font-variant-numeric: tabular-nums;
 }
 .bulk-row p { margin: 4px 0 0 32px; }
+
+/* -- context used in drafts ------------------------------------------------ */
+
+.context-used { padding: 10px 12px; }
+.context-used summary {
+  cursor: pointer;
+  font-size: var(--fs-sm);
+}
+.context-used-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+.context-used-item strong { font-size: var(--fs-sm); }
+.context-used-item p { margin: 2px 0 0; }

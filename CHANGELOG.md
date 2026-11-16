@@ -3,6 +3,25 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.2.8] — 2026-11-16
+
+Memory-aware generation. Schema stays at 4.
+
+### Added
+
+- Generation context now retrieves earlier chapters from the project's FTS
+  index using the request's distinctive words, and includes their summaries and
+  short passages in the prompt under an **Earlier chapters** section with
+  chapter number and title. Up to six chapters / 3,000 characters are used.
+- Retrieval is scoped to chapters before the one being written and excludes the
+  current chapter, including when its existing summary matches the request.
+- The generation response carries `context.chapters` with each source's id,
+  position, title, summary, and excerpt. The generated-draft dialog lists those
+  sources in a collapsible **Earlier chapters given to the model** panel, and the
+  generate dialog explains that selection happens automatically.
+- `SearchRepository.search_terms` provides OR-ranked retrieval for context;
+  author-facing Memory search keeps its exact AND behaviour.
+
 ## [0.2.7] — 2026-11-16
 
 Bulk chapter summaries. Schema stays at 4.

@@ -116,6 +116,10 @@ The interface has these surfaces:
   character profiles that match the request. Matching uses names, aliases,
   titles, categories, and shared words, and the chapter's viewpoint character,
   so established canon reaches the model without flooding its context window.
+  It also retrieves earlier chapters through the Memory index and adds their
+  summaries and short passages, with chapter numbers and titles, under an
+  **Earlier chapters** prompt section. The draft dialog shows exactly which
+  chapters were given to the model.
 - **Project settings** — details for one novel: title, premise, genre, narrative
   style, and word target, plus archiving. Reached from Home or the Workspace
   header.
@@ -148,11 +152,12 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-144 tests run fully offline. All inference is stubbed, so no model or Ollama
+147 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
-summary storage, full-text search, export, and appearance round-trips.
+summary storage, full-text search, memory-aware generation, export, and
+appearance round-trips.
 
 ## Architecture
 
@@ -180,7 +185,7 @@ novellire/
     style_guide.py         Learns a style guide from the manuscript
     story_bible.py         Categorised story bible entries (legacy API)
     characters.py          Character profiles and aliases (legacy API)
-    context.py             Relevance-ranked canon context for generation
+    context.py             Ranked canon and earlier-chapter context for generation
     summaries.py           Chapter summary generation and storage
     memory.py              Search results labelled by chapter or document
     export.py              Markdown and text manuscript compilation
@@ -264,12 +269,12 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.2.7** (schema version 4). `v0.2.7` adds sequential bulk
-chapter summaries with streamed per-chapter progress. It builds on `v0.2.6`,
-which added the Memory phase: generated chapter summaries, an FTS5 index kept in
-sync by database triggers, and a searchable Memory surface; `v0.2.5` added
-manuscript export; and `v0.2.4` separated Home from the project Workspace and
-added reordering and deletion for chapters and scenes.
+Current release: **v0.2.8** (schema version 4). `v0.2.8` makes generation
+memory-aware: earlier chapter summaries and excerpts are retrieved automatically
+and included in the prompt with provenance. It builds on `v0.2.7`, which added
+sequential bulk chapter summaries; `v0.2.6`, which added the Memory phase (FTS5
+index and search surface); `v0.2.5`, manuscript export; and `v0.2.4`, which
+separated Home from the project Workspace and added chapter and scene ordering.
 
 The Phase 1 foundation, the Phase 2 narrative data model, and local manuscript
 memory are complete, and the interface is a browser harness. Still missing:

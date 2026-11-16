@@ -292,6 +292,7 @@ def build_services(
             bible_repository,
             character_repository,
             chapter_repository,
+            SearchRepository(database),
         ),
         style_guide=StyleGuideService(
             provider, project_repository, chapter_service, document_service
@@ -983,6 +984,11 @@ def _build_router(services: ApiServices) -> APIRouter:
         )
         result = generation_payload(outcome.record, include_output=True)
         result["style_guide_inferred"] = style_guide_inferred
+        result["context"] = {
+            "chapters": [
+                asdict(source) for source in generation_context.memory_chapters
+            ]
+        }
         return result
 
     @router.get("/projects/{project_id}/generations")

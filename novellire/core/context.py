@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from ..storage.search_repository import SearchRepository
 from ..storage.story_repositories import (
     ChapterRecord,
     ChapterRepository,
@@ -30,6 +31,12 @@ STORY_BIBLE_CHAR_LIMIT = 3_000
 CHARACTER_CHAR_LIMIT = 3_000
 ENTRY_CONTENT_LIMIT = 700
 PROFILE_FIELD_LIMIT = 300
+MEMORY_MAX_CHAPTERS = 6
+MEMORY_CHAR_LIMIT = 3_000
+MEMORY_SUMMARY_LIMIT = 600
+MEMORY_EXCERPT_LIMIT = 500
+MEMORY_SEARCH_LIMIT = 30
+MEMORY_TERMS_LIMIT = 12
 
 # Canon basics worth carrying even when the request names nothing specific.
 FOUNDATIONAL_CATEGORIES = (
@@ -53,6 +60,25 @@ _STOPWORDS = frozenset(
 
 _WORD = re.compile(r"[a-z0-9']+")
 
+# Words that describe the act of writing rather than the story being written.
+_MEMORY_STOPWORDS = _STOPWORDS | frozenset(
+    """
+    chapter chapters continue draft drafted generate generation next prose scene
+    scenes story write writes writing words
+    """.split()
+)
+
+
+@dataclass(frozen=True)
+class MemoryChapter:
+    """One earlier chapter retrieved for the prompt, with its provenance."""
+
+    id: int
+    position: int
+    title: str
+    summary: str
+    excerpt: str
+
 
 @dataclass(frozen=True)
 class GenerationContext:
@@ -64,6 +90,15 @@ class GenerationContext:
     style_guide: str = ""
     bible_entries: str = ""
     character_profiles: str = ""
+    memory_chapters: tuple[MemoryChapter, ...] = ()
+
+    @property
+    def earlier_chapters(self) -> str:
+        """Prompt block for retrieved chapters, within the memory budget."""
+        return _join_with_budget(
+            [_format_memory(chapter) for chapter in self.memory_chapters],
+            MEMORY_CHAR_LIMIT,
+        )
 
     def documents(self) -> dict[str, str]:
         return {
@@ -83,11 +118,13 @@ class GenerationContextBuilder:
         bible_entries: StoryBibleRepository,
         characters: CharacterRepository,
         chapters: ChapterRepository,
+        search: SearchRepository,
     ) -> None:
         self._documents = documents
         self._bible_entries = bible_entries
         self._characters = characters
         self._chapters = chapters
+        self._search = search
 
     def build(
         self,
@@ -122,6 +159,9 @@ class GenerationContextBuilder:
             query_tokens,
             viewpoint_id=chapter.viewpoint_character_id if chapter else None,
         )
+        memory = self._retrieve_chapters(
+            project_id, _memory_terms(query_text), current=chapter
+        )
 
         return GenerationContext(
             master_bible=documents.get("master_bible", ""),
@@ -136,7 +176,56 @@ class GenerationContextBuilder:
                 [_format_character(character) for character in profiles],
                 CHARACTER_CHAR_LIMIT,
             ),
+            memory_chapters=tuple(memory),
         )
+
+    def _retrieve_chapters(
+        self,
+        project_id: int,
+        terms: list[str],
+        *,
+        current: ChapterRecord | None,
+    ) -> list[MemoryChapter]:
+        """Pick earlier chapters that match the request, best rank first."""
+        if not terms:
+            return []
+        selected: list[MemoryChapter] = []
+        for hit in self._search.search_terms(
+            project_id, terms, limit=MEMORY_SEARCH_LIMIT
+        ):
+            if hit.source_kind != "chapter":
+                continue
+            source = self._chapters.get(hit.source_id)
+            if source is None or not source.content.strip():
+                continue
+            if current is not None and (
+                source.id == current.id or source.position >= current.position
+            ):
+                continue
+            if any(item.id == source.id for item in selected):
+                continue
+            excerpt = " ".join((hit.excerpt or "").split())
+            summary = source.summary.strip()
+            if summary:
+                # The index body begins with the summary, so the snippet often
+                # repeats it. Drop that copy to keep the prompt budget for prose.
+                flat_summary = " ".join(summary.split())
+                if excerpt.startswith(flat_summary):
+                    excerpt = excerpt[len(flat_summary) :].lstrip(" .…—-\n")
+            if not summary and not excerpt:
+                continue
+            selected.append(
+                MemoryChapter(
+                    id=source.id,
+                    position=source.position,
+                    title=source.title,
+                    summary=summary,
+                    excerpt=excerpt,
+                )
+            )
+            if len(selected) >= MEMORY_MAX_CHAPTERS:
+                break
+        return selected
 
     def _ranked_entries(
         self, project_id: int, query_text: str, query_tokens: set[str]
@@ -239,6 +328,27 @@ def _format_character(character: CharacterRecord) -> str:
         value = _trim(getattr(character, field), PROFILE_FIELD_LIMIT)
         if value:
             lines.append(f"{FIELD_LABELS[field]}: {value}")
+    return "\n".join(lines)
+
+
+def _memory_terms(text: str) -> list[str]:
+    """Ordered, deduplicated retrieval terms for the generation request."""
+    terms: list[str] = []
+    for word in _WORD.findall((text or "").casefold()):
+        if len(word) < 3 or word in _MEMORY_STOPWORDS or word in terms:
+            continue
+        terms.append(word)
+        if len(terms) >= MEMORY_TERMS_LIMIT:
+            break
+    return terms
+
+
+def _format_memory(chapter: MemoryChapter) -> str:
+    lines = [f"Chapter {chapter.position} — {chapter.title}"]
+    if chapter.summary:
+        lines.append(f"Summary: {_trim(chapter.summary, MEMORY_SUMMARY_LIMIT)}")
+    if chapter.excerpt:
+        lines.append(f"Passage: {_trim(chapter.excerpt, MEMORY_EXCERPT_LIMIT)}")
     return "\n".join(lines)
 
 

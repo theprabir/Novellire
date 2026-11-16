@@ -44,7 +44,7 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
 
     assert payload["status"] == "ok"
     assert payload["schema_version"] == 4
-    assert payload["version"] == "0.2.7"
+    assert payload["version"] == "0.2.8"
 
 
 def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:
@@ -462,6 +462,45 @@ def test_generation_is_persisted_and_listed(client: TestClient) -> None:
     assert len(listing) == 1
     assert "excerpt" in listing[0]
     assert "output" not in listing[0]
+
+
+def test_generation_uses_earlier_chapters_and_reports_them(
+    client: TestClient, fake_provider
+) -> None:
+    project = create_project(client)
+    client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={
+            "title": "The Gate",
+            "content": "Mira crossed the ashen archive and read the ledger.",
+            "summary": "Mira enters the archive and reads the ledger.",
+        },
+    )
+    current = client.post(
+        f"/api/projects/{project['id']}/chapters", json={"title": "Return"}
+    ).json()
+
+    response = client.post(
+        f"/api/projects/{project['id']}/generate",
+        json={
+            "instructions": "Mira returns to the ashen archive.",
+            "model": "fake-model",
+            "chapter_id": current["id"],
+            "target_words": 300,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    sources = response.json()["context"]["chapters"]
+    assert [source["title"] for source in sources] == ["The Gate"]
+    assert sources[0]["position"] == 1
+    assert "archive" in sources[0]["excerpt"]
+
+    prompt = fake_provider.requests[-1].prompt
+    assert "Earlier chapters:" in prompt
+    assert "Chapter 1 — The Gate" in prompt
+    assert "Mira enters the archive and reads the ledger." in prompt
+    assert "Chapter 2 — Return" not in prompt
 
 
 def test_generation_validation_error_is_reported(client: TestClient) -> None:
