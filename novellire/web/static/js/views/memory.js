@@ -42,6 +42,9 @@ export function renderMemory(ctx) {
   const project = state.tree.project;
   const chapters = state.manuscript?.chapters || [];
   const summarised = chapters.filter((chapter) => chapter.summary?.trim()).length;
+  const pending = chapters.filter(
+    (chapter) => chapter.content?.trim() && !chapter.summary?.trim()
+  ).length;
 
   const query = input({
     type: 'search',
@@ -98,8 +101,126 @@ export function renderMemory(ctx) {
     }
   });
 
-  wrap.append(form, results);
+  wrap.append(form, bulkSummaryCard(ctx, pending), results);
   return wrap;
+}
+
+function bulkSummaryCard(ctx, pending) {
+  const status = el(
+    'p',
+    { class: 'hint bulk-status' },
+    pending
+      ? `${count(pending)} chapter${pending === 1 ? '' : 's'} without a summary. The model runs one chapter at a time.`
+      : 'Every chapter with text already has a summary.'
+  );
+  const list = el('div', { class: 'bulk-list' });
+  const button = el(
+    'button',
+    { class: 'btn', type: 'button' },
+    icon('sparkles'),
+    'Summarise all chapters'
+  );
+  button.disabled = pending === 0;
+  button.addEventListener('click', () =>
+    summariseProject(ctx, button, status, list)
+  );
+
+  return el(
+    'div',
+    { class: 'card card-pad bulk-summary' },
+    el(
+      'div',
+      { class: 'bulk-summary-head' },
+      el(
+        'div',
+        {},
+        el('h2', {}, 'Bulk summaries'),
+        status
+      ),
+      button
+    ),
+    list
+  );
+}
+
+async function summariseProject(ctx, button, status, list) {
+  const state = ctx.state;
+  const model =
+    state.settings?.generation?.model || state.ollama?.models?.[0]?.name || '';
+  const counts = { summarised: 0, skipped: 0, empty: 0, failed: 0 };
+  let total = 0;
+
+  button.disabled = true;
+  button.replaceChildren(icon('refresh'), 'Summarising…');
+  list.replaceChildren();
+  status.textContent = 'Starting…';
+
+  try {
+    await api.stream(
+      `/api/projects/${state.activeProjectId}/summaries`,
+      { model },
+      (event) => {
+        if (event.type === 'start') {
+          total = event.total;
+          status.textContent = `Running 0 of ${count(total)} chapters…`;
+        } else if (event.type === 'step') {
+          counts[event.status] = (counts[event.status] || 0) + 1;
+          list.append(summaryStepRow(event));
+          status.textContent = `Running ${count(event.processed)} of ${count(total)} chapters…`;
+        } else if (event.type === 'done') {
+          status.textContent = summaryTotals(event);
+        }
+      }
+    );
+    toast(
+      `Bulk summary finished: ${count(counts.summarised)} generated, ${count(
+        counts.skipped
+      )} already had one.`,
+      counts.failed ? 'error' : 'success'
+    );
+  } catch (error) {
+    status.textContent = 'Bulk summary stopped. Chapters completed so far are saved.';
+    toast(error.message, 'error');
+  } finally {
+    const complete =
+      total > 0 &&
+      counts.failed === 0 &&
+      counts.summarised + counts.skipped + counts.empty === total;
+    button.disabled = complete;
+    button.replaceChildren(icon('sparkles'), 'Summarise all chapters');
+  }
+}
+
+const STEP_LABELS = {
+  summarised: 'Summarised',
+  skipped: 'Already summarised',
+  empty: 'No chapter text',
+  failed: 'Failed',
+};
+
+function summaryStepRow(event) {
+  const label = STEP_LABELS[event.status] || event.status;
+  return el(
+    'div',
+    { class: `bulk-row ${event.status}` },
+    el(
+      'div',
+      { class: 'bulk-row-main' },
+      el('span', { class: 'bulk-row-position' }, count(event.position)),
+      el('strong', {}, event.title),
+      el('span', { class: `chip ${event.status === 'summarised' ? 'accent' : ''}`.trim() }, label)
+    ),
+    event.detail ? el('p', { class: 'hint' }, event.detail) : null
+  );
+}
+
+function summaryTotals(event) {
+  const parts = [];
+  if (event.summarised) parts.push(`${count(event.summarised)} generated`);
+  if (event.skipped) parts.push(`${count(event.skipped)} already had one`);
+  if (event.empty) parts.push(`${count(event.empty)} without text`);
+  if (event.failed) parts.push(`${count(event.failed)} failed`);
+  return parts.length ? `Finished: ${parts.join(', ')}.` : 'Nothing to summarise.';
 }
 
 function renderResults(hits, query) {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -43,7 +44,7 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
 
     assert payload["status"] == "ok"
     assert payload["schema_version"] == 4
-    assert payload["version"] == "0.2.6"
+    assert payload["version"] == "0.2.7"
 
 
 def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:
@@ -533,6 +534,49 @@ def test_summarize_chapter_stores_the_summary(
 
     manuscript = client.get(f"/api/projects/{project['id']}/manuscript").json()
     assert manuscript["chapters"][0]["summary"] == payload["summary"]
+
+
+def test_bulk_summary_streams_progress(client: TestClient, fake_provider) -> None:
+    project = create_project(client)
+    client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={"title": "One", "content": "Mira pressed the key to her palm."},
+    )
+    client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={
+            "title": "Two",
+            "content": "Mira waited.",
+            "summary": "An older summary.",
+        },
+    )
+
+    with client.stream(
+        "POST",
+        f"/api/projects/{project['id']}/summaries",
+        json={"model": "fake-model"},
+    ) as response:
+        assert response.status_code == 200, response.read()
+        assert response.headers["content-type"].startswith("application/x-ndjson")
+        events = [json.loads(line) for line in response.iter_lines() if line.strip()]
+
+    assert events[0] == {"type": "start", "total": 2, "pending": 1}
+    steps = [event for event in events if event["type"] == "step"]
+    assert [step["status"] for step in steps] == ["summarised", "skipped"]
+    assert steps[0]["processed"] == 1
+    assert steps[1]["detail"] == "Already has a summary."
+    assert events[-1] == {
+        "type": "done",
+        "summarised": 1,
+        "skipped": 1,
+        "empty": 0,
+        "failed": 0,
+        "total": 2,
+    }
+
+    manuscript = client.get(f"/api/projects/{project['id']}/manuscript").json()
+    assert manuscript["chapters"][0]["summary"] == " ".join(["word"] * 120)
+    assert manuscript["chapters"][1]["summary"] == "An older summary."
 
 
 def test_export_returns_a_manuscript_file(client: TestClient) -> None:

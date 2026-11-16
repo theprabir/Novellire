@@ -1463,3 +1463,36 @@ input[type="range"]::-webkit-slider-thumb {
   font-size: var(--fs-sm);
   line-height: 1.6;
 }
+
+/* -- bulk summaries ------------------------------------------------------- */
+
+.bulk-summary { margin-bottom: 14px; }
+.bulk-summary-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.bulk-summary-head h2 { margin: 0 0 4px; font-size: var(--fs-md); }
+.bulk-status { margin: 0; }
+.bulk-list { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.bulk-row {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.bulk-row.failed { border-color: var(--danger-line, var(--border)); }
+.bulk-row-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-sm);
+}
+.bulk-row-main strong { flex: 1; min-width: 0; }
+.bulk-row-position {
+  min-width: 22px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.bulk-row p { margin: 4px 0 0 32px; }

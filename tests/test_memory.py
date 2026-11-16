@@ -8,7 +8,7 @@ from novellire.core.documents import ProjectDocumentService
 from novellire.core.memory import MemoryService
 from novellire.core.settings_service import GenerationSettings
 from novellire.core.summaries import ChapterSummaryService
-from novellire.errors import InvalidInputError
+from novellire.errors import InvalidInputError, LLMResponseError
 from novellire.storage.document_repository import DocumentRepository
 from novellire.storage.search_repository import SearchRepository
 
@@ -135,6 +135,68 @@ def test_blank_search_is_rejected(
 ) -> None:
     with pytest.raises(InvalidInputError, match="Enter a word"):
         memory_service.search(sample_project.id, "   ")
+
+
+def test_bulk_summary_skips_existing_summaries_and_empty_chapters(
+    summary_service: ChapterSummaryService,
+    chapter_service,
+    fake_provider,
+    sample_project,
+) -> None:
+    chapter_service.create_chapter(
+        project_id=sample_project.id, title="One", content="Mira walks."
+    )
+    chapter_service.create_chapter(
+        project_id=sample_project.id,
+        title="Two",
+        content="Mira waits.",
+        summary="An older summary.",
+    )
+    chapter_service.create_chapter(project_id=sample_project.id, title="Three")
+
+    steps = list(
+        summary_service.summarize_pending(
+            sample_project.id, GenerationSettings(model="fake-model")
+        )
+    )
+
+    assert [step.status for step in steps] == [
+        "summarised",
+        "skipped",
+        "empty",
+    ]
+    assert [step.title for step in steps] == ["One", "Two", "Three"]
+    assert len(fake_provider.requests) == 1
+
+
+def test_bulk_summary_stops_after_a_provider_failure(
+    summary_service: ChapterSummaryService,
+    chapter_service,
+    fake_provider,
+    monkeypatch,
+    sample_project,
+) -> None:
+    chapter_service.create_chapter(
+        project_id=sample_project.id, title="One", content="Mira walks."
+    )
+    chapter_service.create_chapter(
+        project_id=sample_project.id, title="Two", content="Mira waits."
+    )
+
+    def fail(_request):
+        raise LLMResponseError("Ollama is not reachable.")
+
+    monkeypatch.setattr(fake_provider, "generate", fail)
+
+    steps = list(
+        summary_service.summarize_pending(
+            sample_project.id, GenerationSettings(model="fake-model")
+        )
+    )
+
+    assert [step.status for step in steps] == ["failed"]
+    assert "not reachable" in steps[0].detail
+    assert len(fake_provider.requests) == 0
 
 
 def test_chapter_summary_is_generated_and_stored(

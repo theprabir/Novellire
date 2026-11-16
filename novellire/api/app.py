@@ -7,12 +7,14 @@ share exactly the same rules.
 
 from __future__ import annotations
 
+import json
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -799,6 +801,60 @@ def _build_router(services: ApiServices) -> APIRouter:
         if "target_word_count" in data:
             kwargs["target_word_count"] = data["target_word_count"]
         return asdict(services.chapters.update_chapter(chapter_id, **kwargs))
+
+    @router.post("/projects/{project_id}/summaries")
+    def summarize_project(
+        project_id: int, payload: SummaryRequest
+    ) -> StreamingResponse:
+        """Summarise every pending chapter sequentially, streaming progress."""
+        services.projects.require_project(project_id)
+        defaults = services.app_settings.generation_settings()
+        settings = GenerationSettings(
+            model=payload.model or defaults.model,
+            temperature=0.2,
+            top_p=payload.top_p,
+            num_predict=payload.num_predict,
+            context_window=payload.context_window,
+        )
+        chapters = services.chapters.list_chapters(project_id)
+        pending = sum(
+            1
+            for chapter in chapters
+            if chapter.content.strip() and not chapter.summary.strip()
+        )
+
+        def event_line(event: dict[str, Any]) -> str:
+            return json.dumps(event, ensure_ascii=False) + "\n"
+
+        def events() -> Iterator[str]:
+            yield event_line(
+                {"type": "start", "total": len(chapters), "pending": pending}
+            )
+            counts = {"summarised": 0, "skipped": 0, "empty": 0, "failed": 0}
+            for step in services.summaries.summarize_pending(project_id, settings):
+                counts[step.status] = counts.get(step.status, 0) + 1
+                yield event_line(
+                    {
+                        "type": "step",
+                        "chapter_id": step.chapter_id,
+                        "title": step.title,
+                        "position": step.position,
+                        "status": step.status,
+                        "detail": step.detail,
+                        "duration_ms": step.duration_ms,
+                        "processed": sum(counts.values()),
+                    }
+                )
+            yield event_line({"type": "done", **counts, "total": len(chapters)})
+
+        return StreamingResponse(
+            events(),
+            media_type="application/x-ndjson",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     @router.post("/chapters/{chapter_id}/summarize")
     def summarize_chapter(

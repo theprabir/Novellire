@@ -3,6 +3,25 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.2.7] — 2026-11-16
+
+Bulk chapter summaries. Schema stays at 4.
+
+### Added
+
+- `POST /api/projects/{id}/summaries` summarises the project one chapter at a
+  time and streams newline-delimited progress events (`start`, one `step` per
+  chapter, then `done`). Chapters that already have a summary and chapters
+  without text are reported as skipped rather than sent to the model.
+- The run stops at the first inference error and reports it, so a stopped Ollama
+  or missing model does not repeat the same failure for every remaining chapter.
+  Completed summaries are already saved when a later step fails.
+- The Memory surface has a **Summarise all chapters** action with live per-chapter
+  status rows and a final count. The button disables itself when the project has
+  nothing left to summarise.
+- `api.stream` in the browser client reads the NDJSON progress stream; the
+  server-side orchestration stays in `ChapterSummaryService.summarize_pending`.
+
 ## [0.2.6] — 2026-11-15
 
 Memory phase. Schema version 4 adds the full-text index; existing databases are
