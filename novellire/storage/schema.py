@@ -312,6 +312,34 @@ CREATE INDEX idx_event_characters_character
 """
 
 
+MIGRATION_7_RELATIONSHIPS = """
+CREATE TABLE character_relationships (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    character_a_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+    character_b_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+    relation_type TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'proposed'
+        CHECK (status IN ('proposed', 'approved', 'rejected')),
+    source_event_id INTEGER REFERENCES narrative_events(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    CHECK (character_a_id < character_b_id)
+)
+"""
+
+MIGRATION_7_RELATIONSHIPS_INDEX = """
+CREATE INDEX idx_character_relationships_project
+    ON character_relationships (project_id, status, id)
+"""
+
+MIGRATION_7_RELATIONSHIPS_PAIR_INDEX = """
+CREATE INDEX idx_character_relationships_pair
+    ON character_relationships (character_a_id, character_b_id)
+"""
+
+
 MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
     (
         1,
@@ -370,6 +398,14 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
                 MIGRATION_6_EVENT_LINKS,
                 MIGRATION_6_EVENT_CHARACTERS,
                 MIGRATION_6_EVENT_CHARACTERS_INDEX,
+            ),
+        ),
+        (
+            7,
+            (
+                MIGRATION_7_RELATIONSHIPS,
+                MIGRATION_7_RELATIONSHIPS_INDEX,
+                MIGRATION_7_RELATIONSHIPS_PAIR_INDEX,
             ),
         ),
     )

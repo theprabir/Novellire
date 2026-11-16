@@ -45,8 +45,8 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
     payload = client.get("/api/health").json()
 
     assert payload["status"] == "ok"
-    assert payload["schema_version"] == 6
-    assert payload["version"] == "0.3.3"
+    assert payload["schema_version"] == 7
+    assert payload["version"] == "0.3.4"
 
 
 def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:
@@ -56,6 +56,7 @@ def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:
     assert any(item["key"] == "approved" for item in payload["work_statuses"])
     assert any(item["key"] == "character_arc" for item in payload["character_fields"])
     assert "violet" in payload["appearance_options"]["accents"]
+    assert any(item["key"] == "ally" for item in payload["relationship_types"])
     kinds = [item["kind"] for item in payload["workspace_documents"]]
     assert kinds == [
         "master_bible",
@@ -781,6 +782,58 @@ def test_relationships_endpoint_reports_shared_events(
         mira["id"],
         orin["id"],
     }
+
+
+def test_relationship_records_support_create_approve_and_delete(
+    client: TestClient,
+) -> None:
+    project = create_project(client)
+    mira = client.post(
+        f"/api/projects/{project['id']}/characters", json={"name": "Mira Voss"}
+    ).json()
+    orin = client.post(
+        f"/api/projects/{project['id']}/characters", json={"name": "Orin Vale"}
+    ).json()
+
+    created = client.post(
+        f"/api/projects/{project['id']}/relationship-records",
+        json={
+            "character_a_id": orin["id"],
+            "character_b_id": mira["id"],
+            "relation_type": "ally",
+            "description": "They guard the archive.",
+        },
+    )
+
+    assert created.status_code == 201, created.text
+    record = created.json()
+    assert record["character_a_id"] == mira["id"]
+    assert record["status"] == "proposed"
+
+    approved = client.patch(
+        f"/api/relationship-records/{record['id']}/status",
+        json={"status": "approved"},
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+
+    edited = client.patch(
+        f"/api/relationship-records/{record['id']}",
+        json={"relation_type": "family"},
+    )
+    assert edited.json()["relation_type"] == "family"
+
+    listing = client.get(
+        f"/api/projects/{project['id']}/relationship-records"
+    ).json()
+    assert len(listing) == 1
+    assert listing[0]["description"] == "They guard the archive."
+
+    deleted = client.delete(f"/api/relationship-records/{record['id']}")
+    assert deleted.status_code == 200
+    assert client.get(
+        f"/api/projects/{project['id']}/relationship-records"
+    ).json() == []
 
 
 def test_adding_an_alias_relinks_existing_events(

@@ -3,6 +3,33 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.3.4] — 2026-11-16
+
+Typed, author-approved relationship records. Schema 7 adds
+`character_relationships`.
+
+### Added
+
+- Relationship records are typed (ally, rival, family, mentor, romantic, debt,
+  other), stored between two canonical, project-scoped characters.
+- Every record starts as `proposed`. Authors can approve, reject, reopen, edit,
+  or delete it; only approved records count as canon.
+- Optional source event and chapter provenance is preserved, including the
+  event summary and narrative chapter position.
+- `GET/POST /api/projects/{id}/relationship-records`,
+  `PATCH /api/relationship-records/{id}`,
+  `PATCH /api/relationship-records/{id}/status`, and
+  `DELETE /api/relationship-records/{id}`.
+- Memory separates **Recorded** relationships from **Derived** associations.
+  Derived rows can prefill a typed record with their latest event as provenance;
+  manual records are also supported.
+- `/api/meta` exposes the relationship type vocabulary used by the UI.
+
+### Deferred
+
+- Automatic relationship-type inference.
+- Injecting approved relationship records into generation context.
+
 ## [0.3.3] — 2026-11-16
 
 Character relationship discovery from episodic memory. Schema stays at 6.

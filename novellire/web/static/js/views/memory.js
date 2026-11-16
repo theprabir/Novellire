@@ -113,11 +113,16 @@ export function renderMemory(ctx) {
     }
   });
 
-  wrap.append(eventsSection(project.id), form, bulkSummaryCard(ctx, pending), results);
+  wrap.append(
+    eventsSection(project.id, state.meta),
+    form,
+    bulkSummaryCard(ctx, pending),
+    results
+  );
   return wrap;
 }
 
-function eventsSection(projectId) {
+function eventsSection(projectId, meta) {
   const list = el(
     'div',
     { class: 'memory-events-list' },
@@ -127,10 +132,21 @@ function eventsSection(projectId) {
     [{ value: '', label: 'All characters' }],
     { value: '', disabled: true, 'aria-label': 'Filter events by character' }
   );
+  const recorded = el(
+    'div',
+    { class: 'relationship-list' },
+    el('p', { class: 'hint' }, 'Loading recorded relationships…')
+  );
   const relationships = el(
     'div',
     { class: 'relationship-list' },
-    el('p', { class: 'hint' }, 'Loading relationships…')
+    el('p', { class: 'hint' }, 'Loading derived associations…')
+  );
+  const recordButton = el(
+    'button',
+    { class: 'btn btn-sm', type: 'button', disabled: true },
+    icon('plus'),
+    'Record relationship'
   );
   const section = el(
     'section',
@@ -157,8 +173,22 @@ function eventsSection(projectId) {
         el(
           'span',
           { class: 'hint' },
-          'Derived from shared events; not canon'
-        )
+          'Recorded records are author-controlled; derived associations are not canon'
+        ),
+        recordButton
+      ),
+      el(
+        'div',
+        { class: 'relationship-subhead' },
+        el('strong', {}, 'Recorded'),
+        el('span', { class: 'hint' }, 'Approved, proposed, and rejected records')
+      ),
+      recorded,
+      el(
+        'div',
+        { class: 'relationship-subhead' },
+        el('strong', {}, 'Derived'),
+        el('span', { class: 'hint' }, 'Shared events; not canon')
       ),
       relationships
     )
@@ -167,7 +197,9 @@ function eventsSection(projectId) {
   let events = [];
   let characters = [];
   let pairs = [];
+  let records = [];
   let relationshipError = '';
+  let recordError = '';
 
   const render = () => {
     const selected = filter.value ? Number(filter.value) : null;
@@ -236,6 +268,15 @@ function eventsSection(projectId) {
         pairs = [];
         relationshipError = error.message;
       }
+      try {
+        records = await api.get(
+          `/api/projects/${projectId}/relationship-records`
+        );
+        recordError = '';
+      } catch (error) {
+        records = [];
+        recordError = error.message;
+      }
       const options = [
         { value: '', label: 'All characters' },
         ...characters.map((character) => ({
@@ -252,22 +293,214 @@ function eventsSection(projectId) {
         })
       );
       filter.disabled = characters.length === 0;
+      recordButton.disabled = characters.length < 2;
       render();
-      renderRelationships(pairs, relationships, relationshipError);
+      renderRecordedRelationships(
+        records,
+        recorded,
+        recordError,
+        meta,
+        characters,
+        refresh,
+        projectId
+      );
+      renderRelationships(
+        pairs,
+        relationships,
+        relationshipError,
+        meta,
+        characters,
+        refresh,
+        projectId
+      );
     } catch (error) {
       list.replaceChildren(el('p', { class: 'hint' }, error.message));
       relationships.replaceChildren(
         el('p', { class: 'hint' }, 'Relationships are unavailable.')
       );
+      recorded.replaceChildren(
+        el('p', { class: 'hint' }, 'Recorded relationships are unavailable.')
+      );
     }
   }
 
   filter.addEventListener('change', render);
+  recordButton.addEventListener('click', () => {
+    if (characters.length < 2) {
+      toast('Add at least two characters before recording a relationship.', 'error');
+      return;
+    }
+    openRelationshipEditor({
+      projectId,
+      meta,
+      characters,
+      refresh,
+    });
+  });
   refresh();
   return section;
 }
 
-function renderRelationships(pairs, host, error) {
+const RELATIONSHIP_STATUS_LABELS = {
+  proposed: 'Proposed',
+  approved: 'Approved',
+  rejected: 'Rejected',
+};
+
+function relationshipTypeLabel(meta, key) {
+  return (
+    (meta?.relationship_types || []).find((item) => item.key === key)?.label ||
+    key
+  );
+}
+
+function relationshipTypeOptions(meta) {
+  const options = meta?.relationship_types || [];
+  return options.length ? options : [{ key: 'other', label: 'Other' }];
+}
+
+function renderRecordedRelationships(
+  records,
+  host,
+  error,
+  meta,
+  characters,
+  refresh,
+  projectId
+) {
+  if (error) {
+    host.replaceChildren(el('p', { class: 'hint' }, error));
+    return;
+  }
+  if (!records.length) {
+    host.replaceChildren(
+      el(
+        'div',
+        { class: 'card card-pad' },
+        el(
+          'p',
+          { class: 'hint' },
+          'No recorded relationships yet. Record one from a derived association or use Record relationship.'
+        )
+      )
+    );
+    return;
+  }
+  host.replaceChildren(
+    ...records.map((record) => {
+      const status = RELATIONSHIP_STATUS_LABELS[record.status] || record.status;
+      const actions = el('div', { class: 'relationship-actions' });
+      if (record.status !== 'approved') {
+        actions.append(
+          el(
+            'button',
+            {
+              class: 'btn btn-ghost btn-sm',
+              type: 'button',
+              onClick: () =>
+                changeRelationshipStatus(record, 'approved', refresh),
+            },
+            icon('check'),
+            'Approve'
+          )
+        );
+      }
+      if (record.status !== 'rejected') {
+        actions.append(
+          el(
+            'button',
+            {
+              class: 'btn btn-ghost btn-sm',
+              type: 'button',
+              onClick: () =>
+                changeRelationshipStatus(record, 'rejected', refresh),
+            },
+            icon('x'),
+            'Reject'
+          )
+        );
+      }
+      actions.append(
+        el(
+          'button',
+          {
+            class: 'btn btn-ghost btn-sm',
+            type: 'button',
+            onClick: () =>
+              openRelationshipEditor({
+                projectId,
+                meta,
+                characters,
+                record,
+                refresh,
+              }),
+          },
+          icon('pencil'),
+          'Edit'
+        ),
+        el(
+          'button',
+          {
+            class: 'btn btn-ghost btn-sm',
+            type: 'button',
+            onClick: () => deleteRelationship(record, refresh),
+          },
+          icon('trash'),
+          'Delete'
+        )
+      );
+
+      return el(
+        'article',
+        { class: 'relationship-row recorded' },
+        el(
+          'div',
+          { class: 'relationship-pair' },
+          el('strong', {}, record.character_a_name),
+          el('span', { class: 'relationship-join' }, '↔'),
+          el('strong', {}, record.character_b_name),
+          el(
+            'span',
+            { class: 'chip accent' },
+            relationshipTypeLabel(meta, record.relation_type)
+          ),
+          el(
+            'span',
+            {
+              class: `chip ${
+                record.status === 'approved'
+                  ? 'ok'
+                  : record.status === 'proposed'
+                    ? 'warn'
+                    : ''
+              }`.trim(),
+            },
+            status
+          )
+        ),
+        record.description
+          ? el('p', { class: 'relationship-note' }, record.description)
+          : null,
+        record.source_event_id
+          ? el(
+              'p',
+              { class: 'hint' },
+              'Source: ',
+              el(
+                'a',
+                { href: `#/workspace/chapters/${record.source_chapter_id}` },
+                `Chapter ${record.source_chapter_position} — ${record.source_chapter_title}`
+              ),
+              ` · ${record.source_summary}`
+            )
+          : null,
+        actions
+      );
+    })
+  );
+}
+
+function renderRelationships(pairs, host, error, meta, characters, refresh, projectId) {
   if (error) {
     host.replaceChildren(el('p', { class: 'hint' }, error));
     return;
@@ -306,6 +539,23 @@ function renderRelationships(pairs, host, error) {
             'span',
             { class: 'chip' },
             `${count(pair.shared_events)} shared event${pair.shared_events === 1 ? '' : 's'}`
+          ),
+          el(
+            'button',
+            {
+              class: 'btn btn-ghost btn-sm',
+              type: 'button',
+              onClick: () =>
+                openRelationshipEditor({
+                  projectId,
+                  meta,
+                  characters,
+                  pair,
+                  refresh,
+                }),
+            },
+            icon('plus'),
+            'Record'
           )
         ),
         el(
@@ -319,6 +569,170 @@ function renderRelationships(pairs, host, error) {
       );
     })
   );
+}
+
+async function changeRelationshipStatus(record, status, refresh) {
+  try {
+    await api.patch(`/api/relationship-records/${record.id}/status`, {
+      status,
+    });
+    toast(`Relationship ${status}.`, 'success');
+    await refresh();
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+function deleteRelationship(record, refresh) {
+  confirmDialog({
+    title: 'Delete relationship',
+    message: `Remove the relationship record between ${record.character_a_name} and ${record.character_b_name}? This cannot be undone.`,
+    confirmLabel: 'Delete record',
+    onConfirm: async () => {
+      try {
+        await api.del(`/api/relationship-records/${record.id}`);
+        toast('Relationship deleted.', 'success');
+        await refresh();
+      } catch (error) {
+        toast(error.message, 'error');
+      }
+    },
+  });
+}
+
+function openRelationshipEditor({
+  projectId,
+  meta,
+  characters,
+  record = null,
+  pair = null,
+  refresh,
+}) {
+  const types = relationshipTypeOptions(meta);
+  const type = select(
+    types.map((item) => ({ value: item.key, label: item.label })),
+    { value: record?.relation_type || types[0].key }
+  );
+  const description = textarea({
+    rows: 3,
+    value: record?.description || '',
+  });
+  let first = null;
+  let second = null;
+  const body = [];
+
+  if (record) {
+    body.push(
+      el(
+        'p',
+        { class: 'relationship-pair' },
+        el('strong', {}, record.character_a_name),
+        el('span', { class: 'relationship-join' }, '↔'),
+        el('strong', {}, record.character_b_name)
+      )
+    );
+  } else {
+    const options = characters.map((character) => ({
+      value: character.id,
+      label: character.name,
+    }));
+    first = select(options, {
+      value: pair?.character_a_id ?? options[0]?.value,
+    });
+    second = select(options, {
+      value: pair?.character_b_id ?? options[1]?.value,
+    });
+    if (pair) {
+      first.disabled = true;
+      second.disabled = true;
+    }
+    body.push(
+      field('First character', first),
+      field('Second character', second)
+    );
+    if (pair) {
+      body.push(
+        el(
+          'p',
+          { class: 'hint' },
+          `Provenance: Chapter ${pair.latest_chapter_position} — ${pair.latest_chapter_title} · ${pair.latest_summary}`
+        )
+      );
+    }
+  }
+
+  body.push(
+    field('Relationship type', type),
+    field(
+      'Description',
+      description,
+      'Optional author note. Only approved records count as canon.'
+    )
+  );
+
+  const save = el(
+    'button',
+    { class: 'btn btn-primary', type: 'button' },
+    record ? 'Save record' : 'Record as proposed'
+  );
+  const modal = openModal({
+    title: record ? 'Edit relationship record' : 'Record relationship',
+    wide: true,
+    body,
+    footer: [
+      el(
+        'button',
+        {
+          class: 'btn btn-ghost',
+          type: 'button',
+          onClick: () => modal.close(),
+        },
+        'Cancel'
+      ),
+      save,
+    ],
+  });
+
+  save.addEventListener('click', async () => {
+    const payload = {
+      relation_type: type.value,
+      description: description.value.trim(),
+    };
+    if (!record) {
+      if (!first?.value || !second?.value) {
+        toast('Choose two characters.', 'error');
+        return;
+      }
+      if (first.value === second.value) {
+        toast('Choose two different characters.', 'error');
+        return;
+      }
+    }
+    modal.setBusy(true);
+    try {
+      if (record) {
+        await api.patch(`/api/relationship-records/${record.id}`, payload);
+        toast('Relationship updated.', 'success');
+      } else {
+        await api.post(
+          `/api/projects/${projectId}/relationship-records`,
+          {
+            character_a_id: Number(first.value),
+            character_b_id: Number(second.value),
+            source_event_id: pair?.latest_event_id ?? null,
+            ...payload,
+          }
+        );
+        toast('Relationship recorded as proposed.', 'success');
+      }
+      modal.close();
+      await refresh();
+    } catch (error) {
+      toast(error.message, 'error');
+    } finally {
+      modal.setBusy(false);
+    }
+  });
 }
 
 function eventCard(event, characters, refresh) {

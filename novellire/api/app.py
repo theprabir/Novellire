@@ -32,6 +32,10 @@ from ..core.export import ExportService
 from ..core.generation import GenerationService
 from ..core.memory import MemoryService
 from ..core.projects import ProjectService
+from ..core.relationships import (
+    RELATIONSHIP_TYPE_LABELS,
+    RelationshipService,
+)
 from ..core.scenes import SceneService
 from ..core.settings_service import (
     ACCENTS,
@@ -66,6 +70,7 @@ from ..storage.database import Database
 from ..storage.document_repository import DocumentRepository
 from ..storage.event_repository import EventRepository
 from ..storage.search_repository import SearchRepository
+from ..storage.relationship_repository import RelationshipRepository
 from ..storage.repositories import (
     AppSettingsRepository,
     GenerationRecord,
@@ -188,6 +193,23 @@ class EventUpdateRequest(BaseModel):
     threads: list[str] = Field(default_factory=list)
 
 
+class RelationshipCreateRequest(BaseModel):
+    character_a_id: int
+    character_b_id: int
+    relation_type: str
+    description: str = ""
+    source_event_id: int | None = None
+
+
+class RelationshipUpdateRequest(BaseModel):
+    relation_type: str | None = None
+    description: str | None = None
+
+
+class RelationshipStatusRequest(BaseModel):
+    status: str
+
+
 class SummaryRequest(BaseModel):
     model: str = ""
     top_p: float = Field(default=0.9, gt=0.0, le=1.0)
@@ -259,6 +281,7 @@ class ApiServices:
     memory: MemoryService
     events: EventExtractionService
     event_repository: EventRepository
+    relationships: RelationshipService
     backup: BackupService
     generations: GenerationRepository
 
@@ -272,6 +295,7 @@ def build_services(
     chapter_repository = ChapterRepository(database)
     bible_repository = StoryBibleRepository(database)
     event_repository = EventRepository(database)
+    relationship_repository = RelationshipRepository(database)
     chapter_service = ChapterService(
         chapter_repository, project_repository, character_repository
     )
@@ -311,6 +335,12 @@ def build_services(
             character_repository,
         ),
         event_repository=event_repository,
+        relationships=RelationshipService(
+            project_repository,
+            character_repository,
+            event_repository,
+            relationship_repository,
+        ),
         backup=BackupService(database),
         context=GenerationContextBuilder(
             document_service,
@@ -465,6 +495,10 @@ def _build_router(services: ApiServices) -> APIRouter:
             "character_fields": [
                 {"key": field, "label": CHARACTER_FIELD_LABELS[field]}
                 for field in PROFILE_FIELDS
+            ],
+            "relationship_types": [
+                {"key": key, "label": label}
+                for key, label in RELATIONSHIP_TYPE_LABELS.items()
             ],
             "appearance_options": {
                 "themes": list(THEMES),
@@ -977,6 +1011,54 @@ def _build_router(services: ApiServices) -> APIRouter:
             asdict(relationship)
             for relationship in services.events.relationships(project_id)
         ]
+
+    @router.get("/projects/{project_id}/relationship-records")
+    def list_relationship_records(project_id: int) -> list[dict[str, Any]]:
+        return [
+            asdict(record)
+            for record in services.relationships.list_for_project(project_id)
+        ]
+
+    @router.post(
+        "/projects/{project_id}/relationship-records", status_code=201
+    )
+    def create_relationship_record(
+        project_id: int, payload: RelationshipCreateRequest
+    ) -> dict[str, Any]:
+        record = services.relationships.create(
+            project_id,
+            character_a_id=payload.character_a_id,
+            character_b_id=payload.character_b_id,
+            relation_type=payload.relation_type,
+            description=payload.description,
+            source_event_id=payload.source_event_id,
+        )
+        return asdict(record)
+
+    @router.patch("/relationship-records/{record_id}")
+    def update_relationship_record(
+        record_id: int, payload: RelationshipUpdateRequest
+    ) -> dict[str, Any]:
+        data = payload.model_dump(exclude_unset=True)
+        record = services.relationships.update(
+            record_id,
+            relation_type=data.get("relation_type"),
+            description=data.get("description"),
+        )
+        return asdict(record)
+
+    @router.patch("/relationship-records/{record_id}/status")
+    def set_relationship_status(
+        record_id: int, payload: RelationshipStatusRequest
+    ) -> dict[str, Any]:
+        return asdict(
+            services.relationships.set_status(record_id, payload.status)
+        )
+
+    @router.delete("/relationship-records/{record_id}")
+    def delete_relationship_record(record_id: int) -> dict[str, Any]:
+        services.relationships.delete(record_id)
+        return {"deleted": True}
 
     @router.post("/chapters/{chapter_id}/move")
     def move_chapter(chapter_id: int, payload: MoveRequest) -> dict[str, Any]:
