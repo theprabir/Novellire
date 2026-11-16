@@ -3,6 +3,21 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.3.3] — 2026-11-16
+
+Character relationship discovery from episodic memory. Schema stays at 6.
+
+### Added
+
+- `GET /api/projects/{id}/relationships` derives character pairs from events
+  where both profiles are linked. Each relationship reports shared-event count,
+  latest event summary, latest chapter, and `derived` status.
+- Memory now shows a **Character relationships** section under episodic memory,
+  ordered by shared-event count. It refreshes after events are edited or
+  deleted.
+- Relationships are explicitly derived, not canon, and carry event/chapter
+  provenance. No relationship data is stored separately yet.
+
 ## [0.3.2] — 2026-11-16
 
 Event-to-character links, character filtering, and event editing. Schema 6 adds

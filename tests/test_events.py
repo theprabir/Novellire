@@ -130,6 +130,66 @@ def test_extraction_stores_events_with_chapter_provenance(
     assert "Between 1 and 8 events" in fake_provider.requests[0].prompt
 
 
+def test_relationships_are_derived_from_shared_events(
+    event_service: EventExtractionService,
+    event_repository: EventRepository,
+    character_service,
+    chapter_service,
+    sample_project,
+) -> None:
+    mira = character_service.create_character(
+        project_id=sample_project.id, name="Mira Voss"
+    )
+    orin = character_service.create_character(
+        project_id=sample_project.id, name="Orin Vale"
+    )
+    keeper = character_service.create_character(
+        project_id=sample_project.id, name="The Keeper"
+    )
+    chapter = chapter_service.create_chapter(
+        project_id=sample_project.id,
+        title="The Gate",
+        content="Mira and Orin meet the Keeper.",
+    )
+    event_repository.replace_for_chapter(
+        sample_project.id,
+        chapter.id,
+        [
+            EventDraft(
+                summary="Mira and Orin open the gate.",
+                characters=("Mira", "Orin"),
+            ),
+            EventDraft(
+                summary="Mira and Orin argue about the ledger.",
+                characters=("Mira", "Orin"),
+            ),
+            EventDraft(
+                summary="Mira meets the Keeper.",
+                characters=("Mira", "The Keeper"),
+            ),
+            EventDraft(
+                summary="The Keeper waits alone.", characters=("The Keeper",)
+            ),
+        ],
+        model="fake-model",
+    )
+
+    relationships = event_service.relationships(sample_project.id)
+
+    pairs = {
+        (item.character_a_id, item.character_b_id): item
+        for item in relationships
+    }
+    assert set(pairs) == {(mira.id, orin.id), (mira.id, keeper.id)}
+    assert pairs[(mira.id, orin.id)].shared_events == 2
+    assert pairs[(mira.id, orin.id)].latest_summary == (
+        "Mira and Orin argue about the ledger."
+    )
+    assert pairs[(mira.id, orin.id)].latest_chapter_title == "The Gate"
+    assert pairs[(mira.id, orin.id)].status == "derived"
+    assert pairs[(mira.id, keeper.id)].shared_events == 1
+
+
 def test_stopword_names_require_a_full_match(
     event_service: EventExtractionService,
     event_repository: EventRepository,

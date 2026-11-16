@@ -58,6 +58,21 @@ NAME_STOPWORDS = frozenset(
 
 
 @dataclass(frozen=True)
+class CharacterRelationship:
+    character_a_id: int
+    character_a_name: str
+    character_b_id: int
+    character_b_name: str
+    shared_events: int
+    latest_event_id: int
+    latest_summary: str
+    latest_chapter_id: int
+    latest_chapter_title: str
+    latest_chapter_position: int
+    status: str = "derived"
+
+
+@dataclass(frozen=True)
 class EventExtractionOutcome:
     events: list[NarrativeEvent]
     model: str
@@ -182,6 +197,40 @@ class EventExtractionService:
     def delete_event(self, event_id: int) -> None:
         if not self._events.delete(event_id):
             raise RecordNotFoundError("That event no longer exists.")
+
+    def relationships(self, project_id: int) -> list[CharacterRelationship]:
+        """Derive character associations from co-occurrence in linked events."""
+        if self._projects.get(project_id) is None:
+            raise ProjectNotFoundError("That project no longer exists.")
+        self.ensure_links(project_id)
+        characters = {
+            character.id: character
+            for character in self._characters.list_for_project(project_id)
+        }
+        relationships: list[CharacterRelationship] = []
+        for a_id, b_id, shared, latest_id in self._events.list_character_pairs(
+            project_id
+        ):
+            character_a = characters.get(a_id)
+            character_b = characters.get(b_id)
+            latest = self._events.get(latest_id)
+            if character_a is None or character_b is None or latest is None:
+                continue
+            relationships.append(
+                CharacterRelationship(
+                    character_a_id=a_id,
+                    character_a_name=character_a.name,
+                    character_b_id=b_id,
+                    character_b_name=character_b.name,
+                    shared_events=shared,
+                    latest_event_id=latest.id,
+                    latest_summary=latest.summary,
+                    latest_chapter_id=latest.chapter_id,
+                    latest_chapter_title=latest.chapter_title,
+                    latest_chapter_position=latest.chapter_position,
+                )
+            )
+        return relationships
 
 
 def match_event_characters(

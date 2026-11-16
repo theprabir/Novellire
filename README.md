@@ -147,7 +147,9 @@ The interface has these surfaces:
   memory** shows extracted events with their characters, locations, objects,
   unresolved threads, and the chapter that produced them. Events are linked to
   character profiles by name or alias, can be filtered by character, and can be
-  edited or deleted in place.
+  edited or deleted in place. **Character relationships** are derived from
+  shared events, with counts and latest-event provenance; they are clearly
+  marked as derived rather than canon.
 - **Chat, Continuity** — designed scopes. Their layout, filters, and detail panes
   are reserved and labelled with the phase that will connect them; they show no
   project data yet.
@@ -162,7 +164,7 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-172 tests run fully offline. All inference is stubbed, so no model or Ollama
+174 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
@@ -283,9 +285,10 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.3.2** (schema version 6). `v0.3.2` links extracted events
-to character profiles and aliases, filters Memory by character, and lets events
-be edited or deleted. It builds on `v0.3.1`, validated backup and restore with
+Current release: **v0.3.3** (schema version 6). `v0.3.3` discovers character
+relationships from shared events and shows them with provenance in Memory. It
+builds on `v0.3.2`, event-to-character linking with conservative name/alias
+matching and event editing; `v0.3.1`, validated backup and restore with
 pre-restore safety copies; `v0.3.0`, event-aware generation; `v0.2.9`, structured
 event extraction; `v0.2.8`, earlier chapter retrieval in generation; `v0.2.7`,
 sequential bulk summaries; `v0.2.6`, the FTS5 Memory index; `v0.2.5`, manuscript

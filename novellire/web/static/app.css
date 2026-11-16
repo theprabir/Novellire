@@ -1521,6 +1521,30 @@ input[type="range"]::-webkit-slider-thumb {
 .memory-events .section-head .select { width: 210px; flex: none; }
 .event-actions { display: flex; gap: 4px; margin-left: auto; }
 .event-actions .btn { padding: 4px 8px; }
+.relationship-block { margin-top: 18px; }
+.relationship-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.relationship-head h3 { font-size: var(--fs-md); }
+.relationship-list { display: flex; flex-direction: column; gap: 8px; }
+.relationship-row {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.relationship-pair {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.relationship-join { color: var(--muted); }
+.relationship-pair .chip { margin-left: auto; }
+.relationship-row .hint { margin: 5px 0 0; }
 .event-list { display: flex; flex-direction: column; gap: 8px; }
 .event-card {
   padding: 12px 14px;

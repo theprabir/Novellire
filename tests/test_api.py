@@ -46,7 +46,7 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
 
     assert payload["status"] == "ok"
     assert payload["schema_version"] == 6
-    assert payload["version"] == "0.3.2"
+    assert payload["version"] == "0.3.3"
 
 
 def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:
@@ -733,6 +733,54 @@ def test_events_link_profiles_and_support_edit_and_delete(
     deleted = client.delete(f"/api/events/{event['id']}")
     assert deleted.status_code == 200
     assert client.get(f"/api/projects/{project['id']}/events").json() == []
+
+
+def test_relationships_endpoint_reports_shared_events(
+    client: TestClient, fake_provider
+) -> None:
+    project = create_project(client)
+    mira = client.post(
+        f"/api/projects/{project['id']}/characters", json={"name": "Mira Voss"}
+    ).json()
+    orin = client.post(
+        f"/api/projects/{project['id']}/characters", json={"name": "Orin Vale"}
+    ).json()
+    chapter = client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={"title": "The Gate", "content": "Mira and Orin meet."},
+    ).json()
+    fake_provider.result = GenerationResult(
+        text=(
+            '{"events":[{"summary":"Mira and Orin open the gate.",'
+            '"characters":["Mira","Orin"],"locations":["gate"],'
+            '"objects":[],"threads":[]}]}'
+        ),
+        model="fake-model",
+        duration_ms=5,
+    )
+    client.post(
+        f"/api/chapters/{chapter['id']}/events/extract",
+        json={"model": "fake-model"},
+    )
+
+    relationships = client.get(
+        f"/api/projects/{project['id']}/relationships"
+    ).json()
+
+    assert len(relationships) == 1
+    pair = relationships[0]
+    assert {pair["character_a_name"], pair["character_b_name"]} == {
+        "Mira Voss",
+        "Orin Vale",
+    }
+    assert pair["shared_events"] == 1
+    assert pair["latest_summary"] == "Mira and Orin open the gate."
+    assert pair["latest_chapter_title"] == "The Gate"
+    assert pair["status"] == "derived"
+    assert {pair["character_a_id"], pair["character_b_id"]} == {
+        mira["id"],
+        orin["id"],
+    }
 
 
 def test_adding_an_alias_relinks_existing_events(

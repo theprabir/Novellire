@@ -118,6 +118,39 @@ class EventRepository:
             ).fetchone()
         return _row_to_event(row) if row is not None else None
 
+    def list_character_pairs(
+        self, project_id: int
+    ) -> list[tuple[int, int, int, int]]:
+        """Return character pairs that share events, with counts and provenance."""
+        with self._database.connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT ec_a.character_id AS character_a_id,
+                       ec_b.character_id AS character_b_id,
+                       COUNT(DISTINCT ec_a.event_id) AS shared_events,
+                       MAX(ec_a.event_id) AS latest_event_id
+                FROM event_characters ec_a
+                JOIN event_characters ec_b
+                  ON ec_b.event_id = ec_a.event_id
+                 AND ec_b.character_id > ec_a.character_id
+                JOIN narrative_events e ON e.id = ec_a.event_id
+                WHERE e.project_id = ?
+                GROUP BY ec_a.character_id, ec_b.character_id
+                ORDER BY shared_events DESC, latest_event_id DESC,
+                         character_a_id, character_b_id
+                """,
+                (project_id,),
+            ).fetchall()
+        return [
+            (
+                int(row["character_a_id"]),
+                int(row["character_b_id"]),
+                int(row["shared_events"]),
+                int(row["latest_event_id"]),
+            )
+            for row in rows
+        ]
+
     def reset_links(self, project_id: int) -> None:
         with self._database.transaction() as connection:
             connection.execute(

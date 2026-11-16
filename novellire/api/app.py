@@ -971,6 +971,13 @@ def _build_router(services: ApiServices) -> APIRouter:
         services.events.delete_event(event_id)
         return {"deleted": True}
 
+    @router.get("/projects/{project_id}/relationships")
+    def list_relationships(project_id: int) -> list[dict[str, Any]]:
+        return [
+            asdict(relationship)
+            for relationship in services.events.relationships(project_id)
+        ]
+
     @router.post("/chapters/{chapter_id}/move")
     def move_chapter(chapter_id: int, payload: MoveRequest) -> dict[str, Any]:
         return asdict(services.chapters.move_chapter(chapter_id, payload.direction))

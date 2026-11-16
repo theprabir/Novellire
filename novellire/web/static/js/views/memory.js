@@ -127,6 +127,11 @@ function eventsSection(projectId) {
     [{ value: '', label: 'All characters' }],
     { value: '', disabled: true, 'aria-label': 'Filter events by character' }
   );
+  const relationships = el(
+    'div',
+    { class: 'relationship-list' },
+    el('p', { class: 'hint' }, 'Loading relationships…')
+  );
   const section = el(
     'section',
     { class: 'memory-events' },
@@ -141,11 +146,28 @@ function eventsSection(projectId) {
       ),
       filter
     ),
-    list
+    list,
+    el(
+      'div',
+      { class: 'relationship-block' },
+      el(
+        'div',
+        { class: 'relationship-head' },
+        el('h3', {}, 'Character relationships'),
+        el(
+          'span',
+          { class: 'hint' },
+          'Derived from shared events; not canon'
+        )
+      ),
+      relationships
+    )
   );
 
   let events = [];
   let characters = [];
+  let pairs = [];
+  let relationshipError = '';
 
   const render = () => {
     const selected = filter.value ? Number(filter.value) : null;
@@ -207,6 +229,13 @@ function eventsSection(projectId) {
           .get(`/api/projects/${projectId}/characters`)
           .catch(() => []);
       }
+      try {
+        pairs = await api.get(`/api/projects/${projectId}/relationships`);
+        relationshipError = '';
+      } catch (error) {
+        pairs = [];
+        relationshipError = error.message;
+      }
       const options = [
         { value: '', label: 'All characters' },
         ...characters.map((character) => ({
@@ -224,14 +253,72 @@ function eventsSection(projectId) {
       );
       filter.disabled = characters.length === 0;
       render();
+      renderRelationships(pairs, relationships, relationshipError);
     } catch (error) {
       list.replaceChildren(el('p', { class: 'hint' }, error.message));
+      relationships.replaceChildren(
+        el('p', { class: 'hint' }, 'Relationships are unavailable.')
+      );
     }
   }
 
   filter.addEventListener('change', render);
   refresh();
   return section;
+}
+
+function renderRelationships(pairs, host, error) {
+  if (error) {
+    host.replaceChildren(el('p', { class: 'hint' }, error));
+    return;
+  }
+  if (!pairs.length) {
+    host.replaceChildren(
+      el(
+        'div',
+        { class: 'card card-pad' },
+        el(
+          'p',
+          { class: 'hint' },
+          'Character relationships appear when two linked profiles share an extracted event.'
+        )
+      )
+    );
+    return;
+  }
+  host.replaceChildren(
+    ...pairs.map((pair) => {
+      const latest = el(
+        'a',
+        { href: `#/workspace/chapters/${pair.latest_chapter_id}` },
+        `Chapter ${pair.latest_chapter_position} — ${pair.latest_chapter_title}`
+      );
+      return el(
+        'article',
+        { class: 'relationship-row' },
+        el(
+          'div',
+          { class: 'relationship-pair' },
+          el('strong', {}, pair.character_a_name),
+          el('span', { class: 'relationship-join' }, '↔'),
+          el('strong', {}, pair.character_b_name),
+          el(
+            'span',
+            { class: 'chip' },
+            `${count(pair.shared_events)} shared event${pair.shared_events === 1 ? '' : 's'}`
+          )
+        ),
+        el(
+          'p',
+          { class: 'hint' },
+          'Latest: ',
+          pair.latest_summary,
+          ' · ',
+          latest
+        )
+      );
+    })
+  );
 }
 
 function eventCard(event, characters, refresh) {
