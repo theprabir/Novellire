@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from novellire.api.app import create_app
 from novellire.config import GenerationDefaults, Settings
+from novellire.llm.base import GenerationResult
 from novellire.storage.database import Database
 
 
@@ -43,8 +44,8 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
     payload = client.get("/api/health").json()
 
     assert payload["status"] == "ok"
-    assert payload["schema_version"] == 4
-    assert payload["version"] == "0.2.8"
+    assert payload["schema_version"] == 5
+    assert payload["version"] == "0.2.9"
 
 
 def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:
@@ -616,6 +617,44 @@ def test_bulk_summary_streams_progress(client: TestClient, fake_provider) -> Non
     manuscript = client.get(f"/api/projects/{project['id']}/manuscript").json()
     assert manuscript["chapters"][0]["summary"] == " ".join(["word"] * 120)
     assert manuscript["chapters"][1]["summary"] == "An older summary."
+
+
+def test_event_extraction_stores_and_lists_events(
+    client: TestClient, fake_provider
+) -> None:
+    project = create_project(client)
+    chapter = client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={
+            "title": "The Gate",
+            "content": "Mira crossed the ashen archive and met the keeper.",
+        },
+    ).json()
+    fake_provider.result = GenerationResult(
+        text=(
+            '{"events":[{"summary":"Mira reaches the archive.",'
+            '"characters":["Mira"],"locations":["archive"],'
+            '"objects":["sealed key"],'
+            '"threads":["Who sealed the ledger?"]}]}'
+        ),
+        model="fake-model",
+        duration_ms=64,
+    )
+
+    response = client.post(
+        f"/api/chapters/{chapter['id']}/events/extract",
+        json={"model": "fake-model"},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["duration_ms"] == 64
+    assert len(payload["events"]) == 1
+    assert payload["events"][0]["chapter_title"] == "The Gate"
+    assert payload["events"][0]["threads"] == ["Who sealed the ledger?"]
+
+    listing = client.get(f"/api/projects/{project['id']}/events").json()
+    assert listing == payload["events"]
 
 
 def test_export_returns_a_manuscript_file(client: TestClient) -> None:

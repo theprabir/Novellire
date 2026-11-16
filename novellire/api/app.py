@@ -25,6 +25,7 @@ from ..core.characters import FIELD_LABELS as CHARACTER_FIELD_LABELS
 from ..core.characters import PROFILE_FIELDS, CharacterService
 from ..core.context import GenerationContextBuilder
 from ..core.documents import ProjectDocumentService, WORKSPACE_DOCUMENTS
+from ..core.events import EventExtractionService
 from ..core.export import ExportService
 from ..core.generation import GenerationService
 from ..core.memory import MemoryService
@@ -61,6 +62,7 @@ from ..llm.ollama import OllamaProvider
 from ..logging_setup import configure_logging
 from ..storage.database import Database
 from ..storage.document_repository import DocumentRepository
+from ..storage.event_repository import EventRepository
 from ..storage.search_repository import SearchRepository
 from ..storage.repositories import (
     AppSettingsRepository,
@@ -245,6 +247,8 @@ class ApiServices:
     style_guide: StyleGuideService
     summaries: ChapterSummaryService
     memory: MemoryService
+    events: EventExtractionService
+    event_repository: EventRepository
     generations: GenerationRepository
 
 
@@ -256,6 +260,7 @@ def build_services(
     character_repository = CharacterRepository(database)
     chapter_repository = ChapterRepository(database)
     bible_repository = StoryBibleRepository(database)
+    event_repository = EventRepository(database)
     chapter_service = ChapterService(
         chapter_repository, project_repository, character_repository
     )
@@ -287,6 +292,10 @@ def build_services(
             provider, project_repository, chapter_service
         ),
         memory=MemoryService(SearchRepository(database), project_repository),
+        events=EventExtractionService(
+            provider, project_repository, chapter_service, event_repository
+        ),
+        event_repository=event_repository,
         context=GenerationContextBuilder(
             document_service,
             bible_repository,
@@ -378,6 +387,18 @@ def create_app(
     _register_error_handlers(app)
 
     if WEB_DIR.is_dir():
+        @app.middleware("http")
+        async def revalidate_static_assets(request, call_next):
+            """Keep upgrades from serving a stale browser module."""
+            response = await call_next(request)
+            is_static = request.url.path.startswith("/static/")
+            is_html = response.headers.get("content-type", "").startswith(
+                "text/html"
+            )
+            if is_static or is_html:
+                response.headers.setdefault("Cache-Control", "no-store")
+            return response
+
         app.mount(
             "/static", StaticFiles(directory=WEB_DIR / "static"), name="static"
         )
@@ -877,6 +898,35 @@ def _build_router(services: ApiServices) -> APIRouter:
             "model": outcome.model,
             "duration_ms": outcome.duration_ms,
         }
+
+    @router.post("/chapters/{chapter_id}/events/extract")
+    def extract_events(
+        chapter_id: int, payload: SummaryRequest
+    ) -> dict[str, Any]:
+        defaults = services.app_settings.generation_settings()
+        outcome = services.events.extract(
+            chapter_id,
+            GenerationSettings(
+                model=payload.model or defaults.model,
+                temperature=0.1,
+                top_p=payload.top_p,
+                num_predict=payload.num_predict,
+                context_window=payload.context_window,
+            ),
+        )
+        return {
+            "events": [asdict(event) for event in outcome.events],
+            "model": outcome.model,
+            "duration_ms": outcome.duration_ms,
+        }
+
+    @router.get("/projects/{project_id}/events")
+    def list_events(project_id: int) -> list[dict[str, Any]]:
+        services.projects.require_project(project_id)
+        return [
+            asdict(event)
+            for event in services.event_repository.list_for_project(project_id)
+        ]
 
     @router.post("/chapters/{chapter_id}/move")
     def move_chapter(chapter_id: int, payload: MoveRequest) -> dict[str, Any]:

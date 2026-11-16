@@ -404,6 +404,18 @@ function chapterEditor(ctx, chapter) {
             'Summarise'
           )
         : null,
+      chapter.content.trim()
+        ? el(
+            'button',
+            {
+              class: 'btn btn-ghost',
+              type: 'button',
+              onClick: (event) => extractEvents(ctx, chapter, event.currentTarget),
+            },
+            icon('database'),
+            'Extract events'
+          )
+        : null,
       imported
         ? el('span', { class: 'chip' }, 'Pre-written')
         : el(
@@ -522,6 +534,31 @@ async function summariseChapter(ctx, chapter, button) {
     toast(error.message, 'error');
     button.disabled = false;
     button.replaceChildren(icon('sparkles'), 'Summarise');
+  }
+}
+
+async function extractEvents(ctx, chapter, button) {
+  const state = ctx.state;
+  const model =
+    state.settings?.generation?.model || state.ollama?.models?.[0]?.name || '';
+  button.disabled = true;
+  button.replaceChildren(icon('refresh'), 'Extracting…');
+  try {
+    const result = await api.post(`/api/chapters/${chapter.id}/events/extract`, {
+      model,
+    });
+    const total = result.events?.length || 0;
+    toast(
+      total
+        ? `${count(total)} event${total === 1 ? '' : 's'} stored for this chapter.`
+        : 'No events were found in this chapter.',
+      total ? 'success' : 'error'
+    );
+    await ctx.refresh();
+  } catch (error) {
+    toast(error.message, 'error');
+    button.disabled = false;
+    button.replaceChildren(icon('database'), 'Extract events');
   }
 }
 

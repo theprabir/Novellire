@@ -101,8 +101,104 @@ export function renderMemory(ctx) {
     }
   });
 
-  wrap.append(form, bulkSummaryCard(ctx, pending), results);
+  wrap.append(eventsSection(project.id), form, bulkSummaryCard(ctx, pending), results);
   return wrap;
+}
+
+function eventsSection(projectId) {
+  const list = el(
+    'div',
+    { class: 'memory-events-list' },
+    el('p', { class: 'hint' }, 'Loading episodic memory…')
+  );
+  const section = el(
+    'section',
+    { class: 'memory-events' },
+    el(
+      'div',
+      { class: 'section-head' },
+      el('h2', {}, 'Episodic memory'),
+      el('span', { class: 'hint' }, 'Extracted events with chapter provenance')
+    ),
+    list
+  );
+  loadEvents(projectId, list);
+  return section;
+}
+
+async function loadEvents(projectId, list) {
+  try {
+    const events = await api.get(`/api/projects/${projectId}/events`);
+    if (!events.length) {
+      list.replaceChildren(
+        el(
+          'div',
+          { class: 'card card-pad' },
+          el(
+            'p',
+            { class: 'hint' },
+            'No episodic events yet. Open a chapter and choose Extract events to build this memory.'
+          )
+        )
+      );
+      return;
+    }
+    list.replaceChildren(
+      el(
+        'div',
+        { class: 'event-list' },
+        ...events.map((event) => eventCard(event))
+      ),
+      el(
+        'p',
+        { class: 'hint' },
+        `${count(events.length)} event${events.length === 1 ? '' : 's'} stored.`
+      )
+    );
+  } catch (error) {
+    list.replaceChildren(el('p', { class: 'hint' }, error.message));
+  }
+}
+
+function eventCard(event) {
+  const tags = [
+    ['Characters', event.characters],
+    ['Locations', event.locations],
+    ['Objects', event.objects],
+  ]
+    .filter(([, values]) => values?.length)
+    .map(([label, values]) =>
+      el('span', { class: 'chip' }, `${label}: ${values.join(', ')}`)
+    );
+
+  return el(
+    'article',
+    { class: 'event-card' },
+    el(
+      'div',
+      { class: 'event-head' },
+      el(
+        'span',
+        { class: 'chip accent' },
+        `Chapter ${event.chapter_position} — ${event.chapter_title}`
+      ),
+      event.model ? el('span', { class: 'hint' }, event.model) : null
+    ),
+    el('p', { class: 'event-summary' }, event.summary),
+    tags.length ? el('div', { class: 'event-tags' }, ...tags) : null,
+    event.threads?.length
+      ? el(
+          'div',
+          { class: 'event-threads' },
+          el('strong', {}, 'Unresolved'),
+          el(
+            'ul',
+            {},
+            ...event.threads.map((thread) => el('li', {}, thread))
+          )
+        )
+      : null
+  );
 }
 
 function bulkSummaryCard(ctx, pending) {

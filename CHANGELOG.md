@@ -3,6 +3,33 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.2.9] — 2026-11-16
+
+Episodic memory extraction. Schema version 5 adds `narrative_events`.
+
+### Added
+
+- `POST /api/chapters/{id}/events/extract` asks the model for structured events
+  from a chapter: a summary plus characters, locations, objects, and unresolved
+  threads. Responses are parsed tolerantly (markdown fences and surrounding
+  chatter are ignored) and every field is cleaned and bounded before storage.
+- Extracted events are stored with chapter provenance (chapter id, title, and
+  position), the producing model, and a timestamp. Re-extracting a chapter
+  replaces only that chapter's events, in one transaction; deleting the chapter
+  removes them through the foreign key.
+- `GET /api/projects/{id}/events` lists a project's events in chapter order.
+- The chapter editor has an **Extract events** action beside Summarise.
+- The Memory surface shows **Episodic memory** above search: each event card
+  carries its chapter provenance, character/location/object chips, unresolved
+  threads, and the extracting model.
+- `novellire/core/events.py` and `novellire/storage/event_repository.py`.
+
+### Changed
+
+- Static CSS/JS and the HTML shell are served with `no-store`, and the app shell
+  uses versioned asset URLs, so an upgrade no longer leaves the browser running a
+  cached Memory module.
+
 ## [0.2.8] — 2026-11-16
 
 Memory-aware generation. Schema stays at 4.

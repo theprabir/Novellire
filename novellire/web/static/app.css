@@ -1512,3 +1512,40 @@ input[type="range"]::-webkit-slider-thumb {
 }
 .context-used-item strong { font-size: var(--fs-sm); }
 .context-used-item p { margin: 2px 0 0; }
+
+/* -- episodic memory ------------------------------------------------------ */
+
+.memory-events { margin-bottom: 18px; }
+.memory-events-list { display: flex; flex-direction: column; gap: 8px; }
+.event-list { display: flex; flex-direction: column; gap: 8px; }
+.event-card {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.event-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.event-head .hint { margin-left: auto; }
+.event-summary {
+  margin: 0 0 8px;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+.event-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.event-threads {
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+  font-size: var(--fs-sm);
+}
+.event-threads strong { color: var(--muted); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.04em; }
+.event-threads ul { margin: 4px 0 0; padding-left: 18px; color: var(--muted); }

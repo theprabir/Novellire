@@ -270,6 +270,27 @@ MIGRATION_4_DOCUMENT_TRIGGERS = (
 )
 
 
+MIGRATION_5_EVENTS = """
+CREATE TABLE narrative_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+    summary TEXT NOT NULL,
+    characters TEXT NOT NULL DEFAULT '[]',
+    locations TEXT NOT NULL DEFAULT '[]',
+    objects TEXT NOT NULL DEFAULT '[]',
+    threads TEXT NOT NULL DEFAULT '[]',
+    model TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+)
+"""
+
+MIGRATION_5_EVENTS_INDEX = """
+CREATE INDEX idx_narrative_events_project_chapter
+    ON narrative_events (project_id, chapter_id, id)
+"""
+
+
 MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
     (
         1,
@@ -313,6 +334,13 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
                 MIGRATION_4_BACKFILL_DOCUMENTS,
                 *MIGRATION_4_CHAPTER_TRIGGERS,
                 *MIGRATION_4_DOCUMENT_TRIGGERS,
+            ),
+        ),
+        (
+            5,
+            (
+                MIGRATION_5_EVENTS,
+                MIGRATION_5_EVENTS_INDEX,
             ),
         ),
     )
