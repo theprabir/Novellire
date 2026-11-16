@@ -45,8 +45,8 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
     payload = client.get("/api/health").json()
 
     assert payload["status"] == "ok"
-    assert payload["schema_version"] == 7
-    assert payload["version"] == "0.3.5"
+    assert payload["schema_version"] == 8
+    assert payload["version"] == "0.3.6"
 
 
 def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:
@@ -833,6 +833,60 @@ def test_relationship_records_support_create_approve_and_delete(
     assert deleted.status_code == 200
     assert client.get(
         f"/api/projects/{project['id']}/relationship-records"
+    ).json() == []
+
+
+def test_character_state_snapshots_support_create_edit_and_delete(
+    client: TestClient,
+) -> None:
+    project = create_project(client)
+    mira = client.post(
+        f"/api/projects/{project['id']}/characters", json={"name": "Mira Voss"}
+    ).json()
+    chapter = client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={"title": "The Gate"},
+    ).json()
+
+    created = client.post(
+        f"/api/projects/{project['id']}/character-states",
+        json={
+            "character_id": mira["id"],
+            "chapter_id": chapter["id"],
+            "location": "The archive",
+            "status": "Wounded",
+            "goals": "Reach the gate",
+            "knowledge": "The gate is warded",
+        },
+    )
+
+    assert created.status_code == 201, created.text
+    state = created.json()
+    assert state["is_current"] is True
+    assert state["chapter_title"] == "The Gate"
+
+    listing = client.get(
+        f"/api/projects/{project['id']}/character-states"
+    ).json()
+    assert len(listing) == 1
+    assert listing[0]["location"] == "The archive"
+
+    updated = client.patch(
+        f"/api/character-states/{state['id']}",
+        json={
+            "location": "The keep",
+            "status": "Recovering",
+            "goals": "Find the ledger",
+            "knowledge": "Orin has the key",
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["location"] == "The keep"
+
+    deleted = client.delete(f"/api/character-states/{state['id']}")
+    assert deleted.status_code == 200
+    assert client.get(
+        f"/api/projects/{project['id']}/character-states"
     ).json() == []
 
 

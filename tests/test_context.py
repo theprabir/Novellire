@@ -13,6 +13,7 @@ from novellire.storage.document_repository import DocumentRepository
 from novellire.storage.event_repository import EventDraft, EventRepository
 from novellire.storage.relationship_repository import RelationshipRepository
 from novellire.storage.search_repository import SearchRepository
+from novellire.storage.state_repository import CharacterStateRepository
 from novellire.storage.story_repositories import (
     ChapterRepository,
     CharacterRepository,
@@ -37,6 +38,7 @@ def context_builder(
         SearchRepository(database),
         event_repository,
         RelationshipRepository(database),
+        CharacterStateRepository(database),
     )
 
 
@@ -163,6 +165,56 @@ def test_build_omits_rejected_relationships(
     )
 
     assert context.relationship_records == ""
+
+
+def test_build_includes_only_current_state_for_selected_profiles(
+    context_builder: GenerationContextBuilder,
+    database,
+    sample_project,
+    character_service,
+    chapter_service,
+) -> None:
+    mira = character_service.create_character(
+        project_id=sample_project.id, name="Mira Voss"
+    )
+    keeper = character_service.create_character(
+        project_id=sample_project.id, name="The Keeper"
+    )
+    first = chapter_service.create_chapter(
+        project_id=sample_project.id, title="Part One"
+    )
+    second = chapter_service.create_chapter(
+        project_id=sample_project.id, title="Part Two"
+    )
+    states = CharacterStateRepository(database)
+    states.create(
+        project_id=sample_project.id,
+        character_id=mira.id,
+        chapter_id=first.id,
+        location="The archive",
+        status="Wounded",
+        goals="Reach the gate",
+        knowledge="She knows the gate is warded",
+    )
+    states.create(
+        project_id=sample_project.id,
+        character_id=mira.id,
+        chapter_id=second.id,
+        location="The keep",
+        status="Recovering",
+        goals="Find the ledger",
+        knowledge="She knows Orin has the key",
+    )
+
+    context = context_builder.build(
+        sample_project.id, instructions="Mira searches the keep for Orin."
+    )
+
+    assert "Mira Voss (as of Chapter 2 — Part Two)" in context.character_states
+    assert "Location: The keep" in context.character_states
+    assert "Knowledge: She knows Orin has the key" in context.character_states
+    assert "The archive" not in context.character_states
+    assert "The Keeper" not in context.character_states
 
 
 def test_build_retrieves_only_earlier_matching_chapters(

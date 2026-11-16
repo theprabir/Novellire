@@ -101,6 +101,29 @@ def test_prompt_includes_approved_relationship_records(
     assert "Mira Voss — Orin Vale: Ally" in prompt
 
 
+def test_prompt_includes_current_character_state(
+    generation_service: GenerationService,
+    fake_provider,
+    sample_project: Project,
+    generation_settings: GenerationSettings,
+) -> None:
+    generation_service.generate(
+        project_id=sample_project.id,
+        instructions="Mira waits at the gate.",
+        settings=generation_settings,
+        context=GenerationContext(
+            character_states=(
+                "Mira Voss (as of Chapter 2 — Part Two)\n"
+                "Location: The keep"
+            )
+        ),
+    )
+
+    prompt = fake_provider.requests[-1].prompt
+    assert "Current character state:" in prompt
+    assert "Mira Voss (as of Chapter 2 — Part Two)" in prompt
+
+
 def test_generate_uses_default_target_when_omitted(
     generation_service: GenerationService,
     fake_provider,

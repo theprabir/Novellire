@@ -23,6 +23,7 @@ from .. import __version__
 from ..config import Settings, load_settings
 from ..core.backup import BackupService
 from ..core.chapters import ChapterService
+from ..core.character_states import CharacterStateService
 from ..core.characters import FIELD_LABELS as CHARACTER_FIELD_LABELS
 from ..core.characters import PROFILE_FIELDS, CharacterService
 from ..core.context import GenerationContextBuilder
@@ -71,6 +72,7 @@ from ..storage.document_repository import DocumentRepository
 from ..storage.event_repository import EventRepository
 from ..storage.search_repository import SearchRepository
 from ..storage.relationship_repository import RelationshipRepository
+from ..storage.state_repository import CharacterStateRepository
 from ..storage.repositories import (
     AppSettingsRepository,
     GenerationRecord,
@@ -193,6 +195,22 @@ class EventUpdateRequest(BaseModel):
     threads: list[str] = Field(default_factory=list)
 
 
+class CharacterStateCreateRequest(BaseModel):
+    character_id: int
+    chapter_id: int
+    location: str = ""
+    status: str = ""
+    goals: str = ""
+    knowledge: str = ""
+
+
+class CharacterStateUpdateRequest(BaseModel):
+    location: str = ""
+    status: str = ""
+    goals: str = ""
+    knowledge: str = ""
+
+
 class RelationshipCreateRequest(BaseModel):
     character_a_id: int
     character_b_id: int
@@ -282,6 +300,7 @@ class ApiServices:
     events: EventExtractionService
     event_repository: EventRepository
     relationships: RelationshipService
+    character_states: CharacterStateService
     backup: BackupService
     generations: GenerationRepository
 
@@ -296,6 +315,7 @@ def build_services(
     bible_repository = StoryBibleRepository(database)
     event_repository = EventRepository(database)
     relationship_repository = RelationshipRepository(database)
+    state_repository = CharacterStateRepository(database)
     chapter_service = ChapterService(
         chapter_repository, project_repository, character_repository
     )
@@ -341,6 +361,12 @@ def build_services(
             event_repository,
             relationship_repository,
         ),
+        character_states=CharacterStateService(
+            project_repository,
+            character_repository,
+            chapter_repository,
+            state_repository,
+        ),
         backup=BackupService(database),
         context=GenerationContextBuilder(
             document_service,
@@ -350,6 +376,7 @@ def build_services(
             SearchRepository(database),
             event_repository,
             relationship_repository,
+            state_repository,
         ),
         style_guide=StyleGuideService(
             provider, project_repository, chapter_service, document_service
@@ -1059,6 +1086,46 @@ def _build_router(services: ApiServices) -> APIRouter:
     @router.delete("/relationship-records/{record_id}")
     def delete_relationship_record(record_id: int) -> dict[str, Any]:
         services.relationships.delete(record_id)
+        return {"deleted": True}
+
+    @router.get("/projects/{project_id}/character-states")
+    def list_character_states(project_id: int) -> list[dict[str, Any]]:
+        return [
+            asdict(state)
+            for state in services.character_states.list_for_project(project_id)
+        ]
+
+    @router.post("/projects/{project_id}/character-states", status_code=201)
+    def create_character_state(
+        project_id: int, payload: CharacterStateCreateRequest
+    ) -> dict[str, Any]:
+        state = services.character_states.create(
+            project_id,
+            character_id=payload.character_id,
+            chapter_id=payload.chapter_id,
+            location=payload.location,
+            status=payload.status,
+            goals=payload.goals,
+            knowledge=payload.knowledge,
+        )
+        return asdict(state)
+
+    @router.patch("/character-states/{state_id}")
+    def update_character_state(
+        state_id: int, payload: CharacterStateUpdateRequest
+    ) -> dict[str, Any]:
+        state = services.character_states.update(
+            state_id,
+            location=payload.location,
+            status=payload.status,
+            goals=payload.goals,
+            knowledge=payload.knowledge,
+        )
+        return asdict(state)
+
+    @router.delete("/character-states/{state_id}")
+    def delete_character_state(state_id: int) -> dict[str, Any]:
+        services.character_states.delete(state_id)
         return {"deleted": True}
 
     @router.post("/chapters/{chapter_id}/move")

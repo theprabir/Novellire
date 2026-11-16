@@ -18,6 +18,10 @@ from ..storage.relationship_repository import (
     RelationshipRepository,
 )
 from ..storage.search_repository import SearchRepository
+from ..storage.state_repository import (
+    CharacterStateRecord,
+    CharacterStateRepository,
+)
 from ..storage.story_repositories import (
     ChapterRecord,
     ChapterRepository,
@@ -51,6 +55,9 @@ MEMORY_PREFERRED_CHAPTER_BOOST = 5
 RELATIONSHIP_MAX_RECORDS = 6
 RELATIONSHIP_CHAR_LIMIT = 1_200
 RELATIONSHIP_DESCRIPTION_LIMIT = 300
+STATE_MAX_RECORDS = 5
+STATE_CHAR_LIMIT = 1_500
+STATE_FIELD_LIMIT = 250
 
 # Canon basics worth carrying even when the request names nothing specific.
 FOUNDATIONAL_CATEGORIES = (
@@ -120,6 +127,7 @@ class GenerationContext:
     bible_entries: str = ""
     character_profiles: str = ""
     relationship_records: str = ""
+    character_states: str = ""
     memory_chapters: tuple[MemoryChapter, ...] = ()
     memory_events: tuple[MemoryEvent, ...] = ()
 
@@ -160,6 +168,7 @@ class GenerationContextBuilder:
         search: SearchRepository,
         events: EventRepository,
         relationships: RelationshipRepository,
+        states: CharacterStateRepository,
     ) -> None:
         self._documents = documents
         self._bible_entries = bible_entries
@@ -168,6 +177,7 @@ class GenerationContextBuilder:
         self._search = search
         self._events = events
         self._relationships = relationships
+        self._states = states
 
     def build(
         self,
@@ -212,9 +222,9 @@ class GenerationContextBuilder:
             current=chapter,
             preferred_chapter_ids={item.id for item in memory},
         )
-        relationships = self._approved_relationships(
-            project_id, {profile.id for profile in profiles}
-        )
+        profile_ids = {profile.id for profile in profiles}
+        relationships = self._approved_relationships(project_id, profile_ids)
+        states = self._current_states(project_id, profile_ids)
 
         return GenerationContext(
             master_bible=documents.get("master_bible", ""),
@@ -232,6 +242,10 @@ class GenerationContextBuilder:
             relationship_records=_join_with_budget(
                 [_format_relationship(record) for record in relationships],
                 RELATIONSHIP_CHAR_LIMIT,
+            ),
+            character_states=_join_with_budget(
+                [_format_state(state) for state in states],
+                STATE_CHAR_LIMIT,
             ),
             memory_chapters=tuple(memory),
             memory_events=tuple(memory_events),
@@ -328,6 +342,17 @@ class GenerationContextBuilder:
             )
             for _, _, _, event in scored[:MEMORY_MAX_EVENTS]
         ]
+
+    def _current_states(
+        self, project_id: int, profile_ids: set[int]
+    ) -> list[CharacterStateRecord]:
+        if not profile_ids:
+            return []
+        return [
+            state
+            for state in self._states.list_for_project(project_id)
+            if state.is_current and state.character_id in profile_ids
+        ][:STATE_MAX_RECORDS]
 
     def _approved_relationships(
         self, project_id: int, profile_ids: set[int]
@@ -455,6 +480,22 @@ def _format_character(character: CharacterRecord) -> str:
         value = _trim(getattr(character, field), PROFILE_FIELD_LIMIT)
         if value:
             lines.append(f"{FIELD_LABELS[field]}: {value}")
+    return "\n".join(lines)
+
+
+def _format_state(state: CharacterStateRecord) -> str:
+    lines = [
+        f"{state.character_name} (as of Chapter {state.chapter_position} — "
+        f"{state.chapter_title})"
+    ]
+    for label, value in (
+        ("Location", state.location),
+        ("Status", state.status),
+        ("Goals", state.goals),
+        ("Knowledge", state.knowledge),
+    ):
+        if value:
+            lines.append(f"{label}: {_trim(value, STATE_FIELD_LIMIT)}")
     return "\n".join(lines)
 
 

@@ -153,7 +153,10 @@ The interface has these surfaces:
   records count as canon, while derived co-occurrence stays clearly marked as
   non-canon with event provenance. Approved records are included in generation
   context when their characters are selected; proposed, rejected, and derived
-  associations are never injected.
+  associations are never injected. **Character state** records authored
+  snapshots per chapter (location, status, goals, knowledge), shows the latest
+  chapter as current with earlier snapshots as history, and supplies current
+  state for selected characters to generation.
 - **Chat, Continuity** — designed scopes. Their layout, filters, and detail panes
   are reserved and labelled with the phase that will connect them; they show no
   project data yet.
@@ -168,7 +171,7 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-185 tests run fully offline. All inference is stubbed, so no model or Ollama
+191 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
@@ -206,6 +209,7 @@ novellire/
     summaries.py           Chapter summary generation and storage
     events.py              Event extraction, character linking, and editing
     relationships.py       Typed, author-approved relationship records
+    character_states.py    Author-recorded character state snapshots
     memory.py              Search results labelled by chapter or document
     export.py              Markdown and text manuscript compilation
     chapters.py            Ordered chapters with pasted or drafted text
@@ -226,6 +230,7 @@ novellire/
     search_repository.py   FTS5 queries over the search index
     event_repository.py    Episodic events with chapter provenance
     relationship_repository.py  Typed relationship records with provenance
+    state_repository.py    Character state snapshots with chapter provenance
     story_repositories.py  SQL access for story bible, characters, chapters, scenes
 tests/                     Pytest suite with a fake provider
 ```
@@ -291,11 +296,12 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.3.5** (schema version 7). `v0.3.5` feeds approved
-relationship records into generation context, excluding proposed, rejected, and
-derived associations. It builds on `v0.3.4`, typed author-approved relationship
-records with optional event provenance; `v0.3.3`, relationship discovery from
-shared events; `v0.3.2`, event-to-character linking with
+Current release: **v0.3.6** (schema version 8). `v0.3.6` adds author-recorded
+character state snapshots with current/history views and generation context. It
+builds on `v0.3.5`, approved relationship records in generation context;
+`v0.3.4`, typed author-approved relationship records with optional event
+provenance; `v0.3.3`, relationship discovery from shared events; `v0.3.2`,
+event-to-character linking with
 conservative name/alias matching and event editing; `v0.3.1`, validated backup
 and restore with pre-restore safety copies; `v0.3.0`, event-aware generation;
 `v0.2.9`, structured event extraction; `v0.2.8`, earlier chapter retrieval in
@@ -305,8 +311,7 @@ Workspace and added chapter and scene ordering.
 
 The Phase 1 foundation, the Phase 2 narrative data model, and local manuscript
 memory are complete, and the interface is a browser harness. Still missing:
-narrative-state memory, semantic (embedding) retrieval, continuity validation,
-and cloud API providers. Chat and Continuity exist as designed UI scopes only. The older story bible entry, character, and scene endpoints remain
+semantic (embedding) retrieval, continuity validation, and cloud API providers. Chat and Continuity exist as designed UI scopes only. The older story bible entry, character, and scene endpoints remain
 for compatibility but are no longer part of the Workspace.
 
 ## License

@@ -340,6 +340,28 @@ CREATE INDEX idx_character_relationships_pair
 """
 
 
+MIGRATION_8_CHARACTER_STATES = """
+CREATE TABLE character_states (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+    chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+    location TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT '',
+    goals TEXT NOT NULL DEFAULT '',
+    knowledge TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (character_id, chapter_id)
+)
+"""
+
+MIGRATION_8_CHARACTER_STATES_INDEX = """
+CREATE INDEX idx_character_states_project
+    ON character_states (project_id, character_id, chapter_id)
+"""
+
+
 MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
     (
         1,
@@ -406,6 +428,13 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
                 MIGRATION_7_RELATIONSHIPS,
                 MIGRATION_7_RELATIONSHIPS_INDEX,
                 MIGRATION_7_RELATIONSHIPS_PAIR_INDEX,
+            ),
+        ),
+        (
+            8,
+            (
+                MIGRATION_8_CHARACTER_STATES,
+                MIGRATION_8_CHARACTER_STATES_INDEX,
             ),
         ),
     )

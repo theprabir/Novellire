@@ -3,6 +3,29 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.3.6] — 2026-11-16
+
+Narrative state memory. Schema 8 adds `character_states`.
+
+### Added
+
+- Author-recorded character state snapshots tied to a chapter and character,
+  with location, status, goals, and knowledge fields.
+- One snapshot per character/chapter. The latest chapter position is current;
+  earlier snapshots remain as history.
+- Memory shows each character's current snapshot plus expandable earlier history,
+  with record, edit, and delete controls.
+- `GET/POST /api/projects/{id}/character-states`,
+  `PATCH /api/character-states/{id}`, and
+  `DELETE /api/character-states/{id}`.
+- Current state for selected character profiles is included in generation context
+  as a **Current character state** prompt block.
+
+### Deferred
+
+- Automatic state extraction or inference from prose/events.
+- Character knowledge timelines and belief tracking beyond the authored snapshot.
+
 ## [0.3.5] — 2026-11-16
 
 Approved relationship records now reach generation context. Schema stays at 7.

@@ -115,6 +115,7 @@ export function renderMemory(ctx) {
 
   wrap.append(
     eventsSection(project.id, state.meta),
+    characterStateSection(project.id),
     form,
     bulkSummaryCard(ctx, pending),
     results
@@ -339,6 +340,320 @@ function eventsSection(projectId, meta) {
   });
   refresh();
   return section;
+}
+
+function characterStateSection(projectId) {
+  const host = el(
+    'div',
+    { class: 'state-list' },
+    el('p', { class: 'hint' }, 'Loading character state…')
+  );
+  const button = el(
+    'button',
+    { class: 'btn btn-sm', type: 'button', disabled: true },
+    icon('plus'),
+    'Record state'
+  );
+  const section = el(
+    'section',
+    { class: 'memory-state' },
+    el(
+      'div',
+      { class: 'section-head' },
+      el(
+        'div',
+        { class: 'memory-events-title' },
+        el('h2', {}, 'Character state'),
+        el(
+          'span',
+          { class: 'hint' },
+          'Author-recorded snapshots; the latest chapter is current'
+        )
+      ),
+      button
+    ),
+    host
+  );
+
+  let states = [];
+  let characters = [];
+  let chapters = [];
+
+  async function refresh() {
+    try {
+      [states, characters, chapters] = await Promise.all([
+        api.get(`/api/projects/${projectId}/character-states`),
+        api.get(`/api/projects/${projectId}/characters`),
+        api.get(`/api/projects/${projectId}/chapters`),
+      ]);
+      button.disabled = characters.length === 0 || chapters.length === 0;
+      renderCharacterStates(states, host, refresh);
+    } catch (error) {
+      host.replaceChildren(el('p', { class: 'hint' }, error.message));
+    }
+  }
+
+  button.addEventListener('click', () => {
+    if (!characters.length || !chapters.length) {
+      toast('Add a character and a chapter before recording state.', 'error');
+      return;
+    }
+    openStateEditor({ projectId, characters, chapters, refresh });
+  });
+
+  refresh();
+  return section;
+}
+
+function renderCharacterStates(states, host, refresh) {
+  if (!states.length) {
+    host.replaceChildren(
+      el(
+        'div',
+        { class: 'card card-pad' },
+        el(
+          'p',
+          { class: 'hint' },
+          'No character state recorded yet. Add a snapshot to track location, status, goals, and knowledge by chapter.'
+        )
+      )
+    );
+    return;
+  }
+
+  const groups = new Map();
+  for (const state of states) {
+    if (!groups.has(state.character_id)) groups.set(state.character_id, []);
+    groups.get(state.character_id).push(state);
+  }
+
+  host.replaceChildren(
+    ...[...groups.values()].map((group) => {
+      const current = group[0];
+      const history = group.slice(1);
+      const card = el(
+        'article',
+        { class: 'state-card' },
+        el(
+          'div',
+          { class: 'state-head' },
+          el('strong', {}, current.character_name),
+          el(
+            'span',
+            { class: 'chip accent' },
+            `Current · Chapter ${current.chapter_position} — ${current.chapter_title}`
+          ),
+          stateActions(current, refresh)
+        ),
+        stateFields(current)
+      );
+      if (history.length) {
+        card.append(
+          el(
+            'details',
+            { class: 'state-history' },
+            el(
+              'summary',
+              {},
+              `Earlier snapshots (${history.length})`
+            ),
+            ...history.map((state) =>
+              el(
+                'div',
+                { class: 'state-history-row' },
+                el(
+                  'div',
+                  { class: 'state-head' },
+                  el(
+                    'span',
+                    { class: 'chip' },
+                    `Chapter ${state.chapter_position} — ${state.chapter_title}`
+                  ),
+                  stateActions(state, refresh)
+                ),
+                stateFields(state)
+              )
+            )
+          )
+        );
+      }
+      return card;
+    })
+  );
+}
+
+function stateFields(state) {
+  const fields = [
+    ['Location', state.location],
+    ['Status', state.status],
+    ['Goals', state.goals],
+    ['Knowledge', state.knowledge],
+  ].filter(([, value]) => value);
+  if (!fields.length) return null;
+  return el(
+    'dl',
+    { class: 'state-fields' },
+    ...fields.flatMap(([label, value]) => [
+      el('dt', {}, label),
+      el('dd', {}, value),
+    ])
+  );
+}
+
+function stateActions(state, refresh) {
+  return el(
+    'div',
+    { class: 'state-actions' },
+    el(
+      'button',
+      {
+        class: 'btn btn-ghost btn-sm',
+        type: 'button',
+        onClick: () =>
+          openStateEditor({
+            projectId: state.project_id,
+            state,
+            characters: [],
+            chapters: [],
+            refresh,
+          }),
+      },
+      icon('pencil'),
+      'Edit'
+    ),
+    el(
+      'button',
+      {
+        class: 'btn btn-ghost btn-sm',
+        type: 'button',
+        onClick: () => deleteState(state, refresh),
+      },
+      icon('trash'),
+      'Delete'
+    )
+  );
+}
+
+async function deleteState(state, refresh) {
+  confirmDialog({
+    title: 'Delete state snapshot',
+    message: `Remove the Chapter ${state.chapter_position} — ${state.chapter_title} snapshot for ${state.character_name}? Older snapshots remain.`,
+    confirmLabel: 'Delete snapshot',
+    onConfirm: async () => {
+      try {
+        await api.del(`/api/character-states/${state.id}`);
+        toast('State snapshot deleted.', 'success');
+        await refresh();
+      } catch (error) {
+        toast(error.message, 'error');
+      }
+    },
+  });
+}
+
+function openStateEditor({
+  projectId,
+  state = null,
+  characters,
+  chapters,
+  refresh,
+}) {
+  let character = null;
+  let chapter = null;
+  const body = [];
+
+  if (state) {
+    body.push(
+      el(
+        'p',
+        { class: 'hint' },
+        `${state.character_name} · Chapter ${state.chapter_position} — ${state.chapter_title}`
+      )
+    );
+  } else {
+    character = select(
+      characters.map((item) => ({ value: item.id, label: item.name })),
+      { value: characters[0]?.id }
+    );
+    const latestChapter = [...chapters].sort(
+      (a, b) => b.position - a.position
+    )[0];
+    chapter = select(
+      chapters.map((item) => ({
+        value: item.id,
+        label: `Chapter ${item.position} — ${item.title}`,
+      })),
+      { value: latestChapter?.id }
+    );
+    body.push(field('Character', character), field('As of chapter', chapter));
+  }
+
+  const location = input({ value: state?.location || '' });
+  const status = textarea({ rows: 2, value: state?.status || '' });
+  const goals = textarea({ rows: 2, value: state?.goals || '' });
+  const knowledge = textarea({ rows: 2, value: state?.knowledge || '' });
+  body.push(
+    field('Location', location),
+    field('Status', status, 'Physical, emotional, or situational condition.'),
+    field('Goals', goals),
+    field('Knowledge', knowledge, 'What this character knows or believes at this point.')
+  );
+
+  const save = el(
+    'button',
+    { class: 'btn btn-primary', type: 'button' },
+    state ? 'Save snapshot' : 'Record snapshot'
+  );
+  const modal = openModal({
+    title: state ? 'Edit state snapshot' : 'Record character state',
+    wide: true,
+    body,
+    footer: [
+      el(
+        'button',
+        {
+          class: 'btn btn-ghost',
+          type: 'button',
+          onClick: () => modal.close(),
+        },
+        'Cancel'
+      ),
+      save,
+    ],
+  });
+
+  save.addEventListener('click', async () => {
+    const fields = {
+      location: location.value.trim(),
+      status: status.value.trim(),
+      goals: goals.value.trim(),
+      knowledge: knowledge.value.trim(),
+    };
+    if (!Object.values(fields).some(Boolean)) {
+      toast('Record at least one state detail.', 'error');
+      return;
+    }
+    modal.setBusy(true);
+    try {
+      if (state) {
+        await api.patch(`/api/character-states/${state.id}`, fields);
+        toast('State snapshot updated.', 'success');
+      } else {
+        await api.post(`/api/projects/${projectId}/character-states`, {
+          character_id: Number(character.value),
+          chapter_id: Number(chapter.value),
+          ...fields,
+        });
+        toast('State snapshot recorded.', 'success');
+      }
+      modal.close();
+      await refresh();
+    } catch (error) {
+      toast(error.message, 'error');
+    } finally {
+      modal.setBusy(false);
+    }
+  });
 }
 
 const RELATIONSHIP_STATUS_LABELS = {
