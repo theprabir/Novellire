@@ -293,6 +293,7 @@ duplicate, `422` schema, `502` provider failure.
 | `generation.top_p` | `0.9` | Nucleus sampling |
 | `generation.num_predict` | `700` | Maximum output tokens |
 | `generation.context_window` | `4096` | `num_ctx` passed to the model; UI offers 2k–16k and prompt budgets scale with it |
+| `analysis.auto_run` | `true` | Queue background chapter analysis after chapter and document saves |
 
 Environment overrides: `NOVELLIRE_CONFIG`, `NOVELLIRE_DATA_DIR`,
 `NOVELLIRE_OLLAMA_URL`.
@@ -313,15 +314,17 @@ by Git. Never commit a novel project's database.
 | 7 | `character_relationships` author records |
 | 8 | `character_states` authored snapshots tied to chapters |
 | 9 | `chapter_revisions` snapshots of earlier chapter text |
+| 10 | `analysis_state` content hashes and `chapter_insights` derived proposals |
 
 Migrations are applied in order inside transactions; an existing database is
 upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.4.3** (schema version 9). `v0.4.3` adds automatic analysis
-of written chapters before a Chapter Map starts, with streamed progress and
-preservation of manual summaries/events. `v0.4.2` adds Chapter Map outline
+Current release: **v0.4.3** (schema version 10). `v0.4.3` adds automatic analysis
+of every written chapter, queued after chapter and document saves with content
+hashes, derived character-state/location/relationship/open-thread proposals, and
+preservation of manual memory. `v0.4.2` adds Chapter Map outline
 import, chapter-number insertion, and context budgets that scale with the
 selected 16k window. `v0.4.1` adds
 editable chapter scene plans, AI plan proposals, and plan-aware drafting.

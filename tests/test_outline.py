@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from novellire.api.app import create_app
-from novellire.config import GenerationDefaults, Settings
+from novellire.config import AnalysisSettings, GenerationDefaults, Settings
 from novellire.core.outline import parse_chapter_map
 from novellire.errors import InvalidInputError
 from novellire.storage.database import Database
@@ -20,6 +20,7 @@ def client(tmp_path: Path, fake_provider) -> TestClient:
     settings = Settings(
         data_dir=tmp_path / "data",
         generation=GenerationDefaults(model="fake-model"),
+        analysis=AnalysisSettings(auto_run=False),
     )
     app = create_app(
         settings=settings,

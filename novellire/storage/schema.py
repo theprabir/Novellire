@@ -380,6 +380,46 @@ CREATE INDEX idx_chapter_revisions_chapter
 """
 
 
+MIGRATION_10_ANALYSIS_STATE = """
+CREATE TABLE analysis_state (
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    source_kind TEXT NOT NULL CHECK (source_kind IN ('chapter', 'document')),
+    source_key TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+    detail TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (project_id, source_kind, source_key)
+)
+"""
+
+MIGRATION_10_ANALYSIS_STATE_INDEX = """
+CREATE INDEX idx_analysis_state_project
+    ON analysis_state (project_id, status)
+"""
+
+MIGRATION_10_CHAPTER_INSIGHTS = """
+CREATE TABLE chapter_insights (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    chapter_id INTEGER NOT NULL UNIQUE REFERENCES chapters(id) ON DELETE CASCADE,
+    content_hash TEXT NOT NULL,
+    character_states TEXT NOT NULL DEFAULT '[]',
+    locations TEXT NOT NULL DEFAULT '[]',
+    relationships TEXT NOT NULL DEFAULT '[]',
+    open_threads TEXT NOT NULL DEFAULT '[]',
+    model TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+)
+"""
+
+MIGRATION_10_CHAPTER_INSIGHTS_INDEX = """
+CREATE INDEX idx_chapter_insights_project
+    ON chapter_insights (project_id, chapter_id)
+"""
+
 MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
     (
         1,
@@ -460,6 +500,15 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
             (
                 MIGRATION_9_CHAPTER_REVISIONS,
                 MIGRATION_9_CHAPTER_REVISIONS_INDEX,
+            ),
+        ),
+        (
+            10,
+            (
+                MIGRATION_10_ANALYSIS_STATE,
+                MIGRATION_10_ANALYSIS_STATE_INDEX,
+                MIGRATION_10_CHAPTER_INSIGHTS,
+                MIGRATION_10_CHAPTER_INSIGHTS_INDEX,
             ),
         ),
     )

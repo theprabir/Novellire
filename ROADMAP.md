@@ -100,21 +100,23 @@ a chapter at number seven places it at position seven; 16k is selectable.
 
 ### v0.4.3 — Automatic analysis and memory
 
-Implemented first slice:
+Implemented:
 
-- Written chapters before a Chapter Map starts are analysed sequentially.
+- Every written chapter missing memory is analysed sequentially.
+- Chapter and document saves queue background analysis.
+- Content hashes skip unchanged chapters and documents.
 - Missing summaries and episodic events are generated; existing author summaries
   and stored events are preserved.
+- Character-state, location, relationship, and open-thread proposals are stored
+  separately from author-controlled records.
 - Per-chapter progress streams into the outline dialog.
 - Failures stop the run without losing created chapters, and retrying fills only
   missing memory.
 
 Remaining:
 
-- Schedule analysis automatically after document or chapter saves.
-- Add content hashes so unchanged documents are skipped.
-- Extract character-state proposals, locations, relationships, and open threads.
-- Store provenance and derived/manual status for every generated record.
+- Surface derived insight proposals in the Memory review queue rather than only
+  through the API.
 - Replace the Memory inspector with the compact four-section UI.
 - Add a persistent retry queue for failures while Ollama is unavailable.
 

@@ -5,14 +5,24 @@ The project follows semantic versioning for the application, not the schema.
 
 ## [0.4.3] — 2026-11-17
 
-Automatic analysis for chapters written before the Chapter Map begins. Schema
-stays at 9.
+Automatic analysis for every written chapter. Schema 10 adds analysis hashes and
+derived chapter insights.
 
 ### Added
 
-- **Build chapters** now analyses existing written chapters that precede the
-  first Chapter Map entry: chapter summaries and episodic events are generated
-  sequentially, one inference request at a time.
+- **Build chapters** now analyses every written chapter missing memory, not only
+  chapters before the first Chapter Map entry.
+- Saving a chapter or workspace document queues background analysis. Only one
+  inference request runs at a time, including interactive generation.
+- Content hashes in `analysis_state` skip chapters and documents that have not
+  changed since their last successful analysis.
+- Chapter analysis also extracts derived character states, locations,
+  relationships, and open threads into `chapter_insights`. These are separate
+  proposals and never overwrite author-controlled memory records.
+- New endpoints expose analysis status and derived insights:
+  `GET /api/projects/{id}/analysis/status`,
+  `GET /api/projects/{id}/insights`, and
+  `GET /api/chapters/{id}/insights`.
 - Analysis streams per-chapter progress into the outline dialog and reports
   analysed, skipped, empty, and failed chapters.
 - A chapter summary written by the author is preserved; a chapter with stored
@@ -23,6 +33,8 @@ stays at 9.
 
 ### Changed
 
+- Outline analysis now covers the whole manuscript; its preview reports every
+  written chapter that will be analysed.
 - Outline parsing and first-chapter lookup share one saved Chapter Map path.
 - The outline dialog remains dismissible while analysis progress is shown.
 

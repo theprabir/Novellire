@@ -8,7 +8,8 @@ share exactly the same rules.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -22,6 +23,7 @@ from pydantic import BaseModel, Field
 from .. import __version__
 from ..config import Settings, load_settings
 from ..core.analysis import ChapterAnalysisService
+from ..core.analysis_scheduler import AnalysisScheduler
 from ..core.backup import BackupService
 from ..core.chapters import ChapterService
 from ..core.character_states import CharacterStateService
@@ -32,6 +34,7 @@ from ..core.documents import ProjectDocumentService, WORKSPACE_DOCUMENTS
 from ..core.events import EventExtractionService
 from ..core.export import ExportService
 from ..core.generation import GenerationService
+from ..core.insights import ChapterInsightService
 from ..core.memory import MemoryService
 from ..core.outline import OutlineService
 from ..core.projects import ProjectService
@@ -68,8 +71,13 @@ from ..errors import (
 )
 from ..llm.base import LLMProvider
 from ..llm.ollama import OllamaProvider
+from ..llm.serialized import SerializedProvider
 from ..logging_setup import configure_logging
 from ..storage.database import Database
+from ..storage.analysis_repository import (
+    AnalysisStateRepository,
+    ChapterInsightRepository,
+)
 from ..storage.document_repository import DocumentRepository
 from ..storage.event_repository import EventRepository
 from ..storage.search_repository import SearchRepository
@@ -318,11 +326,16 @@ class ApiServices:
     character_states: CharacterStateService
     backup: BackupService
     generations: GenerationRepository
+    insights: ChapterInsightService
+    insight_repository: ChapterInsightRepository
+    analysis_state: AnalysisStateRepository
+    analysis_scheduler: AnalysisScheduler
 
 
 def build_services(
     settings: Settings, database: Database, provider: LLMProvider
 ) -> ApiServices:
+    provider = SerializedProvider(provider)
     project_repository = ProjectRepository(database)
     generation_repository = GenerationRepository(database)
     character_repository = CharacterRepository(database)
@@ -331,6 +344,8 @@ def build_services(
     event_repository = EventRepository(database)
     relationship_repository = RelationshipRepository(database)
     state_repository = CharacterStateRepository(database)
+    insight_repository = ChapterInsightRepository(database)
+    analysis_state_repository = AnalysisStateRepository(database)
     chapter_service = ChapterService(
         chapter_repository,
         project_repository,
@@ -351,6 +366,31 @@ def build_services(
         event_repository,
         character_repository,
     )
+    insight_service = ChapterInsightService(
+        provider,
+        project_repository,
+        chapter_service,
+        character_repository,
+        insight_repository,
+    )
+    analysis_service = ChapterAnalysisService(
+        summary_service,
+        event_service,
+        insight_service,
+        chapter_service,
+        event_repository,
+        insight_repository,
+        analysis_state_repository,
+    )
+    app_settings_service = AppSettingsService(
+        AppSettingsRepository(database), settings.generation
+    )
+    analysis_scheduler = AnalysisScheduler(
+        analysis_service,
+        analysis_state_repository,
+        app_settings_service.generation_settings,
+        auto_run=settings.analysis.auto_run,
+    )
 
     return ApiServices(
         settings=settings,
@@ -361,18 +401,14 @@ def build_services(
         generation=GenerationService(
             provider, project_repository, generation_repository
         ),
-        app_settings=AppSettingsService(
-            AppSettingsRepository(database), settings.generation
-        ),
+        app_settings=app_settings_service,
         story_bible=StoryBibleService(bible_repository, project_repository),
         characters=CharacterService(character_repository, project_repository),
         chapters=chapter_service,
         scenes=SceneService(SceneRepository(database), chapter_repository),
         documents=document_service,
         outline=OutlineService(document_service, chapter_service),
-        analysis=ChapterAnalysisService(
-            summary_service, event_service, chapter_service, event_repository
-        ),
+        analysis=analysis_service,
         export=ExportService(
             project_repository, chapter_service, document_service
         ),
@@ -407,6 +443,10 @@ def build_services(
             provider, project_repository, chapter_service, document_service
         ),
         generations=generation_repository,
+        insights=insight_service,
+        insight_repository=insight_repository,
+        analysis_state=analysis_state_repository,
+        analysis_scheduler=analysis_scheduler,
     )
 
 
@@ -476,11 +516,20 @@ def create_app(
     )
     services = build_services(resolved_settings, resolved_database, resolved_provider)
 
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        services.analysis_scheduler.start()
+        try:
+            yield
+        finally:
+            services.analysis_scheduler.stop()
+
     app = FastAPI(
         title="Novellire",
         version=__version__,
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
+        lifespan=lifespan,
     )
     app.state.services = services
     app.include_router(_build_router(services))
@@ -729,6 +778,9 @@ def _build_router(services: ApiServices) -> APIRouter:
         project_id: int, kind: str, payload: DocumentUpdateRequest
     ) -> dict[str, Any]:
         document = services.documents.save_document(project_id, kind, payload.content)
+        services.analysis_scheduler.schedule_document(
+            project_id, document.kind, document.content
+        )
         definition = next(
             item for item in WORKSPACE_DOCUMENTS if item.kind == document.kind
         )
@@ -740,6 +792,43 @@ def _build_router(services: ApiServices) -> APIRouter:
             "updated_at": document.updated_at,
         }
 
+    @router.get("/projects/{project_id}/analysis/status")
+    def analysis_status(project_id: int) -> dict[str, Any]:
+        services.projects.require_project(project_id)
+        states = services.analysis_state.list_for_project(project_id)
+        counts: dict[str, int] = {}
+        for state in states:
+            counts[state.status] = counts.get(state.status, 0) + 1
+        return {
+            "counts": counts,
+            "states": [asdict(state) for state in states],
+        }
+
+    @router.get("/projects/{project_id}/insights")
+    def list_project_insights(project_id: int) -> list[dict[str, Any]]:
+        services.projects.require_project(project_id)
+        chapters = {
+            chapter.id: chapter
+            for chapter in services.chapters.list_chapters(project_id)
+        }
+        payloads = []
+        for record in services.insight_repository.list_for_project(project_id):
+            payload = asdict(record)
+            chapter = chapters.get(record.chapter_id)
+            payload["chapter_title"] = chapter.title if chapter else ""
+            payload["chapter_position"] = chapter.position if chapter else 0
+            payloads.append(payload)
+        return payloads
+
+    @router.get("/chapters/{chapter_id}/insights")
+    def get_chapter_insights(chapter_id: int) -> dict[str, Any]:
+        record = services.insight_repository.get_for_chapter(chapter_id)
+        if record is None:
+            raise RecordNotFoundError(
+                "No derived insights exist for this chapter yet."
+            )
+        return asdict(record)
+
     @router.get("/projects/{project_id}/outline/preview")
     def preview_outline(project_id: int) -> dict[str, Any]:
         preview = services.outline.preview(project_id)
@@ -747,7 +836,7 @@ def _build_router(services: ApiServices) -> APIRouter:
             "chapters": [asdict(item) for item in preview.items],
             "create_count": preview.create_count,
             "existing_count": preview.existing_count,
-            "analysis_count": preview.preceding_count,
+            "analysis_count": preview.analysis_count,
         }
 
     @router.post("/projects/{project_id}/outline/apply")
@@ -763,9 +852,8 @@ def _build_router(services: ApiServices) -> APIRouter:
     def analyze_outline_chapters(
         project_id: int, payload: SummaryRequest
     ) -> StreamingResponse:
-        """Analyse written chapters before the outline starts, sequentially."""
+        """Analyse every written chapter missing memory, sequentially."""
         services.projects.require_project(project_id)
-        first_number = services.outline.first_number(project_id)
         defaults = services.app_settings.generation_settings()
         settings = GenerationSettings(
             model=payload.model or defaults.model,
@@ -777,8 +865,9 @@ def _build_router(services: ApiServices) -> APIRouter:
         chapters = [
             chapter
             for chapter in services.chapters.list_chapters(project_id)
-            if chapter.position < first_number
+            if chapter.content.strip()
         ]
+        written_ids = {chapter.id for chapter in chapters}
 
         def event_line(event: dict[str, Any]) -> str:
             return json.dumps(event, ensure_ascii=False) + "\n"
@@ -788,9 +877,9 @@ def _build_router(services: ApiServices) -> APIRouter:
                 {"type": "start", "total": len(chapters)}
             )
             counts = {"analysed": 0, "skipped": 0, "empty": 0, "failed": 0}
-            for step in services.analysis.analyze_before_position(
-                project_id, first_number, settings
-            ):
+            for step in services.analysis.analyze_project(project_id, settings):
+                if step.chapter_id not in written_ids:
+                    continue
                 counts[step.status] = counts.get(step.status, 0) + 1
                 yield event_line(
                     {
@@ -996,6 +1085,7 @@ def _build_router(services: ApiServices) -> APIRouter:
             content=payload.content,
             origin=payload.origin,
         )
+        services.analysis_scheduler.schedule_chapter(chapter)
         return asdict(chapter)
 
     @router.patch("/chapters/{chapter_id}")
@@ -1011,7 +1101,9 @@ def _build_router(services: ApiServices) -> APIRouter:
             kwargs["viewpoint_character_id"] = data["viewpoint_character_id"]
         if "target_word_count" in data:
             kwargs["target_word_count"] = data["target_word_count"]
-        return asdict(services.chapters.update_chapter(chapter_id, **kwargs))
+        chapter = services.chapters.update_chapter(chapter_id, **kwargs)
+        services.analysis_scheduler.schedule_chapter(chapter)
+        return asdict(chapter)
 
     @router.get("/chapters/{chapter_id}/revisions")
     def list_chapter_revisions(chapter_id: int) -> list[dict[str, Any]]:

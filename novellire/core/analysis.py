@@ -1,9 +1,8 @@
-"""Sequential analysis of chapters that precede a Chapter Map outline.
+"""Sequential analysis of written chapters into derived memory.
 
-This is deliberately conservative about author-owned memory. A chapter with a
-summary keeps it; a chapter with stored events keeps them. Only missing memory is
-derived, one inference request at a time. A failure stops the run so a stopped
-Ollama or missing model does not repeat the same error for every chapter.
+Author-owned memory is preserved: a chapter with a summary keeps it, stored
+events are not re-extracted, and chapter insights live in their own derived
+table. Content hashes let the scheduler skip chapters that have not changed.
 """
 
 from __future__ import annotations
@@ -12,11 +11,17 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 
 from ..errors import NovellireError
+from ..storage.analysis_repository import (
+    AnalysisStateRepository,
+    ChapterInsightRepository,
+)
 from ..storage.event_repository import EventRepository
 from .chapters import ChapterService
 from .events import EventExtractionService
+from .insights import ChapterInsightService
 from .settings_service import GenerationSettings
 from .summaries import ChapterSummaryService
+from .text import content_hash
 
 
 @dataclass(frozen=True)
@@ -30,29 +35,34 @@ class ChapterAnalysisStep:
 
 
 class ChapterAnalysisService:
-    """Fill missing summary and event memory for chapters before an outline."""
+    """Fill missing summary, event, and derived-insight memory for a project."""
 
     def __init__(
         self,
         summaries: ChapterSummaryService,
         events: EventExtractionService,
+        insights: ChapterInsightService,
         chapters: ChapterService,
         event_repository: EventRepository,
+        insight_repository: ChapterInsightRepository,
+        state_repository: AnalysisStateRepository,
     ) -> None:
         self._summaries = summaries
         self._events = events
+        self._insights = insights
         self._chapters = chapters
         self._event_repository = event_repository
+        self._insight_repository = insight_repository
+        self._state_repository = state_repository
 
-    def analyze_before_position(
+    def analyze_project(
         self,
         project_id: int,
-        before_position: int,
         settings: GenerationSettings,
+        *,
+        force: bool = False,
     ) -> Iterator[ChapterAnalysisStep]:
         for chapter in self._chapters.list_chapters(project_id):
-            if chapter.position >= before_position:
-                continue
             common = {
                 "chapter_id": chapter.id,
                 "title": chapter.title,
@@ -64,13 +74,38 @@ class ChapterAnalysisService:
                 )
                 continue
 
-            has_summary = bool(chapter.summary.strip())
-            has_events = bool(self._event_repository.list_for_chapter(chapter.id))
-            if has_summary and has_events:
+            digest = content_hash(chapter.content)
+            state = self._state_repository.get(
+                project_id, "chapter", str(chapter.id)
+            )
+            if (
+                not force
+                and state is not None
+                and state.content_hash == digest
+                and state.status == "completed"
+            ):
                 yield ChapterAnalysisStep(
                     **common,
                     status="skipped",
-                    detail="Summary and events already exist.",
+                    detail="Unchanged since last analysis.",
+                )
+                continue
+
+            self._state_repository.mark(
+                project_id, "chapter", str(chapter.id), digest, "running"
+            )
+            has_summary = bool(chapter.summary.strip())
+            has_events = bool(self._event_repository.list_for_chapter(chapter.id))
+            insight = self._insight_repository.get_for_chapter(chapter.id)
+            needs_insight = insight is None or insight.content_hash != digest
+            if has_summary and has_events and not needs_insight:
+                self._state_repository.mark(
+                    project_id, "chapter", str(chapter.id), digest, "completed"
+                )
+                yield ChapterAnalysisStep(
+                    **common,
+                    status="skipped",
+                    detail="Summary, events, and insights already exist.",
                 )
                 continue
 
@@ -85,7 +120,19 @@ class ChapterAnalysisService:
                     outcome = self._events.extract(chapter.id, settings)
                     duration_ms += outcome.duration_ms
                     actions.append("events")
+                if needs_insight:
+                    outcome = self._insights.extract(chapter.id, settings)
+                    duration_ms += outcome.duration_ms
+                    actions.append("insights")
             except NovellireError as error:
+                self._state_repository.mark(
+                    project_id,
+                    "chapter",
+                    str(chapter.id),
+                    digest,
+                    "failed",
+                    str(error),
+                )
                 yield ChapterAnalysisStep(
                     **common,
                     status="failed",
@@ -93,9 +140,19 @@ class ChapterAnalysisService:
                     duration_ms=duration_ms or None,
                 )
                 return
+
+            detail = "Added " + " and ".join(actions) + "."
+            self._state_repository.mark(
+                project_id,
+                "chapter",
+                str(chapter.id),
+                digest,
+                "completed",
+                detail,
+            )
             yield ChapterAnalysisStep(
                 **common,
                 status="analysed",
-                detail="Added " + " and ".join(actions) + ".",
+                detail=detail,
                 duration_ms=duration_ms,
             )

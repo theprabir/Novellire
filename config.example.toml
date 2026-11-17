@@ -20,6 +20,10 @@ connect_timeout_seconds = 5.0
 # How long Ollama keeps the model in memory after a request.
 keep_alive = "5m"
 
+[analysis]
+# Analyse saved chapters in the background, one inference request at a time.
+auto_run = true
+
 [generation]
 # Empty model means "choose the first model Ollama reports".
 model = "qwen2.5:1.5b"

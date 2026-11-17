@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from novellire.api.app import create_app
-from novellire.config import GenerationDefaults, Settings
+from novellire.config import AnalysisSettings, GenerationDefaults, Settings
 from novellire.llm.base import GenerationResult
 from novellire.storage.event_repository import EventDraft
 from novellire.storage.database import Database
@@ -20,6 +20,7 @@ def client(tmp_path: Path, fake_provider) -> TestClient:
     settings = Settings(
         data_dir=tmp_path / "data",
         generation=GenerationDefaults(model="fake-model"),
+        analysis=AnalysisSettings(auto_run=False),
     )
     database = Database(settings.database_path)
     app = create_app(settings=settings, database=database, provider=fake_provider)
@@ -45,7 +46,7 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
     payload = client.get("/api/health").json()
 
     assert payload["status"] == "ok"
-    assert payload["schema_version"] == 9
+    assert payload["schema_version"] == 10
     assert payload["version"] == "0.4.3"
 
 

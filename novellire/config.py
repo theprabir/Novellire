@@ -47,6 +47,14 @@ class GenerationDefaults(BaseModel):
     context_window: int = Field(default=4096, ge=512, le=32768)
 
 
+class AnalysisSettings(BaseModel):
+    """Automatic memory analysis controls."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    auto_run: bool = True
+
+
 class Settings(BaseModel):
     """Validated application settings."""
 
@@ -56,6 +64,7 @@ class Settings(BaseModel):
     log_level: str = "INFO"
     ollama: OllamaSettings = OllamaSettings()
     generation: GenerationDefaults = GenerationDefaults()
+    analysis: AnalysisSettings = AnalysisSettings()
 
     @field_validator("data_dir")
     @classmethod

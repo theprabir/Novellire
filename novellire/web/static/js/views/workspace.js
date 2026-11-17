@@ -401,7 +401,7 @@ function openOutlinePreview(ctx) {
       phase = 'done';
       modal.close();
       await ctx.refresh();
-      toast('Earlier chapters analysed and added to memory.', 'success');
+      toast('Written chapters analysed and added to memory.', 'success');
     } catch (error) {
       phase = 'failed';
       apply.disabled = false;
@@ -423,14 +423,14 @@ function openOutlinePreview(ctx) {
         preview.create_count
           ? `Create ${preview.create_count} chapter${preview.create_count === 1 ? '' : 's'}`
           : analysisCount
-            ? 'Analyse earlier chapters'
+            ? 'Analyse written chapters'
             : 'Nothing to do'
       );
       host.replaceChildren(
         el(
           'p',
           { class: 'hint' },
-          `${preview.chapters.length} chapters detected · ${preview.create_count} to create · ${preview.existing_count} already exist · ${analysisCount} earlier written chapter${analysisCount === 1 ? '' : 's'} to analyse. Existing chapters are left unchanged.`
+          `${preview.chapters.length} chapters detected · ${preview.create_count} to create · ${preview.existing_count} already exist · ${analysisCount} written chapter${analysisCount === 1 ? '' : 's'} to analyse. Existing chapters are left unchanged.`
         ),
         el(
           'div',
@@ -469,7 +469,7 @@ async function analyzeBeforeOutline(ctx, host, button, total) {
   const heading = el(
     'p',
     { class: 'hint' },
-    `Analysing ${total} earlier chapter${total === 1 ? '' : 's'} one at a time…`
+    `Analysing ${total} written chapter${total === 1 ? '' : 's'} one at a time…`
   );
   const rows = el('div', { class: 'outline-preview' });
   host.replaceChildren(heading, rows);
@@ -485,7 +485,7 @@ async function analyzeBeforeOutline(ctx, host, button, total) {
     },
     (event) => {
       if (event.type === 'start') {
-        heading.textContent = `Analysing ${event.total} earlier chapter${event.total === 1 ? '' : 's'} one at a time…`;
+        heading.textContent = `Analysing ${event.total} written chapter${event.total === 1 ? '' : 's'} one at a time…`;
         return;
       }
       if (event.type === 'step') {
@@ -521,7 +521,7 @@ async function analyzeBeforeOutline(ctx, host, button, total) {
             )
           )
         );
-        heading.textContent = `${event.processed} of ${event.total} earlier chapters processed.`;
+        heading.textContent = `${event.processed} of ${event.total} written chapters processed.`;
         return;
       }
       if (event.type === 'done') {

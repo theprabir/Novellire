@@ -49,7 +49,7 @@ class OutlineItem:
 @dataclass(frozen=True)
 class OutlinePreview:
     items: tuple[OutlineItem, ...]
-    preceding_count: int = 0
+    analysis_count: int = 0
 
     @property
     def create_count(self) -> int:
@@ -176,8 +176,8 @@ class OutlineService:
             )
         return OutlinePreview(
             items=tuple(items),
-            preceding_count=sum(
-                1 for chapter in chapters if chapter.position < first_number
+            analysis_count=sum(
+                1 for chapter in chapters if chapter.content.strip()
             ),
         )
 
