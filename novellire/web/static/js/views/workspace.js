@@ -398,7 +398,7 @@ function chapterEditor(ctx, chapter) {
         {
           class: 'btn btn-ghost',
           type: 'button',
-          onClick: () => openChapterHistory(ctx, chapter),
+          onClick: () => openChapterHistory(ctx, chapter, content.value),
         },
         icon('clock'),
         'History'
@@ -530,7 +530,7 @@ function chapterEditor(ctx, chapter) {
   );
 }
 
-async function openChapterHistory(ctx, chapter) {
+async function openChapterHistory(ctx, chapter, currentText) {
   let revisions;
   try {
     revisions = await api.get(`/api/chapters/${chapter.id}/revisions`);
@@ -539,15 +539,26 @@ async function openChapterHistory(ctx, chapter) {
     return;
   }
 
-  const body = el(
-    'div',
-    { class: 'revision-list' },
+  const draft = typeof currentText === 'string' ? currentText : chapter.content;
+  const dirty = draft !== chapter.content;
+  const body = el('div', { class: 'revision-list' });
+
+  body.append(
     el(
       'p',
       { class: 'hint' },
-      'Revisions are saved automatically when the chapter text changes. Restoring a version first saves the current text here.'
+      'Revisions are saved automatically when the chapter text changes. The newest 50 are kept, and restoring a version first saves the current text here.'
     )
   );
+  if (dirty) {
+    body.append(
+      el(
+        'p',
+        { class: 'revision-warning' },
+        'You have unsaved changes. Save the chapter before restoring an older version.'
+      )
+    );
+  }
 
   if (!revisions.length) {
     body.append(
@@ -559,27 +570,35 @@ async function openChapterHistory(ctx, chapter) {
     );
   } else {
     for (const revision of revisions) {
-      const text = el('pre', { class: 'revision-text' }, 'Loading…');
+      const compareHost = el(
+        'div',
+        { class: 'revision-compare' },
+        el('p', { class: 'hint' }, 'Loading comparison…')
+      );
       const details = el(
         'details',
         { class: 'revision-details' },
-        el('summary', {}, 'Preview text'),
-        text
+        el('summary', {}, 'Compare with current draft'),
+        compareHost
       );
+      let compared = false;
       details.addEventListener('toggle', async () => {
-        if (!details.open || details.dataset.loaded) return;
+        if (!details.open || compared) return;
+        compared = true;
         try {
-          const full = await api.get(`/api/chapter-revisions/${revision.id}`);
-          text.textContent = full.content || '(Empty chapter)'; 
-          details.dataset.loaded = 'true';
+          const full = await api.get(
+            `/api/chapters/${chapter.id}/revisions/${revision.id}`
+          );
+          renderRevisionComparison(compareHost, full.content || '', draft);
         } catch (error) {
-          text.textContent = error.message;
+          compared = false;
+          compareHost.replaceChildren(el('p', { class: 'hint' }, error.message));
         }
       });
 
       const restore = el(
         'button',
-        { class: 'btn btn-sm', type: 'button' },
+        { class: 'btn btn-sm', type: 'button', disabled: dirty },
         icon('refresh'),
         'Restore'
       );
@@ -594,7 +613,7 @@ async function openChapterHistory(ctx, chapter) {
           toast('Chapter text restored. The previous text is in History.', 'success');
         } catch (error) {
           toast(error.message, 'error');
-          restore.disabled = false;
+          restore.disabled = dirty;
         }
       });
 
@@ -639,6 +658,149 @@ async function openChapterHistory(ctx, chapter) {
       ),
     ],
   });
+}
+
+const DIFF_CELL_BUDGET = 1_500_000;
+
+function renderRevisionComparison(host, revisionText, currentText) {
+  const segments = buildDiffSegments(revisionText, currentText);
+  const changed = segments.some((segment) => segment.kind !== 'same');
+  const older = el('pre', { class: 'diff-pane' });
+  const current = el('pre', { class: 'diff-pane' });
+  appendDiffPane(older, segments, 'older');
+  appendDiffPane(current, segments, 'current');
+
+  host.replaceChildren(
+    changed
+      ? el(
+          'div',
+          { class: 'diff-legend' },
+          el('span', { class: 'diff-key diff-key-del' }, 'Removed from this draft'),
+          el('span', { class: 'diff-key diff-key-add' }, 'Added in the current draft'),
+        )
+      : el('p', { class: 'hint' }, 'This revision matches the current draft.'),
+    el(
+      'div',
+      { class: 'diff-grid' },
+      el(
+        'div',
+        { class: 'diff-column' },
+        el(
+          'div',
+          { class: 'diff-title' },
+          `This revision · ${count(countWords(revisionText))} words`
+        ),
+        older
+      ),
+      el(
+        'div',
+        { class: 'diff-column' },
+        el(
+          'div',
+          { class: 'diff-title' },
+          `Current draft · ${count(countWords(currentText))} words`
+        ),
+        current
+      )
+    )
+  );
+}
+
+function appendDiffPane(pane, segments, side) {
+  const fragment = document.createDocumentFragment();
+  for (const segment of segments) {
+    if (segment.kind === 'same') {
+      fragment.append(document.createTextNode(segment.text));
+    } else if (
+      (side === 'older' && segment.kind === 'del') ||
+      (side === 'current' && segment.kind === 'add')
+    ) {
+      fragment.append(
+        el(
+          'mark',
+          { class: side === 'older' ? 'diff-del' : 'diff-add' },
+          segment.text
+        )
+      );
+    }
+  }
+  if (!fragment.childNodes.length) {
+    fragment.append(document.createTextNode('(Empty chapter)'));
+  }
+  pane.replaceChildren(fragment);
+}
+
+function tokenizeWords(text) {
+  return text.match(/\S+\s*/g) || [];
+}
+
+function buildDiffSegments(beforeText, afterText) {
+  const before = tokenizeWords(beforeText);
+  const after = tokenizeWords(afterText);
+  let prefix = 0;
+  while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) {
+    prefix += 1;
+  }
+  let endBefore = before.length;
+  let endAfter = after.length;
+  while (
+    endBefore > prefix &&
+    endAfter > prefix &&
+    before[endBefore - 1] === after[endAfter - 1]
+  ) {
+    endBefore -= 1;
+    endAfter -= 1;
+  }
+
+  const segments = [];
+  const push = (kind, text) => {
+    if (!text) return;
+    const last = segments[segments.length - 1];
+    if (last && last.kind === kind) last.text += text;
+    else segments.push({ kind, text });
+  };
+  push('same', before.slice(0, prefix).join(''));
+
+  const oldMiddle = before.slice(prefix, endBefore);
+  const newMiddle = after.slice(prefix, endAfter);
+  if (oldMiddle.length * newMiddle.length > DIFF_CELL_BUDGET) {
+    // A full rewrite: highlighting the whole middle is truthful and stays fast.
+    push('del', oldMiddle.join(''));
+    push('add', newMiddle.join(''));
+  } else {
+    const lengths = new Array(oldMiddle.length + 1);
+    for (let i = 0; i < lengths.length; i += 1) {
+      lengths[i] = new Uint32Array(newMiddle.length + 1);
+    }
+    for (let i = oldMiddle.length - 1; i >= 0; i -= 1) {
+      for (let j = newMiddle.length - 1; j >= 0; j -= 1) {
+        lengths[i][j] =
+          oldMiddle[i] === newMiddle[j]
+            ? lengths[i + 1][j + 1] + 1
+            : Math.max(lengths[i + 1][j], lengths[i][j + 1]);
+      }
+    }
+    let i = 0;
+    let j = 0;
+    while (i < oldMiddle.length && j < newMiddle.length) {
+      if (oldMiddle[i] === newMiddle[j]) {
+        push('same', oldMiddle[i]);
+        i += 1;
+        j += 1;
+      } else if (lengths[i + 1][j] >= lengths[i][j + 1]) {
+        push('del', oldMiddle[i]);
+        i += 1;
+      } else {
+        push('add', newMiddle[j]);
+        j += 1;
+      }
+    }
+    while (i < oldMiddle.length) push('del', oldMiddle[i++]);
+    while (j < newMiddle.length) push('add', newMiddle[j++]);
+  }
+
+  push('same', before.slice(endBefore).join(''));
+  return segments;
 }
 
 async function summariseChapter(ctx, chapter, button) {

@@ -3,6 +3,28 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.3.8] — 2026-11-17
+
+Revision history hardening and comparison. Schema stays at 9.
+
+### Added
+
+- History compares each revision with the current editor text in two columns,
+  highlighting removed and added words. Large rewrites fall back to
+  whole-passage highlighting instead of building an unbounded diff table.
+- Revision history keeps the newest 50 snapshots per chapter. Older snapshots
+  are pruned in the same transaction that records a new one.
+- Restore is disabled while the editor has unsaved text, so a restore cannot
+  silently discard the author's current draft.
+- The pre-edit snapshot is written before the chapter update, matching restore
+  ordering, so a successful content change cannot be saved without history.
+
+### Changed
+
+- Revision detail lookup is scoped to its chapter:
+  `GET /api/chapters/{id}/revisions/{revision_id}` replaces
+  `GET /api/chapter-revisions/{revision_id}`.
+
 ## [0.3.7] — 2026-11-16
 
 Chapter revision history. Schema 9 adds `chapter_revisions`.

@@ -8,6 +8,8 @@ from typing import Any
 
 from .database import Database
 
+MAX_REVISIONS_PER_CHAPTER = 50
+
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -53,12 +55,39 @@ class RevisionRepository:
                     _utc_now_iso(),
                 ),
             )
+            # Keep history bounded. The subquery leaves the newest revisions.
+            connection.execute(
+                """
+                DELETE FROM chapter_revisions
+                WHERE chapter_id = ?
+                  AND id NOT IN (
+                      SELECT id FROM chapter_revisions
+                      WHERE chapter_id = ?
+                      ORDER BY id DESC
+                      LIMIT ?
+                  )
+                """,
+                (chapter_id, chapter_id, MAX_REVISIONS_PER_CHAPTER),
+            )
         return _require(self.get(int(cursor.lastrowid)))
 
     def get(self, revision_id: int) -> ChapterRevision | None:
         with self._database.connection() as connection:
             row = connection.execute(
                 "SELECT * FROM chapter_revisions WHERE id = ?", (revision_id,)
+            ).fetchone()
+        return _row_to_revision(row) if row is not None else None
+
+    def get_for_chapter(
+        self, chapter_id: int, revision_id: int
+    ) -> ChapterRevision | None:
+        with self._database.connection() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM chapter_revisions
+                WHERE id = ? AND chapter_id = ?
+                """,
+                (revision_id, chapter_id),
             ).fetchone()
         return _row_to_revision(row) if row is not None else None
 

@@ -929,9 +929,11 @@ def _build_router(services: ApiServices) -> APIRouter:
             for revision in services.chapters.list_revisions(chapter_id)
         ]
 
-    @router.get("/chapter-revisions/{revision_id}")
-    def get_chapter_revision(revision_id: int) -> dict[str, Any]:
-        revision = services.chapters.get_revision_by_id(revision_id)
+    @router.get("/chapters/{chapter_id}/revisions/{revision_id}")
+    def get_chapter_revision(
+        chapter_id: int, revision_id: int
+    ) -> dict[str, Any]:
+        revision = services.chapters.get_revision(chapter_id, revision_id)
         return asdict(revision)
 
     @router.post("/chapters/{chapter_id}/revisions/{revision_id}/restore")

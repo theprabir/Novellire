@@ -165,31 +165,24 @@ class ChapterService:
             fields["content"] = cleaned
             fields["word_count"] = count_words(cleaned)
 
-        updated = self._repository.update(chapter_id, **fields)
         if (
             "content" in fields
             and chapter.content.strip()
             and chapter.content != fields["content"]
         ):
             self._snapshot(chapter, source="edit")
-        return updated
+        return self._repository.update(chapter_id, **fields)
 
     def list_revisions(self, chapter_id: int) -> list[ChapterRevision]:
         self.require_chapter(chapter_id)
         return self._revisions.list_for_chapter(chapter_id)
 
-    def get_revision_by_id(self, revision_id: int) -> ChapterRevision:
-        revision = self._revisions.get(revision_id)
-        if revision is None:
-            raise RecordNotFoundError("That revision no longer exists.")
-        return revision
-
     def get_revision(
         self, chapter_id: int, revision_id: int
     ) -> ChapterRevision:
         self.require_chapter(chapter_id)
-        revision = self.get_revision_by_id(revision_id)
-        if revision.chapter_id != chapter_id:
+        revision = self._revisions.get_for_chapter(chapter_id, revision_id)
+        if revision is None:
             raise RecordNotFoundError("That revision no longer exists.")
         return revision
 

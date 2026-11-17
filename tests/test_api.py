@@ -46,7 +46,7 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
 
     assert payload["status"] == "ok"
     assert payload["schema_version"] == 9
-    assert payload["version"] == "0.3.7"
+    assert payload["version"] == "0.3.8"
 
 
 def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:
@@ -910,9 +910,18 @@ def test_chapter_revisions_list_previews_and_restore(
     assert "content" not in listing[0]
 
     detail = client.get(
-        f"/api/chapter-revisions/{listing[0]['id']}"
+        f"/api/chapters/{chapter['id']}/revisions/{listing[0]['id']}"
     ).json()
     assert detail["content"] == "Original text."
+
+    other = client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={"title": "Other", "content": "Other text."},
+    ).json()
+    foreign = client.get(
+        f"/api/chapters/{other['id']}/revisions/{listing[0]['id']}"
+    )
+    assert foreign.status_code == 404
 
     restored = client.post(
         f"/api/chapters/{chapter['id']}/revisions/{listing[0]['id']}/restore"

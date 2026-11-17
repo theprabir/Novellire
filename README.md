@@ -110,10 +110,12 @@ The interface has these surfaces:
   full text: Novellire counts and displays words and marks it pre-written, and
   the AI never rewrites it. New chapters can be drafted from the documents, and
   drafts are editable before insertion. Saving changed chapter text keeps the
-  previous version in **History**, where full drafts can be previewed and
-  restored; restoring also saves the current text first. A chapter with text can
-  be summarised or have its **events extracted** into episodic memory. Chapters,
-  and the legacy
+  previous version in **History**. Each revision can be compared side by side
+  with the current draft, with removed and added words highlighted, then
+  restored; restoring also saves the current text first, and the newest 50
+  snapshots are kept per chapter. Restore is blocked while there are unsaved
+  editor changes. A chapter with text can be summarised or have its **events
+  extracted** into episodic memory. Chapters, and the legacy
   scene records inside them, can be moved up or down and deleted; positions are
   renumbered in the same transaction so the order stays contiguous in the
   database.
@@ -174,7 +176,7 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-196 tests run fully offline. All inference is stubbed, so no model or Ollama
+197 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
@@ -304,11 +306,12 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.3.7** (schema version 9). `v0.3.7` adds automatic chapter
-revision history with preview and restore; schema 9 stores the snapshots. It
-builds on `v0.3.6`, author-recorded character state snapshots with
-current/history views and generation context; `v0.3.5`, approved relationship
-records in generation context;
+Current release: **v0.3.8** (schema version 9). `v0.3.8` adds side-by-side
+revision comparison, a 50-snapshot cap per chapter, and unsaved-edit protection
+for restore. `v0.3.7` added automatic chapter revision history; schema 9 stores
+the snapshots. It builds on `v0.3.6`, author-recorded character state snapshots
+with current/history views and generation context; `v0.3.5`, approved
+relationship records in generation context;
 `v0.3.4`, typed author-approved relationship records with optional event
 provenance; `v0.3.3`, relationship discovery from shared events; `v0.3.2`,
 event-to-character linking with

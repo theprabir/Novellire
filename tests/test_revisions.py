@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from novellire.errors import RecordNotFoundError
+from novellire.storage.revision_repository import MAX_REVISIONS_PER_CHAPTER
 
 
 def test_content_edits_create_revisions_and_restore_snapshots_current(
@@ -53,6 +54,26 @@ def test_empty_initial_content_does_not_create_an_empty_revision(
     chapter_service.update_chapter(chapter.id, content="Now written.")
 
     assert chapter_service.list_revisions(chapter.id) == []
+
+
+def test_revision_history_is_capped_per_chapter(
+    chapter_service, sample_project
+) -> None:
+    chapter = chapter_service.create_chapter(
+        project_id=sample_project.id,
+        title="The Gate",
+        content="Version 0.",
+    )
+    for version in range(1, MAX_REVISIONS_PER_CHAPTER + 6):
+        chapter_service.update_chapter(
+            chapter.id, content=f"Version {version}."
+        )
+
+    revisions = chapter_service.list_revisions(chapter.id)
+
+    assert len(revisions) == MAX_REVISIONS_PER_CHAPTER
+    assert revisions[0].content == f"Version {MAX_REVISIONS_PER_CHAPTER + 4}."
+    assert revisions[-1].content == "Version 5."
 
 
 def test_revision_must_belong_to_the_chapter(
