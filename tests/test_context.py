@@ -77,6 +77,7 @@ def test_build_selects_matching_canon_only(
         project_id=sample_project.id,
         title="Arrival",
         viewpoint_character_id=mira.id,
+        objectives="1. Mira reaches the gate.\n2. The gate opens.",
     )
 
     context = context_builder.build(
@@ -92,6 +93,7 @@ def test_build_selects_matching_canon_only(
     assert "the Courier" in context.character_profiles
     assert "Secrets: She broke the seal once." in context.character_profiles
     assert "Orin Vale" not in context.character_profiles
+    assert "1. Mira reaches the gate." in context.chapter_plan
 
 
 def test_build_includes_only_approved_relationships_for_selected_profiles(

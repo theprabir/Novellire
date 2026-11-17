@@ -261,6 +261,15 @@ class SceneUpdateRequest(BaseModel):
     status: str | None = None
 
 
+class PlanChapterRequest(BaseModel):
+    instructions: str = ""
+    model: str
+    temperature: float = Field(default=0.6, ge=0.0, le=2.0)
+    top_p: float = Field(default=0.9, gt=0.0, le=1.0)
+    num_predict: int = Field(default=700, ge=32, le=8192)
+    context_window: int = Field(default=4096, ge=512, le=32768)
+
+
 class GenerateRequest(BaseModel):
     instructions: str
     model: str
@@ -1291,6 +1300,48 @@ def _build_router(services: ApiServices) -> APIRouter:
         )
         result = generation_payload(outcome.record, include_output=True)
         result["style_guide_inferred"] = style_guide_inferred
+        result["context"] = {
+            "chapters": [
+                asdict(source) for source in generation_context.memory_chapters
+            ],
+            "events": [
+                asdict(event) for event in generation_context.memory_events
+            ],
+        }
+        return result
+
+    @router.post("/chapters/{chapter_id}/plan")
+    def plan_chapter(
+        chapter_id: int, payload: PlanChapterRequest
+    ) -> dict[str, Any]:
+        chapter = services.chapters.require_chapter(chapter_id)
+        if chapter.origin == "imported":
+            raise InvalidInputError(
+                "That chapter is pre-written, so there is nothing to plan."
+            )
+        inference_settings = GenerationSettings(
+            model=payload.model,
+            temperature=payload.temperature,
+            top_p=payload.top_p,
+            num_predict=payload.num_predict,
+            context_window=payload.context_window,
+        )
+        generation_context = services.context.build(
+            chapter.project_id,
+            instructions=payload.instructions,
+            chapter_id=chapter.id,
+            chapter_title=chapter.title,
+        )
+        outcome = services.generation.generate_plan(
+            project_id=chapter.project_id,
+            instructions=payload.instructions,
+            settings=inference_settings,
+            chapter_title=chapter.title,
+            chapter_summary=chapter.summary,
+            chapter_plan=chapter.objectives,
+            context=generation_context,
+        )
+        result = generation_payload(outcome.record, include_output=True)
         result["context"] = {
             "chapters": [
                 asdict(source) for source in generation_context.memory_chapters

@@ -3,6 +3,26 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.4.1] — 2026-11-17
+
+Chapter planning. Schema stays at 9.
+
+### Added
+
+- The chapter editor exposes an editable scene plan alongside the summary and
+  chapter text.
+- **Plan with AI** builds a scene-by-scene plan from the chapter summary,
+  existing plan, workspace documents, and retrieved narrative memory. The
+  result is editable and is not saved until the author chooses **Use plan**.
+- The saved scene plan is included in the writing prompt as a **Chapter plan**
+  block, so Draft with AI follows the author's intended beat sequence.
+- `POST /api/chapters/{id}/plan` records the planning attempt in generation
+  history, like prose generation.
+
+### Deferred
+
+- Sequential scene-by-scene drafting and automatic chapter assembly.
+
 ## [0.4.0] — 2026-11-17
 
 Chapter approval boundary. Schema stays at 9.

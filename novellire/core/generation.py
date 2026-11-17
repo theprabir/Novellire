@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from ..errors import InvalidInputError, LLMError, ProjectNotFoundError
 from ..llm.base import GenerationRequest, LLMProvider
 from ..logging_setup import get_logger
-from ..prompts.templates import build_writing_prompt
+from ..prompts.templates import build_planning_prompt, build_writing_prompt
 from ..storage.repositories import (
     STATUS_COMPLETED,
     STATUS_FAILED,
@@ -105,6 +105,7 @@ class GenerationService:
             instructions=cleaned_instructions,
             target_words=target,
             chapter_title=(chapter_title or "").strip(),
+            chapter_plan=_clip(narrative.chapter_plan),
             scene_title=(scene_title or "").strip(),
             context_notes=(context_notes or "").strip(),
             master_bible=_clip(narrative.master_bible),
@@ -119,6 +120,66 @@ class GenerationService:
             character_states=narrative.character_states,
         )
 
+        return self._complete(
+            project_id, system_prompt, user_prompt, model, settings
+        )
+
+    def generate_plan(
+        self,
+        *,
+        project_id: int,
+        instructions: str,
+        settings: GenerationSettings,
+        chapter_title: str = "",
+        chapter_summary: str = "",
+        chapter_plan: str = "",
+        context: GenerationContext | None = None,
+    ) -> GenerationOutcome:
+        """Generate an editable scene plan, without changing chapter text."""
+        project = self._projects.get(project_id)
+        if project is None:
+            raise ProjectNotFoundError(
+                "That project no longer exists. Choose another project."
+            )
+        model = (settings.model or "").strip()
+        if not model:
+            raise InvalidInputError(
+                "Choose a model before planning. Install one with "
+                "`ollama pull qwen2.5:1.5b` if the list is empty."
+            )
+
+        narrative = context or GenerationContext()
+        system_prompt, user_prompt = build_planning_prompt(
+            project_name=project.name,
+            genre=project.genre,
+            narrative_style=project.narrative_style,
+            instructions=(instructions or "").strip(),
+            chapter_title=(chapter_title or "").strip(),
+            chapter_summary=(chapter_summary or "").strip(),
+            existing_plan=(chapter_plan or "").strip(),
+            master_bible=_clip(narrative.master_bible),
+            character_bible=_clip(narrative.character_bible),
+            chapter_map=_clip(narrative.chapter_map),
+            style_guide=_clip(narrative.style_guide),
+            earlier_chapters=narrative.earlier_chapters,
+            earlier_events=narrative.earlier_events,
+            bible_entries=narrative.bible_entries,
+            character_profiles=narrative.character_profiles,
+            relationship_records=narrative.relationship_records,
+            character_states=narrative.character_states,
+        )
+        return self._complete(
+            project_id, system_prompt, user_prompt, model, settings
+        )
+
+    def _complete(
+        self,
+        project_id: int,
+        system_prompt: str,
+        user_prompt: str,
+        model: str,
+        settings: GenerationSettings,
+    ) -> GenerationOutcome:
         request = GenerationRequest(
             prompt=user_prompt,
             system_prompt=system_prompt,

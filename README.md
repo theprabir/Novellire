@@ -117,7 +117,10 @@ The interface has these surfaces:
   editor changes. A chapter with text can be summarised or have its **events
   extracted** into episodic memory. Each chapter has a workflow status; when it
   is **approved**, its prose is locked and must be reopened before manual edits,
-  AI insertion, or a revision restore can change it. Chapters, and the legacy
+  AI insertion, or a revision restore can change it. Each chapter also has an
+  editable **scene plan**; **Plan with AI** proposes one from the chapter
+  summary, project documents, and retrieved memory, and the saved plan is
+  included when the chapter is drafted. Chapters, and the legacy
   scene records inside them, can be moved up or down and deleted; positions are
   renumbered in the same transaction so the order stays contiguous in the
   database.
@@ -178,7 +181,7 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-199 tests run fully offline. All inference is stubbed, so no model or Ollama
+202 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
@@ -308,9 +311,11 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.4.0** (schema version 9). `v0.4.0` adds chapter workflow
-status and locks approved prose against manual, AI, and revision-restore
-changes until the chapter is reopened. `v0.3.8` added side-by-side revision
+Current release: **v0.4.1** (schema version 9). `v0.4.1` adds editable chapter
+scene plans, AI plan proposals, and plan-aware drafting. `v0.4.0` adds chapter
+workflow status and locks approved prose against manual, AI, and
+revision-restore changes until the chapter is reopened. `v0.3.8` added
+side-by-side revision
 comparison, a 50-snapshot cap per chapter, and unsaved-edit protection for
 restore. `v0.3.7` added automatic chapter revision history; schema 9 stores the
 snapshots. It builds on `v0.3.6`, author-recorded character state snapshots with

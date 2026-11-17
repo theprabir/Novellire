@@ -379,6 +379,12 @@ function chapterEditor(ctx, chapter) {
     rows: 3,
     placeholder: 'A short recap of what happens in this chapter.',
   });
+  const plan = textarea({
+    value: chapter.objectives || '',
+    rows: 6,
+    placeholder:
+      'Optional scene-by-scene plan: titles, purpose, key beats, viewpoint, location.',
+  });
   const words = el('span', { class: 'hint' }, `${count(chapter.word_count)} words`);
   content.addEventListener('input', () => {
     words.textContent = `${count(countWords(content.value))} words`;
@@ -409,6 +415,15 @@ function chapterEditor(ctx, chapter) {
     ),
     el(
       'div',
+      { class: 'span-2' },
+      field(
+        'Scene plan',
+        plan,
+        'Included when Novellire drafts this chapter. Keep it as beats, not prose.'
+      )
+    ),
+    el(
+      'div',
       { class: 'form-actions span-2' },
       el('button', { class: 'btn btn-primary', type: 'submit' }, 'Save chapter'),
       words,
@@ -422,6 +437,18 @@ function chapterEditor(ctx, chapter) {
         icon('clock'),
         'History'
       ),
+      !imported
+        ? el(
+            'button',
+            {
+              class: 'btn btn-ghost',
+              type: 'button',
+              onClick: () => openPlanDialog(ctx, chapter, plan.value),
+            },
+            icon('layers'),
+            'Plan with AI'
+          )
+        : null,
       chapter.content.trim()
         ? el(
             'button',
@@ -476,6 +503,7 @@ function chapterEditor(ctx, chapter) {
         title: title.value,
         content: content.value,
         summary: summary.value,
+        objectives: plan.value,
         status: status.value,
       });
       await ctx.refresh();
@@ -837,6 +865,104 @@ function buildDiffSegments(beforeText, afterText) {
 
   push('same', before.slice(endBefore).join(''));
   return segments;
+}
+
+function openPlanDialog(ctx, chapter, currentPlan) {
+  const state = ctx.state;
+  const settings = state.settings?.generation || {};
+  const instructions = textarea({
+    rows: 3,
+    placeholder:
+      'Optional focus, such as “four scenes, end on the gate opening” or “make room for Orin’s betrayal”.',
+  });
+  const output = textarea({
+    value: currentPlan || '',
+    rows: 14,
+    placeholder: 'Generate a plan, then edit it before using it.',
+  });
+  const generate = el(
+    'button',
+    { class: 'btn btn-primary', type: 'button' },
+    icon('sparkles'),
+    'Generate plan'
+  );
+  const use = el(
+    'button',
+    { class: 'btn', type: 'button', disabled: !output.value.trim() },
+    icon('check'),
+    'Use plan'
+  );
+  const modal = openModal({
+    title: `Plan chapter ${chapter.position}`,
+    wide: true,
+    body: [
+      field(
+        'Planning instructions',
+        instructions,
+        'Optional. The chapter summary, scene plan, documents, and retrieved memory are included automatically.'
+      ),
+      field(
+        'Proposed scene plan',
+        output,
+        'Not saved until you choose Use plan. Once saved, it is included when drafting this chapter.'
+      ),
+    ],
+    footer: [
+      el(
+        'button',
+        { class: 'btn btn-ghost', type: 'button', onClick: () => modal.close() },
+        'Cancel'
+      ),
+      generate,
+      use,
+    ],
+  });
+
+  generate.addEventListener('click', async () => {
+    const model =
+      settings.model || state.ollama?.models?.[0]?.name || '';
+    if (!model) {
+      toast('Choose a model in Settings before planning.', 'error');
+      return;
+    }
+    generate.disabled = true;
+    generate.replaceChildren(icon('refresh'), 'Planning…');
+    try {
+      const record = await api.post(`/api/chapters/${chapter.id}/plan`, {
+        instructions: instructions.value,
+        model,
+        temperature: Number(settings.temperature ?? 0.6),
+        top_p: Number(settings.top_p ?? 0.9),
+        num_predict: Number(settings.num_predict ?? 700),
+        context_window: Number(settings.context_window ?? 4096),
+      });
+      output.value = record.output || '';
+      use.disabled = !output.value.trim();
+    } catch (error) {
+      toast(error.message, 'error');
+    } finally {
+      generate.disabled = false;
+      generate.replaceChildren(icon('sparkles'), 'Generate plan');
+    }
+  });
+
+  use.addEventListener('click', async () => {
+    const text = output.value.trim();
+    if (!text) {
+      toast('Generate or write a plan first.', 'error');
+      return;
+    }
+    use.disabled = true;
+    try {
+      await api.patch(`/api/chapters/${chapter.id}`, { objectives: text });
+      modal.close();
+      await ctx.refresh();
+      toast('Scene plan saved.', 'success');
+    } catch (error) {
+      toast(error.message, 'error');
+      use.disabled = false;
+    }
+  });
 }
 
 async function summariseChapter(ctx, chapter, button) {

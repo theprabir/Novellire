@@ -124,6 +124,53 @@ def test_prompt_includes_current_character_state(
     assert "Mira Voss (as of Chapter 2 — Part Two)" in prompt
 
 
+def test_prompt_includes_chapter_plan(
+    generation_service: GenerationService,
+    fake_provider,
+    sample_project: Project,
+    generation_settings: GenerationSettings,
+) -> None:
+    generation_service.generate(
+        project_id=sample_project.id,
+        instructions="Draft the opening.",
+        settings=generation_settings,
+        chapter_title="The Gate",
+        context=GenerationContext(
+            chapter_plan="1. Mira arrives.\n2. The gate opens."
+        ),
+    )
+
+    prompt = fake_provider.requests[-1].prompt
+    assert "Chapter plan:" in prompt
+    assert "2. The gate opens." in prompt
+
+
+def test_generate_plan_uses_planning_prompt_and_saves_record(
+    generation_service: GenerationService,
+    fake_provider,
+    generation_repository,
+    sample_project: Project,
+    generation_settings: GenerationSettings,
+) -> None:
+    outcome = generation_service.generate_plan(
+        project_id=sample_project.id,
+        instructions="Plan four tense scenes.",
+        settings=generation_settings,
+        chapter_title="The Gate",
+        chapter_summary="Mira opens the sealed gate.",
+        chapter_plan="1. Mira waits.",
+        context=GenerationContext(master_bible="The gate is bound with iron."),
+    )
+
+    request = fake_provider.requests[-1]
+    assert "scene-by-scene plan" in request.prompt
+    assert "Chapter summary:" in request.prompt
+    assert "Plan four tense scenes." in request.prompt
+    assert "Do not write prose" in request.system_prompt
+    assert outcome.record.status == "completed"
+    assert generation_repository.get(outcome.record.id) is not None
+
+
 def test_generate_uses_default_target_when_omitted(
     generation_service: GenerationService,
     fake_provider,

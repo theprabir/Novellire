@@ -123,6 +123,7 @@ class GenerationContext:
     master_bible: str = ""
     character_bible: str = ""
     chapter_map: str = ""
+    chapter_plan: str = ""
     style_guide: str = ""
     bible_entries: str = ""
     character_profiles: str = ""
@@ -230,6 +231,7 @@ class GenerationContextBuilder:
             master_bible=documents.get("master_bible", ""),
             character_bible=documents.get("character_bible", ""),
             chapter_map=documents.get("chapter_map", ""),
+            chapter_plan=chapter.objectives if chapter else "",
             style_guide=documents.get("style_guide", ""),
             bible_entries=_join_with_budget(
                 [_format_entry(entry) for entry in entries],

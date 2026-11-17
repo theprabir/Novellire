@@ -46,7 +46,7 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
 
     assert payload["status"] == "ok"
     assert payload["schema_version"] == 9
-    assert payload["version"] == "0.4.0"
+    assert payload["version"] == "0.4.1"
 
 
 def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:
@@ -932,6 +932,33 @@ def test_chapter_revisions_list_previews_and_restore(
     assert len(
         client.get(f"/api/chapters/{chapter['id']}/revisions").json()
     ) == 2
+
+
+def test_chapter_plan_is_generated_without_saving_it(
+    client: TestClient,
+) -> None:
+    project = create_project(client)
+    chapter = client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={
+            "title": "The Gate",
+            "summary": "Mira opens the sealed gate.",
+            "objectives": "1. Mira waits.",
+        },
+    ).json()
+
+    response = client.post(
+        f"/api/chapters/{chapter['id']}/plan",
+        json={"instructions": "Add a betrayal.", "model": "fake-model"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["output"]
+    assert response.json()["context"] == {"chapters": [], "events": []}
+    manuscript = client.get(
+        f"/api/projects/{project['id']}/manuscript"
+    ).json()
+    assert manuscript["chapters"][0]["objectives"] == "1. Mira waits."
 
 
 def test_approved_chapter_text_must_be_reopened_first(
