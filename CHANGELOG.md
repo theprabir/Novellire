@@ -3,6 +3,29 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.4.3] — 2026-11-17
+
+Automatic analysis for chapters written before the Chapter Map begins. Schema
+stays at 9.
+
+### Added
+
+- **Build chapters** now analyses existing written chapters that precede the
+  first Chapter Map entry: chapter summaries and episodic events are generated
+  sequentially, one inference request at a time.
+- Analysis streams per-chapter progress into the outline dialog and reports
+  analysed, skipped, empty, and failed chapters.
+- A chapter summary written by the author is preserved; a chapter with stored
+  events is not re-extracted, so manual event edits are preserved.
+- If analysis fails partway, outline creation remains saved and the dialog shows
+  the failing chapter. Reopening **Build chapters** retries only missing memory.
+- The outline preview now reports how many earlier chapters will be analysed.
+
+### Changed
+
+- Outline parsing and first-chapter lookup share one saved Chapter Map path.
+- The outline dialog remains dismissible while analysis progress is shown.
+
 ## [0.4.2] — 2026-11-17
 
 Outline and chapter-number foundation. Schema stays at 9.

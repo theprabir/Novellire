@@ -348,50 +348,67 @@ async function analyseStyleGuide(ctx, button) {
 function openOutlinePreview(ctx) {
   const host = el('div', {}, el('p', { class: 'hint' }, 'Reading the Chapter Map…'));
   let ready = false;
+  let phase = 'preview';
+  let analysisCount = 0;
   const apply = el(
     'button',
     { class: 'btn btn-primary', type: 'button', disabled: true },
     'Create chapters'
   );
+  const cancel = el(
+    'button',
+    { class: 'btn btn-ghost', type: 'button', onClick: () => modal.close() },
+    'Cancel'
+  );
   const modal = openModal({
     title: 'Build chapters from the Chapter Map',
     wide: true,
     body: host,
-    footer: [
-      el(
-        'button',
-        { class: 'btn btn-ghost', type: 'button', onClick: () => modal.close() },
-        'Cancel'
-      ),
-      apply,
-    ],
+    footer: [cancel, apply],
   });
 
   apply.addEventListener('click', async () => {
-    if (!ready) return;
+    if (phase === 'failed') {
+      modal.close();
+      return;
+    }
+    if (!ready || phase !== 'preview') return;
+    phase = 'working';
     apply.disabled = true;
     apply.replaceChildren(icon('refresh'), 'Creating…');
     try {
       const result = await api.post(
         `/api/projects/${ctx.state.activeProjectId}/outline/apply`
       );
-      modal.close();
       ctx.state.workspaceType = 'chapters';
       ctx.state.selectedId = result.created[0]?.id || ctx.state.selectedId;
       if (ctx.state.selectedId) {
         syncHash(`#/workspace/chapters/${ctx.state.selectedId}`);
       }
+      if (!analysisCount) {
+        modal.close();
+        await ctx.refresh();
+        toast(
+          result.created_count
+            ? `${result.created_count} chapter${result.created_count === 1 ? '' : 's'} created.`
+            : 'No chapters needed creating.',
+          'success'
+        );
+        return;
+      }
+      apply.replaceChildren(icon('refresh'), 'Analysing chapters…');
+      await analyzeBeforeOutline(ctx, host, apply, analysisCount);
+      phase = 'done';
+      modal.close();
       await ctx.refresh();
-      toast(
-        result.created_count
-          ? `${result.created_count} chapter${result.created_count === 1 ? '' : 's'} created.`
-          : 'No chapters needed creating.',
-        'success'
-      );
+      toast('Earlier chapters analysed and added to memory.', 'success');
     } catch (error) {
-      toast(error.message, 'error');
+      phase = 'failed';
       apply.disabled = false;
-      apply.replaceChildren('Create chapters');
+      cancel.hidden = true;
+      apply.replaceChildren('Close');
+      host.prepend(el('p', { class: 'hint' }, error.message));
+      toast(error.message, 'error');
     }
   });
 
@@ -399,17 +416,21 @@ function openOutlinePreview(ctx) {
     .get(`/api/projects/${ctx.state.activeProjectId}/outline/preview`)
     .then((preview) => {
       ready = true;
-      apply.disabled = preview.create_count === 0;
+      analysisCount = preview.analysis_count || 0;
+      const hasWork = preview.create_count > 0 || analysisCount > 0;
+      apply.disabled = !hasWork;
       apply.replaceChildren(
         preview.create_count
           ? `Create ${preview.create_count} chapter${preview.create_count === 1 ? '' : 's'}`
-          : 'All chapters already exist'
+          : analysisCount
+            ? 'Analyse earlier chapters'
+            : 'Nothing to do'
       );
       host.replaceChildren(
         el(
           'p',
           { class: 'hint' },
-          `${preview.chapters.length} chapters detected · ${preview.create_count} to create · ${preview.existing_count} already exist. Existing chapters are left unchanged.`
+          `${preview.chapters.length} chapters detected · ${preview.create_count} to create · ${preview.existing_count} already exist · ${analysisCount} earlier written chapter${analysisCount === 1 ? '' : 's'} to analyse. Existing chapters are left unchanged.`
         ),
         el(
           'div',
@@ -440,6 +461,78 @@ function openOutlinePreview(ctx) {
     .catch((error) => {
       host.replaceChildren(el('p', { class: 'hint' }, error.message));
     });
+}
+
+async function analyzeBeforeOutline(ctx, host, button, total) {
+  const settings = ctx.state.settings?.generation || {};
+  const model = settings.model || ctx.state.ollama?.models?.[0]?.name || '';
+  const heading = el(
+    'p',
+    { class: 'hint' },
+    `Analysing ${total} earlier chapter${total === 1 ? '' : 's'} one at a time…`
+  );
+  const rows = el('div', { class: 'outline-preview' });
+  host.replaceChildren(heading, rows);
+  button.replaceChildren(icon('refresh'), 'Analysing…');
+  let failed = false;
+  await api.stream(
+    `/api/projects/${ctx.state.activeProjectId}/outline/analyze`,
+    {
+      model,
+      top_p: Number(settings.top_p ?? 0.9),
+      num_predict: Number(settings.num_predict ?? 400),
+      context_window: Number(settings.context_window ?? 4096),
+    },
+    (event) => {
+      if (event.type === 'start') {
+        heading.textContent = `Analysing ${event.total} earlier chapter${event.total === 1 ? '' : 's'} one at a time…`;
+        return;
+      }
+      if (event.type === 'step') {
+        const labels = {
+          analysed: 'Added to memory',
+          skipped: 'Already stored',
+          empty: 'No text',
+          failed: 'Failed',
+        };
+        failed = failed || event.status === 'failed';
+        rows.append(
+          el(
+            'div',
+            { class: 'outline-row' },
+            el('span', { class: 'chip' }, `Chapter ${event.position}`),
+            el(
+              'div',
+              { class: 'texts' },
+              el('strong', {}, event.title),
+              el('span', { class: 'sub' }, event.detail || '')
+            ),
+            el(
+              'span',
+              {
+                class:
+                  event.status === 'failed'
+                    ? 'chip warn'
+                    : event.status === 'analysed'
+                      ? 'chip accent'
+                      : 'chip soon',
+              },
+              labels[event.status] || event.status
+            )
+          )
+        );
+        heading.textContent = `${event.processed} of ${event.total} earlier chapters processed.`;
+        return;
+      }
+      if (event.type === 'done') {
+        failed = failed || event.failed > 0;
+        if (failed) {
+          throw new Error('Analysis stopped at a chapter. The rest can be retried later.');
+        }
+        heading.textContent = `Analysis complete: ${event.analysed} updated, ${event.skipped} already stored, ${event.empty} without text.`;
+      }
+    }
+  );
 }
 
 /* -- chapter editor ------------------------------------------------------- */

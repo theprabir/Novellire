@@ -49,6 +49,7 @@ class OutlineItem:
 @dataclass(frozen=True)
 class OutlinePreview:
     items: tuple[OutlineItem, ...]
+    preceding_count: int = 0
 
     @property
     def create_count(self) -> int:
@@ -68,9 +69,10 @@ class OutlineApplyResult:
 def parse_chapter_map(content: str) -> list[OutlineEntry]:
     """Return ordered outline entries from Chapter Map text.
 
-    Headings must be numbered from 1 without gaps, so applying the outline can
-    create positions without inventing placeholder chapters. Body text below a
-    heading becomes that chapter's scene plan.
+    Headings must be contiguous without gaps so applying the outline can create
+    positions without inventing placeholder chapters. A map may start above 1
+    when earlier chapters already exist. Body text below a heading becomes that
+    chapter's scene plan.
     """
     entries: list[OutlineEntry] = []
     current_number: int | None = None
@@ -140,13 +142,16 @@ class OutlineService:
         self._documents = documents
         self._chapters = chapters
 
-    def preview(self, project_id: int) -> OutlinePreview:
+    def _entries(self, project_id: int) -> list[OutlineEntry]:
         document = self._documents.get_document(project_id, "chapter_map")
         if document is None or not document.content.strip():
             raise InvalidInputError(
                 "Write the Chapter Map before building chapters from it."
             )
-        entries = parse_chapter_map(document.content)
+        return parse_chapter_map(document.content)
+
+    def preview(self, project_id: int) -> OutlinePreview:
+        entries = self._entries(project_id)
         chapters = self._chapters.list_chapters(project_id)
         existing = {chapter.position: chapter for chapter in chapters}
         next_position = max(existing, default=0) + 1
@@ -169,7 +174,16 @@ class OutlineService:
                     chapter_id=chapter.id if chapter is not None else None,
                 )
             )
-        return OutlinePreview(items=tuple(items))
+        return OutlinePreview(
+            items=tuple(items),
+            preceding_count=sum(
+                1 for chapter in chapters if chapter.position < first_number
+            ),
+        )
+
+    def first_number(self, project_id: int) -> int:
+        """Return the first chapter number in the saved Chapter Map."""
+        return self._entries(project_id)[0].number
 
     def apply(self, project_id: int) -> OutlineApplyResult:
         preview = self.preview(project_id)

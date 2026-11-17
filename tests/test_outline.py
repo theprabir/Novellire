@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -147,6 +148,7 @@ def test_outline_can_continue_after_existing_chapters(client) -> None:
     preview = client.get(f"/api/projects/{project['id']}/outline/preview")
     assert preview.status_code == 200, preview.text
     assert preview.json()["create_count"] == 2
+    assert preview.json()["analysis_count"] == 2
 
     applied = client.post(f"/api/projects/{project['id']}/outline/apply")
     assert applied.status_code == 200, applied.text
@@ -174,3 +176,29 @@ def test_outline_cannot_skip_the_next_chapter(client) -> None:
 
     assert response.status_code == 400
     assert "next chapter is 2" in response.json()["detail"]
+
+
+def test_outline_analysis_streams_progress_and_failure(client) -> None:
+    project = client.post("/api/projects", json={"name": "Analysis"}).json()
+    client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={"title": "Written", "content": "Mira reaches the archive."},
+    )
+    client.put(
+        f"/api/projects/{project['id']}/documents/chapter_map",
+        json={"content": "Chapter 2: Next\nPlan."},
+    )
+
+    response = client.post(
+        f"/api/projects/{project['id']}/outline/analyze",
+        json={"model": "fake-model"},
+    )
+
+    assert response.status_code == 200, response.text
+    events = [json.loads(line) for line in response.text.splitlines() if line]
+    assert events[0] == {"type": "start", "total": 1}
+    assert events[1]["type"] == "step"
+    assert events[1]["status"] == "failed"
+    assert events[1]["detail"]
+    assert events[-1]["type"] == "done"
+    assert events[-1]["failed"] == 1

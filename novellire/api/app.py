@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from .. import __version__
 from ..config import Settings, load_settings
+from ..core.analysis import ChapterAnalysisService
 from ..core.backup import BackupService
 from ..core.chapters import ChapterService
 from ..core.character_states import CharacterStateService
@@ -305,6 +306,7 @@ class ApiServices:
     scenes: SceneService
     documents: ProjectDocumentService
     outline: OutlineService
+    analysis: ChapterAnalysisService
     export: ExportService
     context: GenerationContextBuilder
     style_guide: StyleGuideService
@@ -339,6 +341,16 @@ def build_services(
     document_service = ProjectDocumentService(
         DocumentRepository(database), project_repository
     )
+    summary_service = ChapterSummaryService(
+        provider, project_repository, chapter_service
+    )
+    event_service = EventExtractionService(
+        provider,
+        project_repository,
+        chapter_service,
+        event_repository,
+        character_repository,
+    )
 
     return ApiServices(
         settings=settings,
@@ -358,20 +370,15 @@ def build_services(
         scenes=SceneService(SceneRepository(database), chapter_repository),
         documents=document_service,
         outline=OutlineService(document_service, chapter_service),
+        analysis=ChapterAnalysisService(
+            summary_service, event_service, chapter_service, event_repository
+        ),
         export=ExportService(
             project_repository, chapter_service, document_service
         ),
-        summaries=ChapterSummaryService(
-            provider, project_repository, chapter_service
-        ),
+        summaries=summary_service,
         memory=MemoryService(SearchRepository(database), project_repository),
-        events=EventExtractionService(
-            provider,
-            project_repository,
-            chapter_service,
-            event_repository,
-            character_repository,
-        ),
+        events=event_service,
         event_repository=event_repository,
         relationships=RelationshipService(
             project_repository,
@@ -740,6 +747,7 @@ def _build_router(services: ApiServices) -> APIRouter:
             "chapters": [asdict(item) for item in preview.items],
             "create_count": preview.create_count,
             "existing_count": preview.existing_count,
+            "analysis_count": preview.preceding_count,
         }
 
     @router.post("/projects/{project_id}/outline/apply")
@@ -750,6 +758,65 @@ def _build_router(services: ApiServices) -> APIRouter:
             "created_count": len(result.created),
             "existing_count": result.existing_count,
         }
+
+    @router.post("/projects/{project_id}/outline/analyze")
+    def analyze_outline_chapters(
+        project_id: int, payload: SummaryRequest
+    ) -> StreamingResponse:
+        """Analyse written chapters before the outline starts, sequentially."""
+        services.projects.require_project(project_id)
+        first_number = services.outline.first_number(project_id)
+        defaults = services.app_settings.generation_settings()
+        settings = GenerationSettings(
+            model=payload.model or defaults.model,
+            temperature=0.2,
+            top_p=payload.top_p,
+            num_predict=payload.num_predict,
+            context_window=payload.context_window,
+        )
+        chapters = [
+            chapter
+            for chapter in services.chapters.list_chapters(project_id)
+            if chapter.position < first_number
+        ]
+
+        def event_line(event: dict[str, Any]) -> str:
+            return json.dumps(event, ensure_ascii=False) + "\n"
+
+        def events() -> Iterator[str]:
+            yield event_line(
+                {"type": "start", "total": len(chapters)}
+            )
+            counts = {"analysed": 0, "skipped": 0, "empty": 0, "failed": 0}
+            for step in services.analysis.analyze_before_position(
+                project_id, first_number, settings
+            ):
+                counts[step.status] = counts.get(step.status, 0) + 1
+                yield event_line(
+                    {
+                        "type": "step",
+                        "chapter_id": step.chapter_id,
+                        "title": step.title,
+                        "position": step.position,
+                        "status": step.status,
+                        "detail": step.detail,
+                        "duration_ms": step.duration_ms,
+                        "processed": sum(counts.values()),
+                        "total": len(chapters),
+                    }
+                )
+            yield event_line(
+                {"type": "done", **counts, "total": len(chapters)}
+            )
+
+        return StreamingResponse(
+            events(),
+            media_type="application/x-ndjson",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     @router.post("/projects/{project_id}/style-guide/analyze")
     def analyze_style_guide(

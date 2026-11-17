@@ -124,8 +124,11 @@ The interface has these surfaces:
   be previewed with **Build chapters**, which creates only missing chapter
   records and leaves existing chapters untouched. A map may continue after
   written chapters: with fourteen chapters already written, a map starting at
-  Chapter 15 creates Chapters 15 onward. New chapters can be inserted at a
-  chosen chapter number, shifting later chapters down. Chapters, and the
+  Chapter 15 creates Chapters 15 onward. When earlier written chapters exist,
+  **Build chapters** then analyses them sequentially: it adds missing summaries
+  and episodic events while leaving author-written summaries and stored events
+  untouched, and streams per-chapter progress in the dialog. New chapters can be
+  inserted at a chosen chapter number, shifting later chapters down. Chapters, and the
   legacy scene records inside them, can be moved up or down and deleted;
   positions are renumbered in the same transaction so the order stays contiguous
   in the database.
@@ -186,7 +189,7 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-217 tests run fully offline. All inference is stubbed, so no model or Ollama
+219 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
@@ -316,8 +319,11 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.4.2** (schema version 9). `v0.4.2` adds Chapter Map outline
-import, chapter-number insertion, and 16k context selection. `v0.4.1` adds
+Current release: **v0.4.3** (schema version 9). `v0.4.3` adds automatic analysis
+of written chapters before a Chapter Map starts, with streamed progress and
+preservation of manual summaries/events. `v0.4.2` adds Chapter Map outline
+import, chapter-number insertion, and context budgets that scale with the
+selected 16k window. `v0.4.1` adds
 editable chapter scene plans, AI plan proposals, and plan-aware drafting.
 `v0.4.0` adds chapter
 workflow status and locks approved prose against manual, AI, and
