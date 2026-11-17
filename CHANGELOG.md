@@ -11,7 +11,9 @@ Outline and chapter-number foundation. Schema stays at 9.
 
 - Chapter Map headings such as `## Chapter 1: The Missing Face` are parsed into
   an ordered outline. Body text below each heading becomes that chapter's scene
-  plan.
+  plan. A map may continue after existing chapters: with fourteen chapters
+  written, a map starting at Chapter 15 creates Chapters 15 onward and leaves the
+  earlier chapters untouched.
 - **Build chapters** previews the detected outline and creates only the missing
   chapter records. Existing chapters, including authored prose and titles, are
   never deleted or overwritten.
@@ -19,12 +21,17 @@ Outline and chapter-number foundation. Schema stays at 9.
   position shifts later chapters down and keeps numbering contiguous.
 - The model settings and drafting dialog now offer a **16,384-token** context
   window, with 8k retained as the low-resource default.
+- Prompt budgets now scale with the selected context window. Output tokens and
+  system/instruction space are reserved first, then documents, canon, and
+  retrieved memory receive larger shares as the window grows.
 
 ### Changed
 
 - Chapter outline sync is additive and idempotent: applying the same Chapter Map
   twice creates nothing the second time.
-- Outline numbering must run from 1 without gaps or duplicates.
+- Outline numbering must be contiguous without gaps or duplicates. A map may
+  start above 1 only when existing chapters reach the chapter immediately before
+  it.
 
 ## [0.4.1] — 2026-11-17
 

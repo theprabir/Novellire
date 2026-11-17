@@ -122,8 +122,10 @@ The interface has these surfaces:
   summary, project documents, and retrieved memory, and the saved plan is
   included when the chapter is drafted. A Chapter Map with numbered headings can
   be previewed with **Build chapters**, which creates only missing chapter
-  records and leaves existing chapters untouched. New chapters can be inserted
-  at a chosen chapter number, shifting later chapters down. Chapters, and the
+  records and leaves existing chapters untouched. A map may continue after
+  written chapters: with fourteen chapters already written, a map starting at
+  Chapter 15 creates Chapters 15 onward. New chapters can be inserted at a
+  chosen chapter number, shifting later chapters down. Chapters, and the
   legacy scene records inside them, can be moved up or down and deleted;
   positions are renumbered in the same transaction so the order stays contiguous
   in the database.
@@ -184,7 +186,7 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-211 tests run fully offline. All inference is stubbed, so no model or Ollama
+217 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
@@ -287,7 +289,7 @@ duplicate, `422` schema, `502` provider failure.
 | `generation.temperature` | `0.8` | Sampling temperature |
 | `generation.top_p` | `0.9` | Nucleus sampling |
 | `generation.num_predict` | `700` | Maximum output tokens |
-| `generation.context_window` | `4096` | `num_ctx` passed to the model; UI offers 2k–16k |
+| `generation.context_window` | `4096` | `num_ctx` passed to the model; UI offers 2k–16k and prompt budgets scale with it |
 
 Environment overrides: `NOVELLIRE_CONFIG`, `NOVELLIRE_DATA_DIR`,
 `NOVELLIRE_OLLAMA_URL`.

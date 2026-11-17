@@ -119,11 +119,11 @@ def parse_chapter_map(content: str) -> list[OutlineEntry]:
         raise InvalidInputError(
             f"Chapter numbers must be unique. Duplicate number(s): {listed}."
         )
-    expected = list(range(1, max(numbers) + 1))
+    expected = list(range(min(numbers), max(numbers) + 1))
     if sorted(numbers) != expected:
         raise InvalidInputError(
-            "Chapter numbers must run from 1 without gaps so the outline can be "
-            "applied in order."
+            "Chapter numbers must be contiguous, without gaps, so the outline can "
+            "be applied in order."
         )
 
     return sorted(entries, key=lambda entry: entry.number)
@@ -147,10 +147,16 @@ class OutlineService:
                 "Write the Chapter Map before building chapters from it."
             )
         entries = parse_chapter_map(document.content)
-        existing = {
-            chapter.position: chapter
-            for chapter in self._chapters.list_chapters(project_id)
-        }
+        chapters = self._chapters.list_chapters(project_id)
+        existing = {chapter.position: chapter for chapter in chapters}
+        next_position = max(existing, default=0) + 1
+        first_number = entries[0].number
+        if first_number > next_position:
+            raise InvalidInputError(
+                f"The Chapter Map starts at Chapter {first_number}, but the next "
+                f"chapter is {next_position}. Start the map there, or add the "
+                "missing chapters first."
+            )
         items = []
         for entry in entries:
             chapter = existing.get(entry.number)

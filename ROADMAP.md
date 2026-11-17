@@ -86,9 +86,13 @@ text, but it is no longer the primary writing surface.
 
 - Parse Markdown-style Chapter Map headings into ordered chapter entries.
 - Preview detected chapters and create missing blank chapter records.
+- Allow a Chapter Map to continue after existing chapters, so a map starting at
+  Chapter 15 works when Chapters 1–14 already exist.
 - Never delete chapters or overwrite existing chapter prose during outline sync.
 - Add optional chapter number when adding/importing a chapter; insert and reorder.
 - Add 16,384-token context selection while keeping 8k as the low-resource default.
+- Scale document and retrieved-memory prompt budgets with the selected window,
+  reserving output and system/instruction space first.
 - Keep schema at version 9; no destructive migration is required.
 
 Acceptance: a Chapter Map with twelve entries creates twelve chapters; importing

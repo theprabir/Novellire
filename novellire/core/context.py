@@ -58,6 +58,63 @@ RELATIONSHIP_DESCRIPTION_LIMIT = 300
 STATE_MAX_RECORDS = 5
 STATE_CHAR_LIMIT = 1_500
 STATE_FIELD_LIMIT = 250
+CHARS_PER_TOKEN = 4
+CONTEXT_RESERVE_TOKENS = 600
+CONTEXT_MIN_USABLE_TOKENS = 512
+
+
+@dataclass(frozen=True)
+class ContextBudget:
+    """Character budgets derived from the selected context window.
+
+    Output tokens and room for the system/instruction scaffold are reserved
+    before input space is divided among documents, canon, and retrieved memory.
+    The conversion is deliberately conservative because token density varies by
+    model and language.
+    """
+
+    context_window: int
+    reserved_output_tokens: int
+    total_chars: int
+    master_bible_chars: int
+    character_bible_chars: int
+    chapter_map_chars: int
+    style_guide_chars: int
+    chapter_plan_chars: int
+    bible_entries_chars: int
+    character_profiles_chars: int
+    memory_chars: int
+    events_chars: int
+    relationships_chars: int
+    states_chars: int
+
+    @classmethod
+    def from_window(
+        cls, context_window: int, output_tokens: int
+    ) -> "ContextBudget":
+        window = max(int(context_window), CONTEXT_MIN_USABLE_TOKENS)
+        output = max(int(output_tokens), 32)
+        usable = max(window - output - CONTEXT_RESERVE_TOKENS, CONTEXT_MIN_USABLE_TOKENS)
+        total = usable * CHARS_PER_TOKEN
+        return cls(
+            context_window=window,
+            reserved_output_tokens=output,
+            total_chars=total,
+            master_bible_chars=int(total * 0.14),
+            character_bible_chars=int(total * 0.12),
+            chapter_map_chars=int(total * 0.14),
+            style_guide_chars=int(total * 0.06),
+            chapter_plan_chars=int(total * 0.05),
+            bible_entries_chars=int(total * 0.12),
+            character_profiles_chars=int(total * 0.12),
+            memory_chars=int(total * 0.12),
+            events_chars=int(total * 0.06),
+            relationships_chars=int(total * 0.03),
+            states_chars=int(total * 0.04),
+        )
+
+
+DEFAULT_CONTEXT_BUDGET = ContextBudget.from_window(4096, 700)
 
 # Canon basics worth carrying even when the request names nothing specific.
 FOUNDATIONAL_CATEGORIES = (
@@ -131,13 +188,14 @@ class GenerationContext:
     character_states: str = ""
     memory_chapters: tuple[MemoryChapter, ...] = ()
     memory_events: tuple[MemoryEvent, ...] = ()
+    budget: ContextBudget = DEFAULT_CONTEXT_BUDGET
 
     @property
     def earlier_chapters(self) -> str:
         """Prompt block for retrieved chapters, within the memory budget."""
         return _join_with_budget(
             [_format_memory(chapter) for chapter in self.memory_chapters],
-            MEMORY_CHAR_LIMIT,
+            self.budget.memory_chars,
         )
 
     @property
@@ -145,7 +203,7 @@ class GenerationContext:
         """Prompt block for retrieved episodic events, within their budget."""
         return _join_with_budget(
             [_format_event(event) for event in self.memory_events],
-            MEMORY_EVENT_CHAR_LIMIT,
+            self.budget.events_chars,
         )
 
     def documents(self) -> dict[str, str]:
@@ -189,7 +247,10 @@ class GenerationContextBuilder:
         chapter_title: str = "",
         scene_title: str = "",
         context_notes: str = "",
+        context_window: int = 4096,
+        output_tokens: int = 700,
     ) -> GenerationContext:
+        budget = ContextBudget.from_window(context_window, output_tokens)
         chapter = self._chapters.get(chapter_id) if chapter_id is not None else None
         query_text = " ".join(
             part
@@ -235,22 +296,23 @@ class GenerationContextBuilder:
             style_guide=documents.get("style_guide", ""),
             bible_entries=_join_with_budget(
                 [_format_entry(entry) for entry in entries],
-                STORY_BIBLE_CHAR_LIMIT,
+                budget.bible_entries_chars,
             ),
             character_profiles=_join_with_budget(
                 [_format_character(character) for character in profiles],
-                CHARACTER_CHAR_LIMIT,
+                budget.character_profiles_chars,
             ),
             relationship_records=_join_with_budget(
                 [_format_relationship(record) for record in relationships],
-                RELATIONSHIP_CHAR_LIMIT,
+                budget.relationships_chars,
             ),
             character_states=_join_with_budget(
                 [_format_state(state) for state in states],
-                STATE_CHAR_LIMIT,
+                budget.states_chars,
             ),
             memory_chapters=tuple(memory),
             memory_events=tuple(memory_events),
+            budget=budget,
         )
 
     def _retrieve_chapters(

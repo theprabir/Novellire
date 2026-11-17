@@ -25,7 +25,6 @@ logger = get_logger("core.generation")
 DEFAULT_TARGET_WORDS = 900
 MIN_TARGET_WORDS = 50
 MAX_TARGET_WORDS = 6000
-DOCUMENT_CHAR_LIMIT = 2_500
 
 
 @dataclass(frozen=True)
@@ -105,13 +104,23 @@ class GenerationService:
             instructions=cleaned_instructions,
             target_words=target,
             chapter_title=(chapter_title or "").strip(),
-            chapter_plan=_clip(narrative.chapter_plan),
+            chapter_plan=_clip(
+                narrative.chapter_plan, narrative.budget.chapter_plan_chars
+            ),
             scene_title=(scene_title or "").strip(),
             context_notes=(context_notes or "").strip(),
-            master_bible=_clip(narrative.master_bible),
-            character_bible=_clip(narrative.character_bible),
-            chapter_map=_clip(narrative.chapter_map),
-            style_guide=_clip(narrative.style_guide),
+            master_bible=_clip(
+                narrative.master_bible, narrative.budget.master_bible_chars
+            ),
+            character_bible=_clip(
+                narrative.character_bible, narrative.budget.character_bible_chars
+            ),
+            chapter_map=_clip(
+                narrative.chapter_map, narrative.budget.chapter_map_chars
+            ),
+            style_guide=_clip(
+                narrative.style_guide, narrative.budget.style_guide_chars
+            ),
             earlier_chapters=narrative.earlier_chapters,
             earlier_events=narrative.earlier_events,
             bible_entries=narrative.bible_entries,
@@ -157,10 +166,18 @@ class GenerationService:
             chapter_title=(chapter_title or "").strip(),
             chapter_summary=(chapter_summary or "").strip(),
             existing_plan=(chapter_plan or "").strip(),
-            master_bible=_clip(narrative.master_bible),
-            character_bible=_clip(narrative.character_bible),
-            chapter_map=_clip(narrative.chapter_map),
-            style_guide=_clip(narrative.style_guide),
+            master_bible=_clip(
+                narrative.master_bible, narrative.budget.master_bible_chars
+            ),
+            character_bible=_clip(
+                narrative.character_bible, narrative.budget.character_bible_chars
+            ),
+            chapter_map=_clip(
+                narrative.chapter_map, narrative.budget.chapter_map_chars
+            ),
+            style_guide=_clip(
+                narrative.style_guide, narrative.budget.style_guide_chars
+            ),
             earlier_chapters=narrative.earlier_chapters,
             earlier_events=narrative.earlier_events,
             bible_entries=narrative.bible_entries,
@@ -263,6 +280,6 @@ class GenerationService:
         )
 
 
-def _clip(text: str) -> str:
-    """Keep prompt context small enough for CPU inference."""
-    return (text or "")[:DOCUMENT_CHAR_LIMIT]
+def _clip(text: str, limit: int) -> str:
+    """Keep one prompt block inside its share of the context budget."""
+    return (text or "")[:limit]

@@ -1309,6 +1309,8 @@ def _build_router(services: ApiServices) -> APIRouter:
             chapter_title=chapter_title or "",
             scene_title=scene_title or "",
             context_notes=payload.context_notes,
+            context_window=payload.context_window,
+            output_tokens=payload.num_predict,
         )
 
         outcome = services.generation.generate(
@@ -1354,6 +1356,8 @@ def _build_router(services: ApiServices) -> APIRouter:
             instructions=payload.instructions,
             chapter_id=chapter.id,
             chapter_title=chapter.title,
+            context_window=payload.context_window,
+            output_tokens=payload.num_predict,
         )
         outcome = services.generation.generate_plan(
             project_id=chapter.project_id,
