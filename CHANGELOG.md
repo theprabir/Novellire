@@ -3,6 +3,22 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.4.0] — 2026-11-17
+
+Chapter approval boundary. Schema stays at 9.
+
+### Added
+
+- The chapter editor exposes workflow status: planned, drafting, drafted, or
+  approved.
+- Approved chapters lock their prose. Changing text requires the same request
+  to reopen the chapter by setting another status, so AI insertion, manual
+  replacement, and revision restore cannot silently overwrite approved text.
+- Approved chapters hide **Draft with AI**; History still compares revisions,
+  but restore is disabled with a reopen warning.
+- API regression coverage for reopening before text edits and before restoring
+  an older revision.
+
 ## [0.3.8] — 2026-11-17
 
 Revision history hardening and comparison. Schema stays at 9.

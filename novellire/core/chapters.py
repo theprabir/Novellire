@@ -165,6 +165,7 @@ class ChapterService:
             fields["content"] = cleaned
             fields["word_count"] = count_words(cleaned)
 
+        self._ensure_text_editable(chapter, fields)
         if (
             "content" in fields
             and chapter.content.strip()
@@ -193,6 +194,10 @@ class ChapterService:
         revision = self.get_revision(chapter_id, revision_id)
         if revision.content == chapter.content:
             return chapter
+        if chapter.status == "approved":
+            raise InvalidInputError(
+                "This chapter is approved. Reopen it before restoring older text."
+            )
         if chapter.content.strip():
             self._snapshot(chapter, source="restore")
         return self._repository.update(
@@ -200,6 +205,20 @@ class ChapterService:
             content=revision.content,
             word_count=revision.word_count,
         )
+
+    def _ensure_text_editable(
+        self, chapter: ChapterRecord, fields: dict[str, object]
+    ) -> None:
+        """Approved prose may only change when the same request reopens it."""
+        if (
+            chapter.status == "approved"
+            and "content" in fields
+            and chapter.content != fields["content"]
+            and fields.get("status", "approved") == "approved"
+        ):
+            raise InvalidInputError(
+                "This chapter is approved. Reopen it before changing its text."
+            )
 
     def _snapshot(self, chapter: ChapterRecord, *, source: str) -> None:
         self._revisions.create(

@@ -352,11 +352,21 @@ function chapterEditor(ctx, chapter) {
   }
 
   const imported = chapter.origin === 'imported';
+  const approved = chapter.status === 'approved';
   const chapters = ctx.state.manuscript?.chapters || [];
   const index = chapters.findIndex((item) => item.id === chapter.id);
   const scenes =
     ctx.state.tree?.chapters?.find((item) => item.id === chapter.id)?.scenes || [];
   const title = input({ value: chapter.title, maxlength: '200', placeholder: 'Chapter title' });
+  const statusOptions = (
+    ctx.state.meta?.work_statuses || [
+      { key: 'planned', label: 'Planned' },
+      { key: 'drafting', label: 'Drafting' },
+      { key: 'drafted', label: 'Drafted' },
+      { key: 'approved', label: 'Approved' },
+    ]
+  ).map((item) => ({ value: item.key, label: item.label }));
+  const status = select(statusOptions, { value: chapter.status });
   const content = textarea({
     value: chapter.content,
     rows: 24,
@@ -377,7 +387,16 @@ function chapterEditor(ctx, chapter) {
   const form = el(
     'form',
     { class: 'card form-card form-grid' },
-    el('div', { class: 'span-2' }, field('Chapter title', title)),
+    el('div', {}, field('Chapter title', title)),
+    el(
+      'div',
+      {},
+      field(
+        'Status',
+        status,
+        'Approved chapters must be reopened before their text changes.'
+      )
+    ),
     el('div', { class: 'span-2' }, content),
     el(
       'div',
@@ -429,16 +448,22 @@ function chapterEditor(ctx, chapter) {
         : null,
       imported
         ? el('span', { class: 'chip' }, 'Pre-written')
-        : el(
-            'button',
-            {
-              class: 'btn btn-ghost',
-              type: 'button',
-              onClick: () => openGenerateDialog(ctx, chapter),
-            },
-            icon('wand'),
-            'Draft with AI'
-          )
+        : approved
+          ? el(
+              'span',
+              { class: 'chip ok', title: 'Reopen this chapter to draft into it.' },
+              'Approved'
+            )
+          : el(
+              'button',
+              {
+                class: 'btn btn-ghost',
+                type: 'button',
+                onClick: () => openGenerateDialog(ctx, chapter),
+              },
+              icon('wand'),
+              'Draft with AI'
+            )
     )
   );
 
@@ -451,6 +476,7 @@ function chapterEditor(ctx, chapter) {
         title: title.value,
         content: content.value,
         summary: summary.value,
+        status: status.value,
       });
       await ctx.refresh();
       toast('Chapter saved.', 'success');
@@ -541,6 +567,7 @@ async function openChapterHistory(ctx, chapter, currentText) {
 
   const draft = typeof currentText === 'string' ? currentText : chapter.content;
   const dirty = draft !== chapter.content;
+  const approved = chapter.status === 'approved';
   const body = el('div', { class: 'revision-list' });
 
   body.append(
@@ -556,6 +583,15 @@ async function openChapterHistory(ctx, chapter, currentText) {
         'p',
         { class: 'revision-warning' },
         'You have unsaved changes. Save the chapter before restoring an older version.'
+      )
+    );
+  }
+  if (approved) {
+    body.append(
+      el(
+        'p',
+        { class: 'revision-warning' },
+        'This chapter is approved. Reopen it before restoring older text.'
       )
     );
   }
@@ -598,7 +634,7 @@ async function openChapterHistory(ctx, chapter, currentText) {
 
       const restore = el(
         'button',
-        { class: 'btn btn-sm', type: 'button', disabled: dirty },
+        { class: 'btn btn-sm', type: 'button', disabled: dirty || approved },
         icon('refresh'),
         'Restore'
       );
@@ -613,7 +649,7 @@ async function openChapterHistory(ctx, chapter, currentText) {
           toast('Chapter text restored. The previous text is in History.', 'success');
         } catch (error) {
           toast(error.message, 'error');
-          restore.disabled = dirty;
+          restore.disabled = dirty || approved;
         }
       });
 
@@ -1134,6 +1170,7 @@ function openGenerateDialog(ctx, chapter) {
 
 function showDraft(ctx, record, chapter) {
   const existing = chapter.content || '';
+  const approved = chapter.status === 'approved';
   const used = record.context?.chapters || [];
   const usedEvents = record.context?.events || [];
   const output = textarea({ value: record.output, rows: 16, class: 'textarea chapter-text' });
@@ -1145,6 +1182,7 @@ function showDraft(ctx, record, chapter) {
     {
       class: 'btn btn-primary',
       type: 'button',
+      disabled: approved,
       onClick: async () => {
         const text = output.value.trim();
         if (!text) {
@@ -1187,6 +1225,13 @@ function showDraft(ctx, record, chapter) {
       ),
       used.length || usedEvents.length ? contextUsed(used, usedEvents) : null,
       output,
+      approved
+        ? el(
+            'p',
+            { class: 'revision-warning' },
+            'This chapter is approved. Reopen it before inserting an AI draft.'
+          )
+        : null,
       existing
         ? el(
             'label',

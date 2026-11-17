@@ -46,7 +46,7 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
 
     assert payload["status"] == "ok"
     assert payload["schema_version"] == 9
-    assert payload["version"] == "0.3.8"
+    assert payload["version"] == "0.4.0"
 
 
 def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:
@@ -932,6 +932,66 @@ def test_chapter_revisions_list_previews_and_restore(
     assert len(
         client.get(f"/api/chapters/{chapter['id']}/revisions").json()
     ) == 2
+
+
+def test_approved_chapter_text_must_be_reopened_first(
+    client: TestClient,
+) -> None:
+    project = create_project(client)
+    chapter = client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={"title": "The Gate", "content": "Approved text."},
+    ).json()
+    approved = client.patch(
+        f"/api/chapters/{chapter['id']}", json={"status": "approved"}
+    )
+    assert approved.status_code == 200
+
+    blocked = client.patch(
+        f"/api/chapters/{chapter['id']}", json={"content": "Changed text."}
+    )
+    assert blocked.status_code == 400
+    assert "Reopen" in blocked.json()["detail"]
+
+    reopened = client.patch(
+        f"/api/chapters/{chapter['id']}",
+        json={"status": "drafted", "content": "Changed text."},
+    )
+    assert reopened.status_code == 200
+    assert reopened.json()["content"] == "Changed text."
+    assert reopened.json()["status"] == "drafted"
+
+
+def test_approved_chapter_must_be_reopened_before_restore(
+    client: TestClient,
+) -> None:
+    project = create_project(client)
+    chapter = client.post(
+        f"/api/projects/{project['id']}/chapters",
+        json={"title": "The Gate", "content": "Original text."},
+    ).json()
+    client.patch(
+        f"/api/chapters/{chapter['id']}", json={"content": "Changed text."}
+    )
+    revision = client.get(
+        f"/api/chapters/{chapter['id']}/revisions"
+    ).json()[0]
+    client.patch(
+        f"/api/chapters/{chapter['id']}", json={"status": "approved"}
+    )
+
+    blocked = client.post(
+        f"/api/chapters/{chapter['id']}/revisions/{revision['id']}/restore"
+    )
+    assert blocked.status_code == 400
+    assert "Reopen" in blocked.json()["detail"]
+
+    client.patch(f"/api/chapters/{chapter['id']}", json={"status": "drafted"})
+    restored = client.post(
+        f"/api/chapters/{chapter['id']}/revisions/{revision['id']}/restore"
+    )
+    assert restored.status_code == 200
+    assert restored.json()["content"] == "Original text."
 
 
 def test_chapter_with_state_snapshots_cannot_be_deleted(
