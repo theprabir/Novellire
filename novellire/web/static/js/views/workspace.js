@@ -235,6 +235,21 @@ function documentEditor(ctx, document) {
     words,
   ];
 
+  if (document.kind === 'chapter_map' && document.content.trim()) {
+    actions.push(
+      el(
+        'button',
+        {
+          class: 'btn btn-ghost',
+          type: 'button',
+          onClick: () => openOutlinePreview(ctx),
+        },
+        icon('layers'),
+        'Build chapters'
+      )
+    );
+  }
+
   const canAnalyse =
     document.kind === 'style_guide' &&
     chaptersWithText.length > 0 &&
@@ -328,6 +343,103 @@ async function analyseStyleGuide(ctx, button) {
     button.disabled = false;
     button.replaceChildren(icon('sparkles'), 'Analyse my manuscript');
   }
+}
+
+function openOutlinePreview(ctx) {
+  const host = el('div', {}, el('p', { class: 'hint' }, 'Reading the Chapter Map…'));
+  let ready = false;
+  const apply = el(
+    'button',
+    { class: 'btn btn-primary', type: 'button', disabled: true },
+    'Create chapters'
+  );
+  const modal = openModal({
+    title: 'Build chapters from the Chapter Map',
+    wide: true,
+    body: host,
+    footer: [
+      el(
+        'button',
+        { class: 'btn btn-ghost', type: 'button', onClick: () => modal.close() },
+        'Cancel'
+      ),
+      apply,
+    ],
+  });
+
+  apply.addEventListener('click', async () => {
+    if (!ready) return;
+    apply.disabled = true;
+    apply.replaceChildren(icon('refresh'), 'Creating…');
+    try {
+      const result = await api.post(
+        `/api/projects/${ctx.state.activeProjectId}/outline/apply`
+      );
+      modal.close();
+      ctx.state.workspaceType = 'chapters';
+      ctx.state.selectedId = result.created[0]?.id || ctx.state.selectedId;
+      if (ctx.state.selectedId) {
+        syncHash(`#/workspace/chapters/${ctx.state.selectedId}`);
+      }
+      await ctx.refresh();
+      toast(
+        result.created_count
+          ? `${result.created_count} chapter${result.created_count === 1 ? '' : 's'} created.`
+          : 'No chapters needed creating.',
+        'success'
+      );
+    } catch (error) {
+      toast(error.message, 'error');
+      apply.disabled = false;
+      apply.replaceChildren('Create chapters');
+    }
+  });
+
+  api
+    .get(`/api/projects/${ctx.state.activeProjectId}/outline/preview`)
+    .then((preview) => {
+      ready = true;
+      apply.disabled = preview.create_count === 0;
+      apply.replaceChildren(
+        preview.create_count
+          ? `Create ${preview.create_count} chapter${preview.create_count === 1 ? '' : 's'}`
+          : 'All chapters already exist'
+      );
+      host.replaceChildren(
+        el(
+          'p',
+          { class: 'hint' },
+          `${preview.chapters.length} chapters detected · ${preview.create_count} to create · ${preview.existing_count} already exist. Existing chapters are left unchanged.`
+        ),
+        el(
+          'div',
+          { class: 'outline-preview' },
+          ...preview.chapters.map((chapter) =>
+            el(
+              'div',
+              { class: 'outline-row' },
+              el('span', { class: 'chip' }, `Chapter ${chapter.number}`),
+              el(
+                'div',
+                { class: 'texts' },
+                el('strong', {}, chapter.title),
+                chapter.objectives
+                  ? el('span', { class: 'sub' }, chapter.objectives.split('\n')[0])
+                  : null
+              ),
+              el(
+                'span',
+                { class: chapter.action === 'create' ? 'chip accent' : 'chip soon' },
+                chapter.action === 'create' ? 'Will create' : 'Exists'
+              )
+            )
+          )
+        )
+      );
+    })
+    .catch((error) => {
+      host.replaceChildren(el('p', { class: 'hint' }, error.message));
+    });
 }
 
 /* -- chapter editor ------------------------------------------------------- */
@@ -1138,6 +1250,12 @@ function deleteScene(ctx, scene) {
 
 function openChapterDialog(ctx) {
   const title = input({ placeholder: 'The Sealed Vault', maxlength: '200' });
+  const position = input({
+    type: 'number',
+    min: '1',
+    step: '1',
+    placeholder: 'Next chapter',
+  });
   const content = textarea({
     rows: 12,
     class: 'textarea chapter-text',
@@ -1148,6 +1266,15 @@ function openChapterDialog(ctx) {
     'form',
     { class: 'form-grid' },
     el('div', { class: 'span-2' }, field('Chapter title', title)),
+    el(
+      'div',
+      { class: 'span-2' },
+      field(
+        'Chapter number',
+        position,
+        'Optional. Leave blank to add at the end; existing chapters shift down.'
+      )
+    ),
     el('div', { class: 'span-2' }, field('Chapter text', content)),
     el(
       'div',
@@ -1168,8 +1295,10 @@ function openChapterDialog(ctx) {
     button.disabled = true;
     try {
       const pasted = content.value.trim();
+      const number = position.value.trim() ? Number(position.value) : null;
       const created = await api.post(`/api/projects/${ctx.state.activeProjectId}/chapters`, {
-        title: title.value,
+        title: title.value.trim() || (number ? `Chapter ${number}` : ''),
+        position: number || undefined,
         content: content.value,
         origin: pasted ? 'imported' : 'written',
       });
@@ -1213,7 +1342,7 @@ function openGenerateDialog(ctx, chapter) {
   temperature.addEventListener('input', () => { temperatureValue.textContent = Number(temperature.value).toFixed(2); });
   const numPredict = input({ type: 'number', min: '32', max: '8192', step: '1', value: String(saved.num_predict) });
   const contextWindow = select(
-    [2048, 4096, 8192].map((value) => ({ value: String(value), label: `${value} tokens` })),
+    [2048, 4096, 8192, 16384].map((value) => ({ value: String(value), label: `${value} tokens` })),
     { value: String(saved.context_window) }
   );
 

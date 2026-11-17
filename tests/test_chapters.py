@@ -31,6 +31,47 @@ def test_chapters_append_in_order(
     ]
 
 
+def test_chapter_can_be_inserted_at_a_number(
+    chapter_service: ChapterService, sample_project: Project
+) -> None:
+    chapter_service.create_chapter(project_id=sample_project.id, title="One")
+    chapter_service.create_chapter(project_id=sample_project.id, title="Two")
+    chapter_service.create_chapter(project_id=sample_project.id, title="Three")
+
+    inserted = chapter_service.create_chapter(
+        project_id=sample_project.id,
+        title="One and a Half",
+        content="Pasted prose.",
+        origin="imported",
+        position=2,
+    )
+
+    chapters = chapter_service.list_chapters(sample_project.id)
+    assert inserted.position == 2
+    assert [chapter.title for chapter in chapters] == [
+        "One",
+        "One and a Half",
+        "Two",
+        "Three",
+    ]
+    assert [chapter.position for chapter in chapters] == [1, 2, 3, 4]
+
+
+def test_chapter_number_must_be_reachable(
+    chapter_service: ChapterService, sample_project: Project
+) -> None:
+    chapter_service.create_chapter(project_id=sample_project.id, title="One")
+
+    with pytest.raises(InvalidInputError, match="between 1 and 2"):
+        chapter_service.create_chapter(
+            project_id=sample_project.id, title="Skipped", position=4
+        )
+    with pytest.raises(InvalidInputError, match="between 1 and 2"):
+        chapter_service.create_chapter(
+            project_id=sample_project.id, title="Zero", position=0
+        )
+
+
 def test_chapters_are_scoped_per_project(
     chapter_service: ChapterService, project_repository: ProjectRepository
 ) -> None:

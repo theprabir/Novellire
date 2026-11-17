@@ -32,6 +32,7 @@ from ..core.events import EventExtractionService
 from ..core.export import ExportService
 from ..core.generation import GenerationService
 from ..core.memory import MemoryService
+from ..core.outline import OutlineService
 from ..core.projects import ProjectService
 from ..core.relationships import (
     RELATIONSHIP_TYPE_LABELS,
@@ -159,6 +160,7 @@ class AliasesRequest(BaseModel):
 
 class ChapterCreateRequest(BaseModel):
     title: str
+    position: int | None = None
     part: str = ""
     summary: str = ""
     objectives: str = ""
@@ -302,6 +304,7 @@ class ApiServices:
     chapters: ChapterService
     scenes: SceneService
     documents: ProjectDocumentService
+    outline: OutlineService
     export: ExportService
     context: GenerationContextBuilder
     style_guide: StyleGuideService
@@ -354,6 +357,7 @@ def build_services(
         chapters=chapter_service,
         scenes=SceneService(SceneRepository(database), chapter_repository),
         documents=document_service,
+        outline=OutlineService(document_service, chapter_service),
         export=ExportService(
             project_repository, chapter_service, document_service
         ),
@@ -729,6 +733,24 @@ def _build_router(services: ApiServices) -> APIRouter:
             "updated_at": document.updated_at,
         }
 
+    @router.get("/projects/{project_id}/outline/preview")
+    def preview_outline(project_id: int) -> dict[str, Any]:
+        preview = services.outline.preview(project_id)
+        return {
+            "chapters": [asdict(item) for item in preview.items],
+            "create_count": preview.create_count,
+            "existing_count": preview.existing_count,
+        }
+
+    @router.post("/projects/{project_id}/outline/apply")
+    def apply_outline(project_id: int) -> dict[str, Any]:
+        result = services.outline.apply(project_id)
+        return {
+            "created": [asdict(chapter) for chapter in result.created],
+            "created_count": len(result.created),
+            "existing_count": result.existing_count,
+        }
+
     @router.post("/projects/{project_id}/style-guide/analyze")
     def analyze_style_guide(
         project_id: int, payload: StyleGuideRequest
@@ -897,6 +919,7 @@ def _build_router(services: ApiServices) -> APIRouter:
         chapter = services.chapters.create_chapter(
             project_id=project_id,
             title=payload.title,
+            position=payload.position,
             part=payload.part,
             summary=payload.summary,
             objectives=payload.objectives,

@@ -3,6 +3,29 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.4.2] — 2026-11-17
+
+Outline and chapter-number foundation. Schema stays at 9.
+
+### Added
+
+- Chapter Map headings such as `## Chapter 1: The Missing Face` are parsed into
+  an ordered outline. Body text below each heading becomes that chapter's scene
+  plan.
+- **Build chapters** previews the detected outline and creates only the missing
+  chapter records. Existing chapters, including authored prose and titles, are
+  never deleted or overwritten.
+- **Add chapter** accepts an optional chapter number. Importing at an existing
+  position shifts later chapters down and keeps numbering contiguous.
+- The model settings and drafting dialog now offer a **16,384-token** context
+  window, with 8k retained as the low-resource default.
+
+### Changed
+
+- Chapter outline sync is additive and idempotent: applying the same Chapter Map
+  twice creates nothing the second time.
+- Outline numbering must run from 1 without gaps or duplicates.
+
 ## [0.4.1] — 2026-11-17
 
 Chapter planning. Schema stays at 9.

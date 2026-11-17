@@ -66,11 +66,13 @@ class ChapterService:
         status: str = "planned",
         content: str = "",
         origin: str = "written",
+        position: int | None = None,
     ) -> ChapterRecord:
         if self._projects.get(project_id) is None:
             raise ProjectNotFoundError(
                 "That project no longer exists. Choose another project."
             )
+        validated_position = self._validate_insert_position(project_id, position)
         if viewpoint_character_id is not None:
             self._validate_viewpoint(project_id, viewpoint_character_id)
 
@@ -97,7 +99,22 @@ class ChapterService:
             content=cleaned_content,
             word_count=count_words(cleaned_content),
             origin=self._validate_origin(origin),
+            position=validated_position,
         )
+
+    def _validate_insert_position(
+        self, project_id: int, position: int | None
+    ) -> int | None:
+        if position is None:
+            return None
+        if isinstance(position, bool) or not isinstance(position, int):
+            raise InvalidInputError("Chapter number must be a whole number.")
+        count = len(self._repository.list_for_project(project_id))
+        if position < 1 or position > count + 1:
+            raise InvalidInputError(
+                f"Chapter number must be between 1 and {count + 1}."
+            )
+        return position
 
     def list_chapters(self, project_id: int) -> list[ChapterRecord]:
         return self._repository.list_for_project(project_id)

@@ -524,6 +524,11 @@ button { cursor: pointer; }
 .form-grid { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .form-grid .span-2 { grid-column: span 2; }
 .form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
+.outline-preview { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.outline-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel); }
+.outline-row .texts { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; }
+.outline-row .texts strong { font-size: var(--fs-sm); }
+.outline-row .sub { color: var(--muted); font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .segmented {
   display: inline-flex;

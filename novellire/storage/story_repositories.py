@@ -452,6 +452,7 @@ class ChapterRepository:
         content: str = "",
         word_count: int = 0,
         origin: str = "written",
+        position: int | None = None,
     ) -> ChapterRecord:
         now = utc_now_iso()
         with self._database.transaction() as connection:
@@ -460,7 +461,22 @@ class ChapterRepository:
                 "FROM chapters WHERE project_id = ?",
                 (project_id,),
             ).fetchone()
-            position = int(row["next_position"]) if row is not None else 1
+            next_position = int(row["next_position"]) if row is not None else 1
+            if position is None or position >= next_position:
+                position = next_position
+            else:
+                # Move through negative positions so the unique constraint never
+                # sees two chapters claim the same position mid-update.
+                connection.execute(
+                    "UPDATE chapters SET position = -position "
+                    "WHERE project_id = ? AND position >= ?",
+                    (project_id, position),
+                )
+                connection.execute(
+                    "UPDATE chapters SET position = (-position) + 1 "
+                    "WHERE project_id = ? AND position < 0",
+                    (project_id,),
+                )
             try:
                 cursor = connection.execute(
                     """

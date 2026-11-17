@@ -323,7 +323,7 @@ function modelCard(ctx) {
     value: String(generation.num_predict),
   });
   const contextWindow = select(
-    [2048, 4096, 8192].map((value) => ({ value: String(value), label: `${value} tokens` })),
+    [2048, 4096, 8192, 16384].map((value) => ({ value: String(value), label: `${value} tokens` })),
     { value: String(generation.context_window) }
   );
 

@@ -120,10 +120,13 @@ The interface has these surfaces:
   AI insertion, or a revision restore can change it. Each chapter also has an
   editable **scene plan**; **Plan with AI** proposes one from the chapter
   summary, project documents, and retrieved memory, and the saved plan is
-  included when the chapter is drafted. Chapters, and the legacy
-  scene records inside them, can be moved up or down and deleted; positions are
-  renumbered in the same transaction so the order stays contiguous in the
-  database.
+  included when the chapter is drafted. A Chapter Map with numbered headings can
+  be previewed with **Build chapters**, which creates only missing chapter
+  records and leaves existing chapters untouched. New chapters can be inserted
+  at a chosen chapter number, shifting later chapters down. Chapters, and the
+  legacy scene records inside them, can be moved up or down and deleted;
+  positions are renumbered in the same transaction so the order stays contiguous
+  in the database.
   Generation receives the four documents plus the story bible entries and
   character profiles that match the request. Matching uses names, aliases,
   titles, categories, and shared words, and the chapter's viewpoint character,
@@ -181,7 +184,7 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-202 tests run fully offline. All inference is stubbed, so no model or Ollama
+211 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
@@ -284,7 +287,7 @@ duplicate, `422` schema, `502` provider failure.
 | `generation.temperature` | `0.8` | Sampling temperature |
 | `generation.top_p` | `0.9` | Nucleus sampling |
 | `generation.num_predict` | `700` | Maximum output tokens |
-| `generation.context_window` | `4096` | `num_ctx` passed to the model |
+| `generation.context_window` | `4096` | `num_ctx` passed to the model; UI offers 2k–16k |
 
 Environment overrides: `NOVELLIRE_CONFIG`, `NOVELLIRE_DATA_DIR`,
 `NOVELLIRE_OLLAMA_URL`.
@@ -311,8 +314,10 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.4.1** (schema version 9). `v0.4.1` adds editable chapter
-scene plans, AI plan proposals, and plan-aware drafting. `v0.4.0` adds chapter
+Current release: **v0.4.2** (schema version 9). `v0.4.2` adds Chapter Map outline
+import, chapter-number insertion, and 16k context selection. `v0.4.1` adds
+editable chapter scene plans, AI plan proposals, and plan-aware drafting.
+`v0.4.0` adds chapter
 workflow status and locks approved prose against manual, AI, and
 revision-restore changes until the chapter is reopened. `v0.3.8` added
 side-by-side revision
