@@ -284,6 +284,45 @@ def test_chat_stream_validates_before_streaming(
         assert "Write a message" in response.json()["detail"]
 
 
+def test_chat_mode_can_switch_within_a_conversation(
+    tmp_path: Path, fake_provider_factory
+) -> None:
+    provider = fake_provider_factory(
+        result=GenerationResult(
+            text="Mira steps through the gate.", model="fake-model", duration_ms=5
+        )
+    )
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads",
+            json={"mode": "plan"},
+        ).json()
+        assert thread["mode"] == "plan"
+
+        switched = client.patch(
+            f"/api/chat/threads/{thread['id']}", json={"mode": "write"}
+        )
+        assert switched.status_code == 200, switched.text
+        assert switched.json()["mode"] == "write"
+
+        reply = client.post(
+            f"/api/chat/threads/{thread['id']}/messages",
+            json={
+                "instructions": "Draft the opening.",
+                "model": "fake-model",
+                "target_words": 240,
+            },
+        )
+        assert reply.status_code == 200, reply.text
+        assert "Target length: about 240 words." in provider.requests[0].prompt
+
+        invalid = client.patch(
+            f"/api/chat/threads/{thread['id']}", json={"mode": "edit"}
+        )
+        assert invalid.status_code == 422
+
+
 def test_chat_rejects_a_chapter_from_another_project(
     tmp_path: Path, fake_provider_factory
 ) -> None:

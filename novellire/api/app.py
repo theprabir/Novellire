@@ -258,6 +258,7 @@ class ChatThreadCreateRequest(BaseModel):
 class ChatThreadUpdateRequest(BaseModel):
     planning_notes: str | None = None
     title: str | None = None
+    mode: Literal["plan", "write"] | None = None
 
 
 class ChatMessageRequest(BaseModel):
@@ -871,6 +872,7 @@ def _build_router(services: ApiServices) -> APIRouter:
             thread_id,
             planning_notes=payload.planning_notes,
             title=payload.title,
+            mode=payload.mode,
         )
         return asdict(thread)
 

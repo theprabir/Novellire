@@ -3,6 +3,36 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.4.6] — 2026-11-18
+
+Chat rebuilt as a focused conversation surface. Schema stays at 11.
+
+### Changed
+
+- The Chat screen is a full-height conversation surface: a 768px centred feed is
+  the only scrolling region and the composer stays pinned to the bottom.
+- Author messages are right-aligned rounded bubbles. Model replies are flush
+  left and rendered as markdown — headings, lists, quotes, inline code, and
+  fenced code blocks with a copy button. Markdown builds DOM nodes and never
+  assigns HTML, so generated text cannot inject markup.
+- The composer is a floating rounded card with an auto-expanding textarea.
+  Enter sends, Shift + Enter adds a line, and there are no attachment controls.
+- A segmented **Plan / Write** switch inside the composer changes the reply mode
+  mid-conversation; the next reply uses the new mode. `PATCH
+  /api/chat/threads/{id}` now accepts `mode`.
+- One circular action button sends (up arrow) and becomes a square **Stop**
+  control while a reply streams.
+- Planning notes moved out of the layout into an optional panel behind the
+  header button and appear only in Plan mode.
+- Conversations open in a slide-over drawer, so the writing column stays clear.
+- An unsent draft survives a reload through `localStorage`.
+
+### Added
+
+- `novellire/web/static/js/markdown.js`, a small markdown-to-DOM renderer.
+- `novellire/web/static/js/views/chat.js`; the Continuity scope stays in
+  `scopes.js`.
+
 ## [0.4.5] — 2026-11-18
 
 Streamed Chat replies. Schema stays at 11.

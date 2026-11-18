@@ -175,11 +175,15 @@ The interface has these surfaces:
   snapshots per chapter (location, status, goals, knowledge), shows the latest
   chapter as current with earlier snapshots as history, and supplies current
   state for selected characters to generation.
-- **Chat** — plan or draft in a persistent conversation scoped to the project or
-  one chapter. Plan mode keeps compact, editable planning notes; Write mode
-  rebuilds its context from the documents, notes, chapter, and memory on every
-  turn. Replies stream token by token, **Stop** keeps the text received so far,
-  and a reload reopens the stored conversation.
+- **Chat** — a full-height conversation surface scoped to the project or one
+  chapter. A centred 768px feed is the only thing that scrolls; the composer
+  floats above the bottom edge. **Plan** and **Write** can be switched from the
+  composer at any point in a conversation: Plan keeps compact, editable planning
+  notes, while Write rebuilds its context from the documents, notes, chapter, and
+  memory on every turn. Replies stream token by token and render as markdown;
+  the round action button becomes **Stop**, which keeps the text received so far.
+  Conversations live in a slide-over drawer, and a reload reopens the stored
+  conversation and any unsent draft.
 - **Continuity** — a designed scope. Its layout, filters, and detail panes are
   reserved and labelled with the phase that will connect them; it shows no
   project data yet.
@@ -213,10 +217,11 @@ novellire/
     index.html             Shell, icon sprite, theme bootstrap, modal, toasts
     static/app.css         Design tokens, layout, reader, settings, scopes
     static/js/app.js       Boot, routing, state, appearance, sidebar chrome
-    static/js/api.js       JSON fetch wrapper and error mapping
+    static/js/api.js       JSON fetch wrapper, error mapping, NDJSON streams
+    static/js/markdown.js  Safe markdown-to-DOM renderer for model replies
     static/js/ui.js        DOM helpers, modal, toasts, prose rendering
     static/js/views/       home, project-settings, projects, workspace,
-                           preview, export, memory, settings, scopes
+                           preview, export, memory, settings, chat, scopes
   config.py                Settings model, TOML loading, env overrides
   errors.py                User-facing error hierarchy
   logging_setup.py         Logging (never logs prompts or prose)
@@ -327,10 +332,13 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.4.5** (schema version 11). `v0.4.5` streams Chat replies as
-the model produces them, with a Stop control that keeps the partial reply.
-`v0.4.4` adds persistent project- and chapter-scoped Chat with Plan and Write
-modes, retrieval-backed context, and author-controlled planning notes. `v0.4.3` adds automatic analysis
+Current release: **v0.4.6** (schema version 11). `v0.4.6` rebuilds Chat as a
+full-height conversation surface: a centred scrolling feed, markdown replies, a
+pinned floating composer, a Plan/Write switch inside the chat, and one
+Send/Stop button. `v0.4.5` streams Chat replies as the model
+produces them, keeping the partial reply when stopped. `v0.4.4` adds persistent
+project- and chapter-scoped Chat with Plan and Write modes, retrieval-backed
+context, and author-controlled planning notes. `v0.4.3` adds automatic analysis
 of every written chapter, queued after chapter and document saves with content
 hashes, derived character-state/location/relationship/open-thread proposals, and
 preservation of manual memory. `v0.4.2` adds Chapter Map outline

@@ -99,6 +99,13 @@ class ChatRepository:
                 (title, utc_now_iso(), thread_id),
             )
 
+    def set_mode(self, thread_id: int, mode: str) -> None:
+        with self._database.transaction() as connection:
+            connection.execute(
+                "UPDATE chat_threads SET mode = ?, updated_at = ? WHERE id = ?",
+                (mode, utc_now_iso(), thread_id),
+            )
+
     def set_planning_notes(
         self, thread_id: int, notes: str, *, source: str
     ) -> ChatThread:

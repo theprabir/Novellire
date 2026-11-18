@@ -136,8 +136,16 @@ class ChatService:
         *,
         planning_notes: str | None = None,
         title: str | None = None,
+        mode: str | None = None,
     ) -> ChatThread:
         thread = self._require_thread(thread_id)
+        if mode is not None:
+            normalized_mode = (mode or "").strip().casefold()
+            if normalized_mode not in CHAT_MODES:
+                raise InvalidInputError(
+                    "Choose Plan or Write mode for a conversation."
+                )
+            self._threads.set_mode(thread.id, normalized_mode)
         if title is not None:
             cleaned = _clean_title(title)
             if cleaned:
