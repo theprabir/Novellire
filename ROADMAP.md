@@ -125,13 +125,23 @@ content is skipped; manual edits survive re-analysis.
 
 ### v0.4.4 — Chat shell and context assembly
 
-- Persistent project and chapter-scoped chat threads.
-- Plan and Write modes.
-- Stored, editable planning notes maintained after planning exchanges.
-- Write mode rebuilds context from documents, notes, chapter, and retrieval.
-- Streaming from Ollama with stop and reconnect support.
-- Large chat layout with side-by-side chapter view and context drawer.
-- Draft checkpoints survive interruption.
+Implemented first slice:
+
+- Persistent project- and chapter-scoped chat threads and messages in SQLite.
+- Plan and Write modes, selected when a conversation starts.
+- Plan replies propose compact planning notes; notes remain editable, and an
+  author edit locks them against later model replacement.
+- Write mode rebuilds context from documents, notes, chapter, retrieval, canon,
+  relationships, and character state on every turn.
+- Chat uses the serialized local provider, so it cannot overlap another
+  inference request.
+
+Remaining:
+
+- Token streaming from Ollama with stop and reconnect support.
+- Side-by-side chapter pane and an expandable context drawer.
+- Draft checkpoints that survive interruption.
+- Insert a Write-mode reply into the chapter with the approval lock enforced.
 
 Acceptance: a planning discussion survives a page reload as compact notes; Write
 mode starts from fresh context and streams prose into the chapter pane.

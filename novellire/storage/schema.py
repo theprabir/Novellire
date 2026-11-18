@@ -420,6 +420,42 @@ CREATE INDEX idx_chapter_insights_project
     ON chapter_insights (project_id, chapter_id)
 """
 
+MIGRATION_11_CHAT_THREADS = """
+CREATE TABLE chat_threads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    chapter_id INTEGER REFERENCES chapters(id) ON DELETE CASCADE,
+    mode TEXT NOT NULL CHECK (mode IN ('plan', 'write')),
+    title TEXT NOT NULL DEFAULT 'New conversation',
+    planning_notes TEXT NOT NULL DEFAULT '',
+    planning_notes_source TEXT NOT NULL DEFAULT ''
+        CHECK (planning_notes_source IN ('', 'model', 'author')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+)
+"""
+
+MIGRATION_11_CHAT_THREADS_INDEX = """
+CREATE INDEX idx_chat_threads_project
+    ON chat_threads (project_id, updated_at)
+"""
+
+MIGRATION_11_CHAT_MESSAGES = """
+CREATE TABLE chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id INTEGER NOT NULL REFERENCES chat_threads(id) ON DELETE CASCADE,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+    content TEXT NOT NULL,
+    model TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+)
+"""
+
+MIGRATION_11_CHAT_MESSAGES_INDEX = """
+CREATE INDEX idx_chat_messages_thread
+    ON chat_messages (thread_id, id)
+"""
+
 MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
     (
         1,
@@ -509,6 +545,15 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
                 MIGRATION_10_ANALYSIS_STATE_INDEX,
                 MIGRATION_10_CHAPTER_INSIGHTS,
                 MIGRATION_10_CHAPTER_INSIGHTS_INDEX,
+            ),
+        ),
+        (
+            11,
+            (
+                MIGRATION_11_CHAT_THREADS,
+                MIGRATION_11_CHAT_THREADS_INDEX,
+                MIGRATION_11_CHAT_MESSAGES,
+                MIGRATION_11_CHAT_MESSAGES_INDEX,
             ),
         ),
     )

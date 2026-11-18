@@ -315,13 +315,16 @@ by Git. Never commit a novel project's database.
 | 8 | `character_states` authored snapshots tied to chapters |
 | 9 | `chapter_revisions` snapshots of earlier chapter text |
 | 10 | `analysis_state` content hashes and `chapter_insights` derived proposals |
+| 11 | `chat_threads` and `chat_messages` for persistent conversations |
 
 Migrations are applied in order inside transactions; an existing database is
 upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.4.3** (schema version 10). `v0.4.3` adds automatic analysis
+Current release: **v0.4.4** (schema version 11). `v0.4.4` adds persistent
+project- and chapter-scoped Chat with Plan and Write modes, retrieval-backed
+context, and author-controlled planning notes. `v0.4.3` adds automatic analysis
 of every written chapter, queued after chapter and document saves with content
 hashes, derived character-state/location/relationship/open-thread proposals, and
 preservation of manual memory. `v0.4.2` adds Chapter Map outline

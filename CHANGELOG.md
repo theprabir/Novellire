@@ -3,6 +3,35 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.4.4] — 2026-11-18
+
+Persistent chat shell. Schema 11 adds chat threads and messages.
+
+### Added
+
+- **Chat** now stores project-wide or chapter-scoped conversations in SQLite.
+  Threads, messages, mode, and planning notes survive a page reload.
+- **Plan mode** discusses causality, continuity, and consequences without writing
+  prose. A compact `<planning_notes>` block in the reply is extracted into
+  editable notes for the chapter.
+- **Write mode** drafts prose in the conversation. Every turn rebuilds context
+  from the workspace documents, selected chapter, planning notes, retrieved
+  earlier chapters and events, canon, relationships, and character state.
+- Planning notes track whether they were model-maintained or author-edited. Once
+  the author saves notes, later model replies cannot replace them.
+- The first author message names an untitled conversation automatically.
+
+### Changed
+
+- Chat is no longer a placeholder scope and is included in normal navigation.
+- Chat inference shares the same serialized local provider as generation and
+  background analysis, so only one request runs at a time.
+
+### Deferred
+
+- True token streaming, reconnect-after-interrupt, chat draft checkpoints, and
+  inserting a Write-mode reply directly into a chapter remain for the next slice.
+
 ## [0.4.3] — 2026-11-17
 
 Automatic analysis for every written chapter. Schema 10 adds analysis hashes and

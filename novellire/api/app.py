@@ -29,6 +29,7 @@ from ..core.chapters import ChapterService
 from ..core.character_states import CharacterStateService
 from ..core.characters import FIELD_LABELS as CHARACTER_FIELD_LABELS
 from ..core.characters import PROFILE_FIELDS, CharacterService
+from ..core.chat import ChatService
 from ..core.context import GenerationContextBuilder
 from ..core.documents import ProjectDocumentService, WORKSPACE_DOCUMENTS
 from ..core.events import EventExtractionService
@@ -78,6 +79,7 @@ from ..storage.analysis_repository import (
     AnalysisStateRepository,
     ChapterInsightRepository,
 )
+from ..storage.chat_repository import ChatRepository
 from ..storage.document_repository import DocumentRepository
 from ..storage.event_repository import EventRepository
 from ..storage.search_repository import SearchRepository
@@ -247,6 +249,27 @@ class SummaryRequest(BaseModel):
     context_window: int = Field(default=4096, ge=512, le=32768)
 
 
+class ChatThreadCreateRequest(BaseModel):
+    mode: Literal["plan", "write"] = "plan"
+    chapter_id: int | None = None
+    title: str = ""
+
+
+class ChatThreadUpdateRequest(BaseModel):
+    planning_notes: str | None = None
+    title: str | None = None
+
+
+class ChatMessageRequest(BaseModel):
+    instructions: str
+    model: str
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    top_p: float = Field(default=0.9, gt=0.0, le=1.0)
+    num_predict: int = Field(default=700, ge=32, le=8192)
+    context_window: int = Field(default=4096, ge=512, le=32768)
+    target_words: int = Field(default=900, ge=50, le=6000)
+
+
 class StyleGuideRequest(BaseModel):
     model: str = ""
     temperature: float = Field(default=0.3, ge=0.0, le=2.0)
@@ -330,6 +353,7 @@ class ApiServices:
     insight_repository: ChapterInsightRepository
     analysis_state: AnalysisStateRepository
     analysis_scheduler: AnalysisScheduler
+    chat: ChatService
 
 
 def build_services(
@@ -391,6 +415,23 @@ def build_services(
         app_settings_service.generation_settings,
         auto_run=settings.analysis.auto_run,
     )
+    context_builder = GenerationContextBuilder(
+        document_service,
+        bible_repository,
+        character_repository,
+        chapter_repository,
+        SearchRepository(database),
+        event_repository,
+        relationship_repository,
+        state_repository,
+    )
+    chat_service = ChatService(
+        provider,
+        project_repository,
+        chapter_service,
+        ChatRepository(database),
+        context_builder,
+    )
 
     return ApiServices(
         settings=settings,
@@ -429,16 +470,7 @@ def build_services(
             state_repository,
         ),
         backup=BackupService(database),
-        context=GenerationContextBuilder(
-            document_service,
-            bible_repository,
-            character_repository,
-            chapter_repository,
-            SearchRepository(database),
-            event_repository,
-            relationship_repository,
-            state_repository,
-        ),
+        context=context_builder,
         style_guide=StyleGuideService(
             provider, project_repository, chapter_service, document_service
         ),
@@ -447,6 +479,7 @@ def build_services(
         insight_repository=insight_repository,
         analysis_state=analysis_state_repository,
         analysis_scheduler=analysis_scheduler,
+        chat=chat_service,
     )
 
 
@@ -802,6 +835,70 @@ def _build_router(services: ApiServices) -> APIRouter:
         return {
             "counts": counts,
             "states": [asdict(state) for state in states],
+        }
+
+    # -- chat ----------------------------------------------------------
+
+    @router.get("/projects/{project_id}/chat/threads")
+    def list_chat_threads(project_id: int) -> list[dict[str, Any]]:
+        return [asdict(thread) for thread in services.chat.list_threads(project_id)]
+
+    @router.post("/projects/{project_id}/chat/threads", status_code=201)
+    def create_chat_thread(
+        project_id: int, payload: ChatThreadCreateRequest
+    ) -> dict[str, Any]:
+        thread = services.chat.create_thread(
+            project_id=project_id,
+            mode=payload.mode,
+            chapter_id=payload.chapter_id,
+            title=payload.title,
+        )
+        return asdict(thread)
+
+    @router.get("/chat/threads/{thread_id}")
+    def get_chat_thread(thread_id: int) -> dict[str, Any]:
+        bundle = services.chat.get_thread_bundle(thread_id)
+        return {
+            "thread": asdict(bundle.thread),
+            "messages": [asdict(message) for message in bundle.messages],
+        }
+
+    @router.patch("/chat/threads/{thread_id}")
+    def update_chat_thread(
+        thread_id: int, payload: ChatThreadUpdateRequest
+    ) -> dict[str, Any]:
+        thread = services.chat.update_thread(
+            thread_id,
+            planning_notes=payload.planning_notes,
+            title=payload.title,
+        )
+        return asdict(thread)
+
+    @router.post("/chat/threads/{thread_id}/messages")
+    def send_chat_message(
+        thread_id: int, payload: ChatMessageRequest
+    ) -> dict[str, Any]:
+        settings = GenerationSettings(
+            model=payload.model,
+            temperature=payload.temperature,
+            top_p=payload.top_p,
+            num_predict=payload.num_predict,
+            context_window=payload.context_window,
+        )
+        reply = services.chat.send_message(
+            thread_id,
+            instructions=payload.instructions,
+            settings=settings,
+            target_words=payload.target_words,
+        )
+        return {
+            "thread": asdict(reply.thread),
+            "user": asdict(reply.user_message),
+            "assistant": asdict(reply.assistant_message),
+            "context": {
+                "chapters": list(reply.context_chapters),
+                "events": reply.context_events,
+            },
         }
 
     @router.get("/projects/{project_id}/insights")

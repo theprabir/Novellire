@@ -7,20 +7,20 @@ import {
   toast,
 } from './ui.js';
 import { renderHome } from './views/home.js';
-import { renderMemory } from './views/memory.js?v=0.4.3';
+import { renderMemory } from './views/memory.js?v=0.4.4';
 import { openProjectForm } from './views/projects.js';
 import { renderProjectSettings } from './views/project-settings.js';
-import { renderWorkspace } from './views/workspace.js?v=0.4.3';
+import { renderWorkspace } from './views/workspace.js?v=0.4.4';
 import { renderPreview } from './views/preview.js';
 import { renderExport } from './views/export.js';
 import { renderSettings } from './views/settings.js';
-import { renderChat, renderScope } from './views/scopes.js';
+import { renderChat, renderScope } from './views/scopes.js?v=0.4.4';
 
 const NAV = [
   { key: 'home', label: 'Home', icon: 'home' },
   { key: 'workspace', label: 'Workspace', icon: 'layers' },
   { key: 'preview', label: 'Preview', icon: 'book' },
-  { key: 'chat', label: 'Chat', icon: 'message', pill: 'Phase 4' },
+  { key: 'chat', label: 'Chat', icon: 'message' },
   { key: 'memory', label: 'Memory', icon: 'database' },
   { key: 'continuity', label: 'Continuity', icon: 'shield', pill: 'Phase 5' },
   { key: 'export', label: 'Export', icon: 'download' },
@@ -55,6 +55,7 @@ export const state = {
   selectedId: null,
   selectedSceneId: null,
   previewChapterId: null,
+  chatThreadId: null,
   filesOpen: { documents: true, chapters: true },
   loading: true,
 };
@@ -172,6 +173,7 @@ async function selectProject(projectId) {
     state.workspaceType = 'docs';
     state.selectedSceneId = null;
     state.previewChapterId = null;
+    state.chatThreadId = null;
     await Promise.all([refreshProjects(), loadProjectData()]);
     if (window.location.hash !== '#/workspace') window.location.hash = '#/workspace';
     render();
