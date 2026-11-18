@@ -7,6 +7,7 @@ belongs here, so another local provider can be added without touching them.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
@@ -38,6 +39,16 @@ class GenerationRequest:
 
 
 @dataclass(frozen=True)
+class GenerationChunk:
+    """One streamed piece of a generation. ``done`` marks the final chunk."""
+
+    text: str = ""
+    model: str = ""
+    done: bool = False
+    truncated: bool = False
+
+
+@dataclass(frozen=True)
 class GenerationResult:
     """The outcome of a successful generation."""
 
@@ -63,4 +74,15 @@ class LLMProvider(Protocol):
 
     def generate(self, request: GenerationRequest) -> GenerationResult:
         """Generate text or raise an ``LLMError`` subclass."""
+        ...
+
+
+@runtime_checkable
+class StreamingLLMProvider(Protocol):
+    """Optional provider capability: the same request, delivered in pieces."""
+
+    def generate_stream(
+        self, request: GenerationRequest
+    ) -> Iterator[GenerationChunk]:
+        """Yield text chunks, then a final chunk with ``done=True``."""
         ...

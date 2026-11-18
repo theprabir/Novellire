@@ -175,8 +175,13 @@ The interface has these surfaces:
   snapshots per chapter (location, status, goals, knowledge), shows the latest
   chapter as current with earlier snapshots as history, and supplies current
   state for selected characters to generation.
-- **Chat, Continuity** — designed scopes. Their layout, filters, and detail panes
-  are reserved and labelled with the phase that will connect them; they show no
+- **Chat** — plan or draft in a persistent conversation scoped to the project or
+  one chapter. Plan mode keeps compact, editable planning notes; Write mode
+  rebuilds its context from the documents, notes, chapter, and memory on every
+  turn. Replies stream token by token, **Stop** keeps the text received so far,
+  and a reload reopens the stored conversation.
+- **Continuity** — a designed scope. Its layout, filters, and detail panes are
+  reserved and labelled with the phase that will connect them; it shows no
   project data yet.
 
 Appearance choices are stored in the database (`app_settings`, key
@@ -189,7 +194,7 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-219 tests run fully offline. All inference is stubbed, so no model or Ollama
+232 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
@@ -322,9 +327,10 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.4.4** (schema version 11). `v0.4.4` adds persistent
-project- and chapter-scoped Chat with Plan and Write modes, retrieval-backed
-context, and author-controlled planning notes. `v0.4.3` adds automatic analysis
+Current release: **v0.4.5** (schema version 11). `v0.4.5` streams Chat replies as
+the model produces them, with a Stop control that keeps the partial reply.
+`v0.4.4` adds persistent project- and chapter-scoped Chat with Plan and Write
+modes, retrieval-backed context, and author-controlled planning notes. `v0.4.3` adds automatic analysis
 of every written chapter, queued after chapter and document saves with content
 hashes, derived character-state/location/relationship/open-thread proposals, and
 preservation of manual memory. `v0.4.2` adds Chapter Map outline

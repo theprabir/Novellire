@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from novellire.api.app import create_app
 from novellire.config import AnalysisSettings, GenerationDefaults, Settings
-from novellire.llm.base import GenerationResult
+from novellire.llm.base import GenerationChunk, GenerationResult, ModelInfo
 from novellire.storage.database import Database
 
 
@@ -160,6 +161,127 @@ def test_write_chat_uses_chapter_prose_and_context(
         assert "Current chapter text:\nMira waits before the locked gate." in prompt
         assert "Target length: about 350 words." in prompt
         assert "Write the requested prose now." in prompt
+
+
+class StreamingProvider:
+    """Provider stub that streams fixed chunks instead of generating at once."""
+
+    def __init__(self, chunks: list[GenerationChunk]) -> None:
+        self.chunks = chunks
+        self.requests = []
+
+    def is_available(self) -> bool:
+        return True
+
+    def list_models(self) -> list[ModelInfo]:
+        return [ModelInfo(name="fake-model")]
+
+    def generate(self, request):  # noqa: ANN001, ANN201 - must not be used
+        raise AssertionError("the stream endpoint should stream")
+
+    def generate_stream(self, request):  # noqa: ANN001, ANN201
+        self.requests.append(request)
+        yield from self.chunks
+
+
+def _events(response) -> list[dict]:  # noqa: ANN001
+    return [
+        json.loads(line)
+        for line in response.text.splitlines()
+        if line.strip()
+    ]
+
+
+def test_chat_stream_streams_deltas_and_stores_the_reply(
+    tmp_path: Path,
+) -> None:
+    provider = StreamingProvider(
+        [
+            GenerationChunk(text="Mira waits. "),
+            GenerationChunk(text="The gate stays shut."),
+            GenerationChunk(model="fake-model", done=True),
+        ]
+    )
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        chapter = client.post(
+            f"/api/projects/{project['id']}/chapters",
+            json={"title": "The Gate", "content": "Mira waits."},
+        ).json()
+        thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads",
+            json={"mode": "plan", "chapter_id": chapter["id"]},
+        ).json()
+
+        response = client.post(
+            f"/api/chat/threads/{thread['id']}/messages/stream",
+            json={"instructions": "What happens next?", "model": "fake-model"},
+        )
+
+        assert response.status_code == 200, response.text
+        events = _events(response)
+        assert events[0]["type"] == "start"
+        assert events[0]["user"]["content"] == "What happens next?"
+        deltas = "".join(
+            event["text"] for event in events if event["type"] == "delta"
+        )
+        assert deltas == "Mira waits. The gate stays shut."
+        done = events[-1]
+        assert done["type"] == "done"
+        assert done["assistant"]["content"] == (
+            "Mira waits. The gate stays shut."
+        )
+        assert done["assistant"]["model"] == "fake-model"
+
+        bundle = client.get(f"/api/chat/threads/{thread['id']}").json()
+        assert [message["role"] for message in bundle["messages"]] == [
+            "user",
+            "assistant",
+        ]
+
+
+def test_chat_stream_falls_back_to_a_single_delta(
+    tmp_path: Path, fake_provider_factory
+) -> None:
+    provider = fake_provider_factory(
+        result=GenerationResult(
+            text="One complete reply.", model="fake-model", duration_ms=5
+        )
+    )
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads", json={"mode": "plan"}
+        ).json()
+
+        response = client.post(
+            f"/api/chat/threads/{thread['id']}/messages/stream",
+            json={"instructions": "Summarise.", "model": "fake-model"},
+        )
+
+        assert response.status_code == 200, response.text
+        events = _events(response)
+        assert [event["type"] for event in events] == ["start", "delta", "done"]
+        assert events[1]["text"] == "One complete reply."
+
+
+def test_chat_stream_validates_before_streaming(
+    tmp_path: Path, fake_provider_factory
+) -> None:
+    provider = fake_provider_factory()
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads", json={"mode": "plan"}
+        ).json()
+
+        response = client.post(
+            f"/api/chat/threads/{thread['id']}/messages/stream",
+            json={"instructions": "   ", "model": "fake-model"},
+        )
+
+        assert response.status_code == 400
+        assert "Write a message" in response.json()["detail"]
 
 
 def test_chat_rejects_a_chapter_from_another_project(

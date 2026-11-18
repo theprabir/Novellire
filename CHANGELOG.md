@@ -3,6 +3,39 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.4.5] — 2026-11-18
+
+Streamed Chat replies. Schema stays at 11.
+
+### Added
+
+- **Chat replies stream token by token.**
+  `POST /api/chat/threads/{id}/messages/stream` returns newline-delimited JSON:
+  `start` (the stored author message and thread), `delta` (text as the model
+  produces it), `done` (the stored reply and updated thread), or `error`.
+- `OllamaProvider.generate_stream` reads Ollama's streamed NDJSON, maps a
+  mid-stream error line, reports truncation, and closes the connection. A
+  provider without streaming falls back to one complete delta.
+- The serialized provider holds its single-request lock for the whole stream, so
+  interactive chat and background analysis still never overlap.
+- **Stop** aborts the reply. The server stores the text received so far before
+  the stream closes, so a stopped or interrupted reply survives a reload.
+- The composer swaps **Send** for **Stop** while generating and shows a caret
+  where the next token will arrive.
+
+### Changed
+
+- Turn preparation (validation, author message storage, prompt context) is shared
+  by the blocking and streaming chat paths, and runs before the stream starts so
+  a validation failure is still a normal 4xx response.
+- An untitled conversation is named from its first author message as soon as that
+  message is stored.
+
+### Deferred
+
+- Side-by-side chapter pane, context drawer, chat draft checkpoints, and inserting
+  a Write-mode reply into the chapter.
+
 ## [0.4.4] — 2026-11-18
 
 Persistent chat shell. Schema 11 adds chat threads and messages.

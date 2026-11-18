@@ -901,6 +901,43 @@ def _build_router(services: ApiServices) -> APIRouter:
             },
         }
 
+    @router.post("/chat/threads/{thread_id}/messages/stream")
+    def stream_chat_message(
+        thread_id: int, payload: ChatMessageRequest
+    ) -> StreamingResponse:
+        """Stream one chat reply as newline-delimited JSON events.
+
+        ``start`` carries the stored author message, ``delta`` carries text as it
+        arrives, ``done`` carries the stored reply and updated thread, and
+        ``error`` reports a failure without a stack trace reaching the client.
+        """
+        settings = GenerationSettings(
+            model=payload.model,
+            temperature=payload.temperature,
+            top_p=payload.top_p,
+            num_predict=payload.num_predict,
+            context_window=payload.context_window,
+        )
+        events = services.chat.stream_message(
+            thread_id,
+            instructions=payload.instructions,
+            settings=settings,
+            target_words=payload.target_words,
+        )
+
+        def lines() -> Iterator[str]:
+            for event in events:
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+
+        return StreamingResponse(
+            lines(),
+            media_type="application/x-ndjson",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
     @router.get("/projects/{project_id}/insights")
     def list_project_insights(project_id: int) -> list[dict[str, Any]]:
         services.projects.require_project(project_id)

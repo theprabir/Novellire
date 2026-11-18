@@ -68,6 +68,12 @@ export function renderChat(ctx) {
     icon('sparkles'),
     'Send'
   );
+  const stopButton = el(
+    'button',
+    { class: 'btn btn-ghost stop-btn', type: 'button', onClick: () => stop(), hidden: true },
+    icon('x'),
+    'Stop'
+  );
   const composerNote = el(
     'div',
     { class: 'composer-note' },
@@ -77,7 +83,7 @@ export function renderChat(ctx) {
   const composer = el(
     'div',
     { class: 'chat-composer' },
-    el('div', { class: 'composer-row' }, composerText, sendButton),
+    el('div', { class: 'composer-row' }, composerText, stopButton, sendButton),
     composerNote
   );
   const main = el('div', { class: 'chat-main' }, header, stream, notesHost, composer);
@@ -103,6 +109,7 @@ export function renderChat(ctx) {
   let threads = [];
   let active = null;
   let busy = false;
+  let abortController = null;
 
   function chapterFor(thread) {
     if (!thread?.chapter_id) return null;
@@ -188,6 +195,32 @@ export function renderChat(ctx) {
     );
   }
 
+  function streamingBubble() {
+    const text = document.createTextNode('');
+    const modelTag = el('span', { class: 'bubble-model' });
+    const body = el('div', { class: 'bubble streaming' }, text, modelTag);
+    const node = el(
+      'div',
+      { class: 'chat-bubble' },
+      el('span', { class: 'avatar' }, icon('feather', 'icon sm')),
+      body
+    );
+    return {
+      node,
+      append(chunk) {
+        text.data += chunk;
+      },
+      finish(model) {
+        body.classList.remove('streaming');
+        if (model) modelTag.textContent = model;
+      },
+    };
+  }
+
+  function scrollStream() {
+    stream.scrollTop = stream.scrollHeight;
+  }
+
   function renderStream(messages) {
     stream.replaceChildren();
     if (!messages.length) {
@@ -266,6 +299,9 @@ export function renderChat(ctx) {
     const enabled = Boolean(active) && !busy;
     composerText.disabled = !enabled;
     sendButton.disabled = !enabled;
+    sendButton.hidden = busy;
+    stopButton.hidden = !busy;
+    stopButton.disabled = !busy;
     composerText.placeholder = active
       ? active.mode === 'write'
         ? 'Describe the scene to draft, or ask for a revision…'
@@ -274,7 +310,7 @@ export function renderChat(ctx) {
     composerNote.replaceChildren(
       icon('alert', 'icon sm'),
       busy
-        ? 'Thinking… one local inference request is running.'
+        ? 'Generating… one local inference request is running. Stop keeps what arrived.'
         : active
           ? CHAT_MODES[active.mode]?.hint || ''
           : 'Choose a conversation or start a new one.'
@@ -374,6 +410,19 @@ export function renderChat(ctx) {
     openModal({ title: 'New conversation', body: form });
   }
 
+  async function refreshThreads() {
+    try {
+      threads = await api.get(`/api/projects/${project.id}/chat/threads`);
+      renderHistory();
+    } catch (error) {
+      /* keep the list already on screen */
+    }
+  }
+
+  function stop() {
+    abortController?.abort();
+  }
+
   async function send() {
     if (busy || !active) return;
     const text = composerText.value.trim();
@@ -388,27 +437,61 @@ export function renderChat(ctx) {
       return;
     }
     busy = true;
+    const threadId = active.id;
+    const reply = streamingBubble();
     renderComposer();
     stream.append(bubble('user', text));
-    stream.append(bubble('assistant', 'Thinking…'));
-    stream.scrollTop = stream.scrollHeight;
+    stream.append(reply.node);
+    scrollStream();
     composerText.value = '';
-    const threadId = active.id;
+    abortController = new AbortController();
+    let failure = '';
     try {
-      await api.post(`/api/chat/threads/${threadId}/messages`, {
-        instructions: text,
-        model,
-        temperature: Number(settings.temperature ?? 0.7),
-        top_p: Number(settings.top_p ?? 0.9),
-        num_predict: Number(settings.num_predict ?? 700),
-        context_window: Number(settings.context_window ?? 4096),
-      });
-      busy = false;
-      await loadThreads(threadId);
+      await api.stream(
+        `/api/chat/threads/${threadId}/messages/stream`,
+        {
+          instructions: text,
+          model,
+          temperature: Number(settings.temperature ?? 0.7),
+          top_p: Number(settings.top_p ?? 0.9),
+          num_predict: Number(settings.num_predict ?? 700),
+          context_window: Number(settings.context_window ?? 4096),
+        },
+        (event) => {
+          if (event.type === 'delta') {
+            reply.append(event.text || '');
+            scrollStream();
+          } else if (event.type === 'done') {
+            reply.finish(event.assistant?.model || model);
+            active = event.thread;
+            state.chatThreadId = active.id;
+            const item = threads.find((thread) => thread.id === active.id);
+            if (item) Object.assign(item, active);
+            renderHistory();
+            renderHeader();
+            renderNotes();
+          } else if (event.type === 'error') {
+            failure = event.message || 'The model did not finish the reply.';
+          }
+        },
+        { signal: abortController.signal }
+      );
+      if (failure) throw new Error(failure);
+      await refreshThreads();
     } catch (error) {
+      if (error?.name === 'AbortError') {
+        // The server stores the partial reply before the stream closes.
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        await refreshThreads();
+        await selectThread(threadId);
+      } else {
+        toast(error.message, 'error');
+        await selectThread(threadId);
+      }
+    } finally {
+      abortController = null;
       busy = false;
-      toast(error.message, 'error');
-      await selectThread(threadId);
+      renderComposer();
     }
   }
 

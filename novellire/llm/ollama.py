@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Iterator
 from typing import Any
 
 import requests
@@ -20,7 +21,7 @@ from ..errors import (
     ModelNotFoundError,
 )
 from ..logging_setup import get_logger
-from .base import GenerationRequest, GenerationResult, ModelInfo
+from .base import GenerationChunk, GenerationRequest, GenerationResult, ModelInfo
 
 logger = get_logger("llm.ollama")
 
@@ -97,25 +98,7 @@ class OllamaProvider:
     # -- generation --------------------------------------------------------
 
     def generate(self, request: GenerationRequest) -> GenerationResult:
-        payload: dict[str, Any] = {
-            "model": request.model,
-            "prompt": request.prompt,
-            "stream": False,
-            "keep_alive": self._keep_alive,
-            "options": {
-                "temperature": request.temperature,
-                "top_p": request.top_p,
-                "num_predict": request.num_predict,
-                "num_ctx": request.context_window,
-            },
-        }
-        if request.system_prompt:
-            payload["system"] = request.system_prompt
-        if request.seed is not None:
-            payload["options"]["seed"] = request.seed
-        if request.stop:
-            payload["options"]["stop"] = list(request.stop)
-
+        payload = self._payload(request)
         started = time.perf_counter()
         response = self._post("/api/generate", payload)
         elapsed_ms = int((time.perf_counter() - started) * 1000)
@@ -158,6 +141,88 @@ class OllamaProvider:
             output_tokens=_optional_int(data.get("eval_count")),
         )
 
+    def generate_stream(
+        self, request: GenerationRequest
+    ) -> Iterator[GenerationChunk]:
+        """Yield the model's text as it arrives, one Ollama JSON line at a time."""
+        payload = self._payload(request)
+        payload["stream"] = True
+        response = self._post("/api/generate", payload, stream=True)
+        if response.status_code == 404:
+            raise ModelNotFoundError(self._model_error_message(response, request.model))
+        if response.status_code != 200:
+            raise LLMResponseError(
+                f"Ollama rejected the request (HTTP {response.status_code}): "
+                f"{self._body_snippet(response)}"
+            )
+
+        model = request.model
+        produced = 0
+        started = time.perf_counter()
+        try:
+            for raw_line in response.iter_lines():
+                if not raw_line:
+                    continue
+                data = self._parse_stream_line(raw_line)
+                error = data.get("error")
+                if isinstance(error, str) and error.strip():
+                    raise LLMResponseError(
+                        f"Ollama stopped generating: {error.strip()[:_ERROR_BODY_LIMIT]}"
+                    )
+                piece = data.get("response")
+                if isinstance(piece, str) and piece:
+                    produced += len(piece)
+                    yield GenerationChunk(text=piece)
+                name = data.get("model")
+                if isinstance(name, str) and name.strip():
+                    model = name.strip()
+                if data.get("done"):
+                    if produced == 0:
+                        raise LLMResponseError(
+                            "Ollama returned an empty response. Try reducing the "
+                            "context window or increasing the maximum output tokens."
+                        )
+                    truncated = data.get("done_reason") == "length"
+                    logger.info(
+                        "Ollama streaming ok: model=%s chars=%d duration_ms=%d",
+                        model,
+                        produced,
+                        int((time.perf_counter() - started) * 1000),
+                    )
+                    yield GenerationChunk(
+                        model=model, done=True, truncated=truncated
+                    )
+        except requests.Timeout as exc:
+            raise LLMTimeoutError(
+                f"Ollama stopped responding while streaming. Reduce the requested "
+                "length, or raise request_timeout_seconds in config.toml."
+            ) from exc
+        except requests.RequestException as exc:
+            raise LLMUnavailableError(self._unavailable_message()) from exc
+        finally:
+            response.close()
+
+    def _payload(self, request: GenerationRequest) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "model": request.model,
+            "prompt": request.prompt,
+            "stream": False,
+            "keep_alive": self._keep_alive,
+            "options": {
+                "temperature": request.temperature,
+                "top_p": request.top_p,
+                "num_predict": request.num_predict,
+                "num_ctx": request.context_window,
+            },
+        }
+        if request.system_prompt:
+            payload["system"] = request.system_prompt
+        if request.seed is not None:
+            payload["options"]["seed"] = request.seed
+        if request.stop:
+            payload["options"]["stop"] = list(request.stop)
+        return payload
+
     # -- HTTP helpers ------------------------------------------------------
 
     def _get_json(self, path: str, *, timeout: tuple[float, float]) -> dict[str, Any]:
@@ -179,10 +244,14 @@ class OllamaProvider:
             )
         return self._parse_json(response)
 
-    def _post(self, path: str, payload: dict[str, Any]) -> requests.Response:
+    def _post(
+        self, path: str, payload: dict[str, Any], *, stream: bool = False
+    ) -> requests.Response:
         url = f"{self._base_url}{path}"
         try:
-            return self._session.post(url, json=payload, timeout=self._timeout)
+            return self._session.post(
+                url, json=payload, timeout=self._timeout, stream=stream
+            )
         except requests.Timeout as exc:
             raise LLMTimeoutError(
                 f"Ollama did not finish generating within "
@@ -193,6 +262,19 @@ class OllamaProvider:
             raise LLMUnavailableError(self._unavailable_message()) from exc
         except requests.RequestException as exc:
             raise LLMUnavailableError(self._unavailable_message()) from exc
+
+    @staticmethod
+    def _parse_stream_line(raw_line: bytes | str) -> dict[str, Any]:
+        try:
+            data = json.loads(raw_line)
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise LLMResponseError(
+                "Ollama streamed a line that is not valid JSON. Check that the "
+                "local Ollama version is current."
+            ) from exc
+        if not isinstance(data, dict):
+            raise LLMResponseError("Ollama streamed an unexpected JSON structure.")
+        return data
 
     def _parse_json(self, response: requests.Response) -> dict[str, Any]:
         try:

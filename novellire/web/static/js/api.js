@@ -38,7 +38,7 @@ async function request(method, path, body) {
   return response.json();
 }
 
-async function stream(path, body, onEvent) {
+async function stream(path, body, onEvent, options = {}) {
   let response;
   try {
     response = await fetch(path, {
@@ -48,8 +48,10 @@ async function stream(path, body, onEvent) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body === undefined ? {} : body),
+      signal: options.signal,
     });
   } catch (error) {
+    if (error?.name === 'AbortError') throw error;
     throw new ApiError('Cannot reach the Novellire server. Is it still running?', 0);
   }
 

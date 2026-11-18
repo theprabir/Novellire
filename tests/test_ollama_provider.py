@@ -18,15 +18,34 @@ from novellire.llm.ollama import OllamaProvider
 
 
 class StubResponse:
-    def __init__(self, status_code: int = 200, payload: object = None) -> None:
+    def __init__(
+        self,
+        status_code: int = 200,
+        payload: object = None,
+        lines: list[object] | None = None,
+    ) -> None:
         self.status_code = status_code
         self._payload = payload
+        self._lines = lines or []
         self.text = json.dumps(payload) if payload is not None else ""
+        self.closed = False
 
     def json(self):
         if self._payload is None:
             raise ValueError("Response is not JSON")
         return self._payload
+
+    def iter_lines(self):
+        for line in self._lines:
+            if isinstance(line, bytes):
+                yield line
+            elif isinstance(line, str):
+                yield line.encode("utf-8")
+            else:
+                yield json.dumps(line).encode("utf-8")
+
+    def close(self) -> None:
+        self.closed = True
 
 
 class StubSession:
@@ -206,3 +225,71 @@ def test_generate_reports_timeout() -> None:
 def test_provider_exposes_base_url() -> None:
     provider, _ = build_provider()
     assert provider.base_url == "http://localhost:11434"
+
+
+def test_generate_stream_yields_text_and_final_metadata() -> None:
+    lines = [
+        {"model": "qwen2.5:1.5b", "response": "The vault ", "done": False},
+        {"model": "qwen2.5:1.5b", "response": "door opened.", "done": False},
+        {
+            "model": "qwen2.5:1.5b",
+            "response": "",
+            "done": True,
+            "done_reason": "stop",
+        },
+    ]
+    provider, session = build_provider(post=StubResponse(200, lines=lines))
+
+    chunks = list(provider.generate_stream(build_request()))
+
+    assert "".join(chunk.text for chunk in chunks) == "The vault door opened."
+    final = chunks[-1]
+    assert final.done is True
+    assert final.model == "qwen2.5:1.5b"
+    assert final.truncated is False
+    _, _, kwargs = session.calls[0]
+    assert kwargs["json"]["stream"] is True
+    assert kwargs["stream"] is True
+    assert kwargs["timeout"] == (5.0, 180.0)
+
+
+def test_generate_stream_marks_truncated_output() -> None:
+    lines = [
+        {"response": "An unfinished sent", "done": False},
+        {"response": "", "done": True, "done_reason": "length"},
+    ]
+    provider, _ = build_provider(post=StubResponse(200, lines=lines))
+
+    chunks = list(provider.generate_stream(build_request()))
+
+    assert chunks[-1].truncated is True
+
+
+def test_generate_stream_rejects_an_empty_stream() -> None:
+    provider, _ = build_provider(
+        post=StubResponse(200, lines=[{"done": True, "done_reason": "stop"}])
+    )
+    with pytest.raises(LLMResponseError, match="empty response"):
+        list(provider.generate_stream(build_request()))
+
+
+def test_generate_stream_rejects_a_malformed_line() -> None:
+    provider, _ = build_provider(post=StubResponse(200, lines=[b"{not json"]))
+    with pytest.raises(LLMResponseError, match="not valid JSON"):
+        list(provider.generate_stream(build_request()))
+
+
+def test_generate_stream_reports_a_streamed_model_error() -> None:
+    provider, _ = build_provider(
+        post=StubResponse(200, lines=[{"error": "out of memory", "done": True}])
+    )
+    with pytest.raises(LLMResponseError, match="out of memory"):
+        list(provider.generate_stream(build_request()))
+
+
+def test_generate_stream_reports_missing_model() -> None:
+    payload = {"error": 'model "qwen2.5:1.5b" not found, try pulling it first'}
+    provider, _ = build_provider(post=StubResponse(404, payload))
+
+    with pytest.raises(ModelNotFoundError, match="ollama pull"):
+        list(provider.generate_stream(build_request()))

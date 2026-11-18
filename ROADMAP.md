@@ -135,10 +135,11 @@ Implemented first slice:
   relationships, and character state on every turn.
 - Chat uses the serialized local provider, so it cannot overlap another
   inference request.
+- Replies stream token by token from Ollama; **Stop** stores the partial reply so
+  it survives a reload.
 
 Remaining:
 
-- Token streaming from Ollama with stop and reconnect support.
 - Side-by-side chapter pane and an expandable context drawer.
 - Draft checkpoints that survive interruption.
 - Insert a Write-mode reply into the chapter with the approval lock enforced.

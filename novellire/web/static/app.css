@@ -1086,6 +1086,21 @@ input[type="range"]::-webkit-slider-thumb {
   white-space: pre-wrap;
 }
 .chat-bubble .bubble-model { display: block; margin-top: 6px; font-size: var(--fs-xs); color: var(--faint); }
+.chat-bubble .bubble-model:empty { display: none; }
+.chat-bubble .bubble.streaming::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 3px;
+  vertical-align: -0.15em;
+  background: var(--accent);
+  animation: chat-caret 1s steps(1) infinite;
+}
+@keyframes chat-caret {
+  50% { opacity: 0; }
+}
+.stop-btn { flex: none; }
 .chat-bubble.user { align-self: flex-end; flex-direction: row-reverse; }
 .chat-bubble.user .bubble { background: var(--accent-soft); border-color: var(--accent-line); color: var(--text); }
 .chat-composer { border-top: 1px solid var(--border); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }

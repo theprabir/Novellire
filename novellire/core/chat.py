@@ -9,15 +9,18 @@ in the conversation without changing chapter text.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from collections.abc import Iterator
+from dataclasses import asdict, dataclass
 
 from ..errors import (
     InvalidInputError,
     LLMResponseError,
+    NovellireError,
     ProjectNotFoundError,
     RecordNotFoundError,
 )
 from ..llm.base import GenerationRequest, LLMProvider
+from ..logging_setup import get_logger
 from ..prompts.templates import build_chat_prompt
 from ..storage.chat_repository import (
     CHAT_MODES,
@@ -39,6 +42,8 @@ CHAT_CHAPTER_CHARS = 6_000
 CHAT_OUTPUT_TOKENS = 900
 NEW_THREAD_TITLE = "New conversation"
 
+logger = get_logger("core.chat")
+
 _PLANNING_BLOCK = re.compile(
     r"<planning_notes>(.*?)</planning_notes>", re.IGNORECASE | re.DOTALL
 )
@@ -55,6 +60,20 @@ class ChatReply:
     thread: ChatThread
     user_message: ChatMessage
     assistant_message: ChatMessage
+    context_chapters: tuple[dict[str, object], ...]
+    context_events: int
+
+
+@dataclass(frozen=True)
+class _ChatTurn:
+    """Everything needed to generate one reply, prepared before streaming."""
+
+    thread: ChatThread
+    system_prompt: str
+    user_prompt: str
+    model: str
+    num_predict: int
+    user_message: ChatMessage
     context_chapters: tuple[dict[str, object], ...]
     context_events: int
 
@@ -145,6 +164,48 @@ class ChatService:
         settings: GenerationSettings,
         target_words: int = 900,
     ) -> ChatReply:
+        turn = self._prepare_turn(
+            thread_id,
+            instructions=instructions,
+            settings=settings,
+            target_words=target_words,
+        )
+        result = self._provider.generate(
+            GenerationRequest(
+                prompt=turn.user_prompt,
+                system_prompt=turn.system_prompt,
+                model=turn.model,
+                temperature=settings.temperature,
+                top_p=settings.top_p,
+                num_predict=turn.num_predict,
+                context_window=settings.context_window,
+            )
+        )
+        reply = (result.text or "").strip()
+        if not reply:
+            raise LLMResponseError(
+                "The model returned an empty response. Try again."
+            )
+        assistant_message, updated = self._finish_turn(
+            turn.thread, reply, result.model or turn.model
+        )
+        return ChatReply(
+            thread=updated,
+            user_message=turn.user_message,
+            assistant_message=assistant_message,
+            context_chapters=turn.context_chapters,
+            context_events=turn.context_events,
+        )
+
+    def _prepare_turn(
+        self,
+        thread_id: int,
+        *,
+        instructions: str,
+        settings: GenerationSettings,
+        target_words: int,
+    ) -> _ChatTurn:
+        """Validate, store the author message, and rebuild prompt context."""
         thread = self._require_thread(thread_id)
         project = self._projects.get(thread.project_id)
         if project is None:
@@ -173,6 +234,11 @@ class ChatService:
         user_message = self._threads.add_message(
             thread.id, role="user", content=text
         )
+        if thread.title == NEW_THREAD_TITLE:
+            self._threads.set_title(thread.id, _title_from(text))
+            renamed = self._threads.get_thread(thread.id)
+            if renamed is not None:
+                thread = renamed
         history_messages = self._threads.list_messages(thread.id)[:-1]
         history = _format_history(history_messages)
         prompt_text = text
@@ -205,46 +271,13 @@ class ChatService:
             history=history,
             **_context_blocks(context),
         )
-        result = self._provider.generate(
-            GenerationRequest(
-                prompt=user_prompt,
-                system_prompt=system_prompt,
-                model=model,
-                temperature=settings.temperature,
-                top_p=settings.top_p,
-                num_predict=min(
-                    max(settings.num_predict, 256), CHAT_OUTPUT_TOKENS
-                ),
-                context_window=settings.context_window,
-            )
-        )
-        reply = (result.text or "").strip()
-        if not reply:
-            raise LLMResponseError(
-                "The model returned an empty response. Try again."
-            )
-
-        if thread.mode == "plan":
-            suggested, reply = _extract_planning_notes(reply)
-            if suggested and thread.planning_notes_source != "author":
-                thread = self._threads.set_planning_notes(
-                    thread.id, suggested, source="model"
-                )
-        assistant_message = self._threads.add_message(
-            thread.id,
-            role="assistant",
-            content=reply,
-            model=result.model or model,
-        )
-        if thread.title == NEW_THREAD_TITLE:
-            self._threads.set_title(thread.id, _title_from(text))
-        refreshed = self._threads.get_thread(thread.id)
-        if refreshed is None:
-            raise RecordNotFoundError("That conversation no longer exists.")
-        return ChatReply(
-            thread=refreshed,
+        return _ChatTurn(
+            thread=thread,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            model=model,
+            num_predict=min(max(settings.num_predict, 256), CHAT_OUTPUT_TOKENS),
             user_message=user_message,
-            assistant_message=assistant_message,
             context_chapters=tuple(
                 {
                     "id": item.id,
@@ -255,6 +288,126 @@ class ChatService:
             ),
             context_events=len(context.memory_events),
         )
+
+    def stream_message(
+        self,
+        thread_id: int,
+        *,
+        instructions: str,
+        settings: GenerationSettings,
+        target_words: int = 900,
+    ) -> Iterator[dict[str, object]]:
+        """Prepare eagerly, then stream reply events as newline-delimited JSON.
+
+        Preparation happens before the response starts, so a validation or
+        missing-model failure is still an ordinary 4xx rather than a stream that
+        dies on its first event.
+        """
+        turn = self._prepare_turn(
+            thread_id,
+            instructions=instructions,
+            settings=settings,
+            target_words=target_words,
+        )
+        return self._reply_events(turn, settings)
+
+    def _reply_events(
+        self, turn: _ChatTurn, settings: GenerationSettings
+    ) -> Iterator[dict[str, object]]:
+        yield {
+            "type": "start",
+            "thread": asdict(turn.thread),
+            "user": asdict(turn.user_message),
+        }
+        request = GenerationRequest(
+            prompt=turn.user_prompt,
+            system_prompt=turn.system_prompt,
+            model=turn.model,
+            temperature=settings.temperature,
+            top_p=settings.top_p,
+            num_predict=turn.num_predict,
+            context_window=settings.context_window,
+        )
+        pieces: list[str] = []
+        model = turn.model
+        try:
+            stream = getattr(self._provider, "generate_stream", None)
+            if stream is None:
+                result = self._provider.generate(request)
+                text = (result.text or "").strip()
+                if not text:
+                    raise LLMResponseError(
+                        "The model returned an empty response. Try again."
+                    )
+                pieces.append(text)
+                yield {"type": "delta", "text": text}
+                model = result.model or model
+            else:
+                for chunk in stream(request):
+                    if chunk.text:
+                        pieces.append(chunk.text)
+                        yield {"type": "delta", "text": chunk.text}
+                    if chunk.model:
+                        model = chunk.model
+            text = "".join(pieces).strip()
+            if not text:
+                raise LLMResponseError(
+                    "The model returned an empty response. Try again."
+                )
+            assistant_message, thread = self._finish_turn(
+                turn.thread, text, model
+            )
+            yield {
+                "type": "done",
+                "thread": asdict(thread),
+                "assistant": asdict(assistant_message),
+                "context": {
+                    "chapters": list(turn.context_chapters),
+                    "events": turn.context_events,
+                },
+            }
+        except GeneratorExit:
+            # The author stopped the reply or closed the page. Keep what arrived.
+            partial = "".join(pieces).strip()
+            if partial:
+                self._save_interrupted(turn.thread, partial, model)
+            raise
+        except NovellireError as exc:
+            yield {"type": "error", "message": str(exc)}
+        except Exception:  # noqa: BLE001 - a stream must end with a readable event
+            logger.exception("Chat stream failed unexpectedly")
+            yield {
+                "type": "error",
+                "message": "The reply failed while streaming. Try again.",
+            }
+
+    def _finish_turn(
+        self, thread: ChatThread, text: str, model: str
+    ) -> tuple[ChatMessage, ChatThread]:
+        if thread.mode == "plan":
+            suggested, text = _extract_planning_notes(text)
+            if suggested and thread.planning_notes_source != "author":
+                thread = self._threads.set_planning_notes(
+                    thread.id, suggested, source="model"
+                )
+        assistant_message = self._threads.add_message(
+            thread.id,
+            role="assistant",
+            content=text,
+            model=model,
+        )
+        refreshed = self._threads.get_thread(thread.id)
+        if refreshed is None:
+            raise RecordNotFoundError("That conversation no longer exists.")
+        return assistant_message, refreshed
+
+    def _save_interrupted(
+        self, thread: ChatThread, text: str, model: str
+    ) -> None:
+        try:
+            self._finish_turn(thread, text, model)
+        except Exception:  # noqa: BLE001 - the connection is already gone
+            logger.warning("Could not store an interrupted chat reply")
 
     def _require_project(self, project_id: int):  # noqa: ANN202 - project record
         project = self._projects.get(project_id)
