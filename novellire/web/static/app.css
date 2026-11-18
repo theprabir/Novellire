@@ -1156,6 +1156,22 @@ input[type="range"]::-webkit-slider-thumb {
 }
 .msg-meta { font-family: var(--font-mono); font-size: 10.5px; color: var(--faint); }
 .msg-meta:empty { display: none; }
+.msg-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 20px; }
+.msg-foot:empty { display: none; }
+.msg-actions { display: flex; gap: 6px; }
+.msg-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--faint);
+  font-size: var(--fs-xs);
+}
+.msg-action:hover:not(:disabled) { color: var(--text); border-color: var(--border); background: var(--panel-2); }
+.msg-action:disabled { opacity: 0.55; cursor: not-allowed; }
 @keyframes chat-caret { 50% { opacity: 0; } }
 
 /* -- markdown -------------------------------------------------------------- */

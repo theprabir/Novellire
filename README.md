@@ -182,8 +182,11 @@ The interface has these surfaces:
   notes, while Write rebuilds its context from the documents, notes, chapter, and
   memory on every turn. Replies stream token by token and render as markdown;
   the round action button becomes **Stop**, which keeps the text received so far.
-  Conversations live in a slide-over drawer, and a reload reopens the stored
-  conversation and any unsent draft.
+  In Write mode, a reply can be **inserted into its chapter** — appended, or used
+  to replace the chapter text — with the previous text kept in revision history
+  and approved chapters refused until reopened. Conversations live in a
+  slide-over drawer, and a reload reopens the stored conversation and the draft
+  belonging to it.
 - **Continuity** — a designed scope. Its layout, filters, and detail panes are
   reserved and labelled with the phase that will connect them; it shows no
   project data yet.
@@ -198,7 +201,7 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-232 tests run fully offline. All inference is stubbed, so no model or Ollama
+236 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
@@ -332,7 +335,9 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.4.6** (schema version 11). `v0.4.6` rebuilds Chat as a
+Current release: **v0.4.7** (schema version 11). `v0.4.7` scopes chat drafts per
+conversation and adds **Insert into chapter** for Write-mode replies, respecting
+the approval lock and keeping a revision snapshot. `v0.4.6` rebuilds Chat as a
 full-height conversation surface: a centred scrolling feed, markdown replies, a
 pinned floating composer, a Plan/Write switch inside the chat, and one
 Send/Stop button. `v0.4.5` streams Chat replies as the model

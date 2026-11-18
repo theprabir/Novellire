@@ -7,15 +7,15 @@ import {
   toast,
 } from './ui.js';
 import { renderHome } from './views/home.js';
-import { renderMemory } from './views/memory.js?v=0.4.6';
+import { renderMemory } from './views/memory.js?v=0.4.7';
 import { openProjectForm } from './views/projects.js';
 import { renderProjectSettings } from './views/project-settings.js';
-import { renderWorkspace } from './views/workspace.js?v=0.4.6';
+import { renderWorkspace } from './views/workspace.js?v=0.4.7';
 import { renderPreview } from './views/preview.js';
 import { renderExport } from './views/export.js';
 import { renderSettings } from './views/settings.js';
-import { renderChat } from './views/chat.js?v=0.4.6';
-import { renderScope } from './views/scopes.js?v=0.4.6';
+import { renderChat } from './views/chat.js?v=0.4.7';
+import { renderScope } from './views/scopes.js?v=0.4.7';
 
 const NAV = [
   { key: 'home', label: 'Home', icon: 'home' },

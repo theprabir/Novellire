@@ -261,6 +261,10 @@ class ChatThreadUpdateRequest(BaseModel):
     mode: Literal["plan", "write"] | None = None
 
 
+class ChatInsertRequest(BaseModel):
+    replace: bool = False
+
+
 class ChatMessageRequest(BaseModel):
     instructions: str
     model: str
@@ -939,6 +943,21 @@ def _build_router(services: ApiServices) -> APIRouter:
                 "X-Accel-Buffering": "no",
             },
         )
+
+    @router.post("/chat/threads/{thread_id}/messages/{message_id}/insert")
+    def insert_chat_message(
+        thread_id: int,
+        message_id: int,
+        payload: ChatInsertRequest | None = None,
+    ) -> dict[str, Any]:
+        """Append or replace the chapter text with a Write-mode reply."""
+        chapter = services.chat.insert_reply(
+            thread_id,
+            message_id,
+            replace=bool(payload and payload.replace),
+        )
+        services.analysis_scheduler.schedule_chapter(chapter)
+        return asdict(chapter)
 
     @router.get("/projects/{project_id}/insights")
     def list_project_insights(project_id: int) -> list[dict[str, Any]]:

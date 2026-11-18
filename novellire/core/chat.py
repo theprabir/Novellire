@@ -29,6 +29,7 @@ from ..storage.chat_repository import (
     ChatThread,
 )
 from ..storage.repositories import ProjectRepository
+from ..storage.story_repositories import ChapterRecord
 from .chapters import ChapterService
 from .context import GenerationContext, GenerationContextBuilder
 from .settings_service import GenerationSettings
@@ -416,6 +417,44 @@ class ChatService:
             self._finish_turn(thread, text, model)
         except Exception:  # noqa: BLE001 - the connection is already gone
             logger.warning("Could not store an interrupted chat reply")
+
+    def insert_reply(
+        self,
+        thread_id: int,
+        message_id: int,
+        *,
+        replace: bool = False,
+    ) -> ChapterRecord:
+        """Write a Write-mode reply into its chapter, respecting the approval lock."""
+        thread = self._require_thread(thread_id)
+        message = self._threads.get_message(message_id)
+        if message is None or message.thread_id != thread.id:
+            raise RecordNotFoundError(
+                "That reply no longer exists in this conversation."
+            )
+        if message.role != "assistant":
+            raise InvalidInputError(
+                "Only a model reply can be inserted into the chapter."
+            )
+        if thread.mode != "write":
+            raise InvalidInputError(
+                "Switch this conversation to Write mode before inserting prose."
+            )
+        if thread.chapter_id is None:
+            raise InvalidInputError(
+                "This conversation is project-wide. Start a chapter-scoped chat "
+                "to insert prose."
+            )
+        chapter = self._chapters.require_chapter(thread.chapter_id)
+        prose = message.content.strip()
+        if not prose:
+            raise InvalidInputError("That reply is empty.")
+        existing = chapter.content.rstrip()
+        content = prose if replace or not existing else f"{existing}\n\n{prose}"
+        if content == chapter.content:
+            return chapter
+        # ChapterService enforces the approval lock and snapshots the revision.
+        return self._chapters.update_chapter(chapter.id, content=content)
 
     def _require_project(self, project_id: int):  # noqa: ANN202 - project record
         project = self._projects.get(project_id)

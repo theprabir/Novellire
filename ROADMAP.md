@@ -137,12 +137,15 @@ Implemented first slice:
   inference request.
 - Replies stream token by token from Ollama; **Stop** stores the partial reply so
   it survives a reload.
+- Chat is a full-height conversation surface with a Plan/Write switch inside the
+  composer, and unsent drafts are stored per conversation.
+- A Write-mode reply can be inserted into its chapter (append or replace) through
+  the normal chapter edit path, so the approval lock and revision history apply.
 
 Remaining:
 
 - Side-by-side chapter pane and an expandable context drawer.
-- Draft checkpoints that survive interruption.
-- Insert a Write-mode reply into the chapter with the approval lock enforced.
+- Chat draft checkpoints that survive an interrupted generation.
 
 Acceptance: a planning discussion survives a page reload as compact notes; Write
 mode starts from fresh context and streams prose into the chapter pane.

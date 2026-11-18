@@ -16,7 +16,7 @@ const MODES = [
   { value: 'plan', label: 'Plan' },
 ];
 const NEW_THREAD_TITLE = 'New conversation';
-const DRAFT_KEY = 'novellire.chat.draft';
+const DRAFT_PREFIX = 'novellire.chat.draft.';
 
 function chapterFor(state, thread) {
   if (!thread?.chapter_id) return null;
@@ -256,10 +256,7 @@ export function renderChat(ctx) {
     saveDraft();
   });
 
-  try {
-    const saved = window.localStorage.getItem(DRAFT_KEY);
-    if (saved) inputBox.value = saved;
-  } catch (error) { /* drafts are optional */ }
+  loadDraft();
 
   root.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && root.classList.contains('drawer-open')) {
@@ -357,6 +354,41 @@ export function renderChat(ctx) {
     inputBox.style.height = `${Math.min(inputBox.scrollHeight, 220)}px`;
   }
 
+  function insertActions(message) {
+    if (!active || active.mode !== 'write' || !active.chapter_id) return null;
+    if (message.role !== 'assistant') return null;
+    const chapter = chapterFor(state, active);
+    if (!chapter) return null;
+    const locked = chapter.status === 'approved';
+    return el(
+      'div',
+      { class: 'msg-actions' },
+      el(
+        'button',
+        {
+          class: 'msg-action',
+          type: 'button',
+          disabled: locked,
+          title: locked
+            ? 'This chapter is approved. Reopen it before inserting.'
+            : 'Insert this reply into the chapter',
+          onClick: () => offerInsert(message),
+        },
+        icon('arrow-down', 'icon sm'),
+        'Insert into chapter'
+      )
+    );
+  }
+
+  function footNode(message) {
+    return el(
+      'div',
+      { class: 'msg-foot' },
+      message.model ? el('span', { class: 'msg-meta' }, message.model) : null,
+      insertActions(message)
+    );
+  }
+
   function messageNode(message) {
     if (message.role === 'user') {
       return el(
@@ -367,28 +399,26 @@ export function renderChat(ctx) {
     }
     const body = el('div', { class: 'msg-body md' });
     body.append(renderMarkdown(message.content));
-    return el(
-      'article',
-      { class: 'msg msg-assistant' },
-      body,
-      message.model ? el('div', { class: 'msg-meta' }, message.model) : null
-    );
+    return el('article', { class: 'msg msg-assistant' }, body, footNode(message));
   }
 
   function streamingMessage() {
     const text = document.createTextNode('');
     const body = el('div', { class: 'msg-body md streaming' }, text);
-    const meta = el('div', { class: 'msg-meta' });
-    const node = el('article', { class: 'msg msg-assistant' }, body, meta);
+    const foot = el('div', { class: 'msg-foot' });
+    const node = el('article', { class: 'msg msg-assistant' }, body, foot);
     return {
       node,
       append(chunk) {
         text.data += chunk;
       },
-      finish(model, content) {
+      finish(model, content, message) {
         body.classList.remove('streaming');
         body.replaceChildren(renderMarkdown(content));
-        meta.textContent = model || '';
+        foot.replaceChildren(
+          model ? el('span', { class: 'msg-meta' }, model) : null,
+          message ? insertActions(message) : null
+        );
       },
     };
   }
@@ -433,10 +463,31 @@ export function renderChat(ctx) {
     return (active?.mode || pendingMode) === 'write' ? 'Write' : 'Plan';
   }
 
+  function draftKey() {
+    return `${DRAFT_PREFIX}${active?.id ?? 'new'}`;
+  }
+
+  function loadDraft() {
+    let saved = '';
+    try {
+      saved = window.localStorage.getItem(draftKey()) || '';
+    } catch (error) { /* drafts are optional */ }
+    inputBox.value = saved;
+    autoGrow();
+    renderComposer();
+  }
+
   function saveDraft() {
     try {
-      if (inputBox.value) window.localStorage.setItem(DRAFT_KEY, inputBox.value);
-      else window.localStorage.removeItem(DRAFT_KEY);
+      const key = draftKey();
+      if (inputBox.value) window.localStorage.setItem(key, inputBox.value);
+      else window.localStorage.removeItem(key);
+    } catch (error) { /* drafts are optional */ }
+  }
+
+  function clearDraft(key) {
+    try {
+      window.localStorage.removeItem(key);
     } catch (error) { /* drafts are optional */ }
   }
 
@@ -453,6 +504,66 @@ export function renderChat(ctx) {
     notesOpen = !notesOpen;
     renderNotes();
     if (notesOpen) notesText.focus();
+  }
+
+  function offerInsert(message) {
+    const chapter = active ? chapterFor(state, active) : null;
+    if (!chapter) return;
+    if (chapter.status === 'approved') {
+      toast('This chapter is approved. Reopen it before inserting.', 'error');
+      return;
+    }
+    if (!chapter.content?.trim()) {
+      insertReply(message, false);
+      return;
+    }
+    openModal({
+      title: 'Insert reply into chapter',
+      body: el(
+        'p',
+        { class: 'hint' },
+        `Chapter ${chapter.position} — ${chapter.title} already has text. ` +
+          'Append this reply to the end, or replace the chapter text with it?'
+      ),
+      footer: [
+        el('button', { class: 'btn btn-ghost', type: 'button', onClick: closeModal }, 'Cancel'),
+        el(
+          'button',
+          { class: 'btn', type: 'button', onClick: () => insertReply(message, true) },
+          'Replace text'
+        ),
+        el(
+          'button',
+          { class: 'btn btn-primary', type: 'button', onClick: () => insertReply(message, false) },
+          'Append'
+        ),
+      ],
+    });
+  }
+
+  async function insertReply(message, replace) {
+    if (!active) return;
+    try {
+      const chapter = await api.post(
+        `/api/chat/threads/${active.id}/messages/${message.id}/insert`,
+        { replace }
+      );
+      closeModal();
+      const [manuscript, tree] = await Promise.all([
+        api.get(`/api/projects/${project.id}/manuscript`),
+        api.get(`/api/projects/${project.id}/tree`),
+      ]);
+      state.manuscript = manuscript;
+      state.tree = tree;
+      ctx.renderShell?.();
+      toast(
+        `Inserted into Chapter ${chapter.position} — ${chapter.title} ` +
+          `(${chapter.word_count.toLocaleString()} words).`,
+        'success'
+      );
+    } catch (error) {
+      toast(error.message, 'error');
+    }
   }
 
   async function saveNotes() {
@@ -525,7 +636,7 @@ export function renderChat(ctx) {
       renderMode();
       renderMessages(bundle.messages);
       renderNotes();
-      renderComposer();
+      loadDraft();
       toggleDrawer(false);
     } catch (error) {
       toast(error.message, 'error');
@@ -569,7 +680,7 @@ export function renderChat(ctx) {
         renderHeader();
         renderMode();
         renderMessages([]);
-        renderComposer();
+        loadDraft();
       }
     } catch (error) {
       toast(error.message, 'error');
@@ -622,18 +733,24 @@ export function renderChat(ctx) {
           title: title.value.trim(),
         });
         closeModal();
+        const carried = active === null ? inputBox.value : '';
         active = created;
         state.chatThreadId = created.id;
         threads = [created, ...threads];
         notesOpen = false;
-        inputBox.value = '';
-        autoGrow();
         renderHeader();
         renderDrawer();
         renderMode();
         renderMessages([]);
         renderNotes();
-        renderComposer();
+        if (carried) {
+          inputBox.value = carried;
+          autoGrow();
+          saveDraft();
+          clearDraft(`${DRAFT_PREFIX}new`);
+        } else {
+          loadDraft();
+        }
         toggleDrawer(false);
         inputBox.focus();
       } catch (error) {
@@ -658,6 +775,7 @@ export function renderChat(ctx) {
       toast('Choose a model in Settings first.', 'error');
       return;
     }
+    const sentKey = draftKey();
 
     if (!active) {
       try {
@@ -688,7 +806,7 @@ export function renderChat(ctx) {
     scrollToEnd(true);
     inputBox.value = '';
     autoGrow();
-    saveDraft();
+    clearDraft(sentKey);
     abortController = new AbortController();
     let failure = '';
     let collected = '';
@@ -710,10 +828,10 @@ export function renderChat(ctx) {
             reply.append(event.text || '');
             scrollToEnd();
           } else if (event.type === 'done') {
-            reply.finish(event.assistant?.model || model, collected);
             active = event.thread;
             state.chatThreadId = active.id;
             pendingMode = active.mode;
+            reply.finish(event.assistant?.model || model, collected, event.assistant);
             const item = threads.find((thread) => thread.id === active.id);
             if (item) Object.assign(item, active);
             renderHeader();

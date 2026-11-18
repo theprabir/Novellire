@@ -3,6 +3,33 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.4.7] — 2026-11-18
+
+Per-conversation drafts and inserting Write replies into chapters. Schema stays
+at 11.
+
+### Added
+
+- **Insert into chapter.** A Write-mode reply in a chapter-scoped conversation
+  can be appended to the chapter or used to replace its text:
+  `POST /api/chat/threads/{id}/messages/{id}/insert` with `{"replace": false}`.
+  The chapter takes its normal edit path, so the previous text is snapshotted
+  into revision history and the approval lock still applies: an approved chapter
+  is refused until it is reopened.
+- Insert is offered only for model replies in Write mode on a chapter-scoped
+  conversation. Plan replies and project-wide conversations are rejected with a
+  clear message, and the button is disabled with a reopen hint when the chapter
+  is approved.
+- After inserting, the manuscript, chapter word counts, and project tree refresh
+  in place, and background analysis is queued for the changed chapter.
+
+### Fixed
+
+- An unsent chat draft was stored under one global key, so text typed in one
+  conversation appeared in every other one. Drafts are now keyed per
+  conversation, with a separate key for a chat that does not exist yet; a draft
+  is carried into the new conversation and cleared when its message is sent.
+
 ## [0.4.6] — 2026-11-18
 
 Chat rebuilt as a focused conversation surface. Schema stays at 11.

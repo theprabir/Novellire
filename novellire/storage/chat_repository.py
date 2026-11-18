@@ -134,6 +134,17 @@ class ChatRepository:
             ).fetchall()
         return [_message_from_row(row) for row in rows]
 
+    def get_message(self, message_id: int) -> ChatMessage | None:
+        with self._database.connection() as connection:
+            row = connection.execute(
+                """
+                SELECT id, thread_id, role, content, model, created_at
+                FROM chat_messages WHERE id = ?
+                """,
+                (message_id,),
+            ).fetchone()
+        return _message_from_row(row) if row is not None else None
+
     def add_message(
         self, thread_id: int, *, role: str, content: str, model: str = ""
     ) -> ChatMessage:

@@ -323,6 +323,151 @@ def test_chat_mode_can_switch_within_a_conversation(
         assert invalid.status_code == 422
 
 
+def test_write_reply_can_be_inserted_into_its_chapter(
+    tmp_path: Path, fake_provider_factory
+) -> None:
+    provider = fake_provider_factory(
+        result=GenerationResult(
+            text="Mira steps through the gate.", model="fake-model", duration_ms=5
+        )
+    )
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        chapter = client.post(
+            f"/api/projects/{project['id']}/chapters",
+            json={"title": "The Gate", "content": "Mira waits."},
+        ).json()
+        thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads",
+            json={"mode": "write", "chapter_id": chapter["id"]},
+        ).json()
+        sent = client.post(
+            f"/api/chat/threads/{thread['id']}/messages",
+            json={"instructions": "Draft the crossing.", "model": "fake-model"},
+        )
+        assert sent.status_code == 200, sent.text
+        reply = sent.json()["assistant"]
+
+        appended = client.post(
+            f"/api/chat/threads/{thread['id']}/messages/{reply['id']}/insert",
+            json={"replace": False},
+        )
+        assert appended.status_code == 200, appended.text
+        assert appended.json()["content"] == (
+            "Mira waits.\n\nMira steps through the gate."
+        )
+        assert appended.json()["word_count"] == 7
+
+        revisions = client.get(
+            f"/api/chapters/{chapter['id']}/revisions"
+        ).json()
+        assert len(revisions) == 1
+        assert revisions[0]["word_count"] == 2
+
+        replaced = client.post(
+            f"/api/chat/threads/{thread['id']}/messages/{reply['id']}/insert",
+            json={"replace": True},
+        )
+        assert replaced.status_code == 200, replaced.text
+        assert replaced.json()["content"] == "Mira steps through the gate."
+
+
+def test_insert_respects_the_approval_lock(
+    tmp_path: Path, fake_provider_factory
+) -> None:
+    provider = fake_provider_factory(
+        result=GenerationResult(
+            text="A new ending.", model="fake-model", duration_ms=5
+        )
+    )
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        chapter = client.post(
+            f"/api/projects/{project['id']}/chapters",
+            json={
+                "title": "The Gate",
+                "content": "Mira waits.",
+                "status": "approved",
+            },
+        ).json()
+        assert chapter["status"] == "approved"
+        thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads",
+            json={"mode": "write", "chapter_id": chapter["id"]},
+        ).json()
+        sent = client.post(
+            f"/api/chat/threads/{thread['id']}/messages",
+            json={"instructions": "Draft it.", "model": "fake-model"},
+        )
+        reply = sent.json()["assistant"]
+
+        response = client.post(
+            f"/api/chat/threads/{thread['id']}/messages/{reply['id']}/insert",
+            json={"replace": False},
+        )
+
+        assert response.status_code == 400
+        assert "approved" in response.json()["detail"]
+        unchanged = client.get(
+            f"/api/projects/{project['id']}/manuscript"
+        ).json()["chapters"][0]
+        assert unchanged["content"] == "Mira waits."
+
+
+def test_insert_requires_a_chapter_scoped_write_thread(
+    tmp_path: Path, fake_provider_factory
+) -> None:
+    provider = fake_provider_factory(
+        result=GenerationResult(text="Some prose.", model="fake-model", duration_ms=5)
+    )
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        chapter = client.post(
+            f"/api/projects/{project['id']}/chapters",
+            json={"title": "The Gate"},
+        ).json()
+
+        plan_thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads",
+            json={"mode": "plan", "chapter_id": chapter["id"]},
+        ).json()
+        plan_reply = client.post(
+            f"/api/chat/threads/{plan_thread['id']}/messages",
+            json={"instructions": "What next?", "model": "fake-model"},
+        ).json()["assistant"]
+        plan_insert = client.post(
+            f"/api/chat/threads/{plan_thread['id']}/messages/{plan_reply['id']}/insert",
+            json={"replace": False},
+        )
+        assert plan_insert.status_code == 400
+        assert "Write mode" in plan_insert.json()["detail"]
+
+        wide_thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads",
+            json={"mode": "write"},
+        ).json()
+        wide_reply = client.post(
+            f"/api/chat/threads/{wide_thread['id']}/messages",
+            json={"instructions": "Draft.", "model": "fake-model"},
+        ).json()["assistant"]
+        wide_insert = client.post(
+            f"/api/chat/threads/{wide_thread['id']}/messages/{wide_reply['id']}/insert",
+            json={"replace": False},
+        )
+        assert wide_insert.status_code == 400
+        assert "project-wide" in wide_insert.json()["detail"]
+
+        other = client.post(
+            f"/api/projects/{project['id']}/chat/threads",
+            json={"mode": "write", "chapter_id": chapter["id"]},
+        ).json()
+        foreign = client.post(
+            f"/api/chat/threads/{other['id']}/messages/{wide_reply['id']}/insert",
+            json={"replace": False},
+        )
+        assert foreign.status_code == 404
+
+
 def test_chat_rejects_a_chapter_from_another_project(
     tmp_path: Path, fake_provider_factory
 ) -> None:
