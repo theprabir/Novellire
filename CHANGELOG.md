@@ -25,6 +25,10 @@ at 11.
 
 ### Fixed
 
+- Switching Plan/Write now reports an error instead of silently snapping back
+  when the running server is older than the interface: an old server ignores the
+  `mode` field, answers 200 with the unchanged thread, and the toggle used to
+  follow that response without explanation.
 - An unsent chat draft was stored under one global key, so text typed in one
   conversation appeared in every other one. Drafts are now keyed per
   conversation, with a separate key for a chat that does not exist yet; a draft

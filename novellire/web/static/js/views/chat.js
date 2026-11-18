@@ -604,6 +604,12 @@ export function renderChat(ctx) {
     renderHeader();
     try {
       const updated = await api.patch(`/api/chat/threads/${active.id}`, { mode });
+      if (updated.mode !== mode) {
+        // An older server ignores the mode field and answers 200 unchanged.
+        throw new Error(
+          'The server did not switch modes. Restart Novellire if it is running an older version.'
+        );
+      }
       active = updated;
       pendingMode = updated.mode;
       const item = threads.find((thread) => thread.id === active.id);
