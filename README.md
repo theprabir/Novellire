@@ -347,7 +347,9 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.4.13** (schema version 15). `v0.4.13` reviews a generated
+Current release: **v0.4.14** (schema version 15). `v0.4.14` discusses a saved
+scene plan before drafting: Novellire asks what the plan leaves undecided, and
+the author's answers feed the scene-by-scene draft. `v0.4.13` reviews a generated
 draft against its plan and canon and proposes findings, each quoting prose the
 server verified in the draft, which the author can apply to the draft.
 `v0.4.12` drafts a chapter

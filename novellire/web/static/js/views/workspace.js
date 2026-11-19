@@ -643,16 +643,28 @@ function chapterEditor(ctx, chapter) {
         'History'
       ),
       !imported
-        ? el(
-            'button',
-            {
-              class: 'btn btn-ghost',
-              type: 'button',
-              onClick: () => openPlanDialog(ctx, chapter, plan.value),
-            },
-            icon('layers'),
-            'Plan with AI'
-          )
+        ? [
+            el(
+              'button',
+              {
+                class: 'btn btn-ghost',
+                type: 'button',
+                onClick: () => openPlanDialog(ctx, chapter, plan.value),
+              },
+              icon('layers'),
+              'Plan with AI'
+            ),
+            el(
+              'button',
+              {
+                class: 'btn btn-ghost',
+                type: 'button',
+                onClick: () => openDiscussDialog(ctx, chapter),
+              },
+              icon('message'),
+              'Discuss plan'
+            ),
+          ]
         : null,
       chapter.content.trim()
         ? el(
@@ -1183,6 +1195,117 @@ function openPlanDialog(ctx, chapter, currentPlan) {
   });
 }
 
+function openDiscussDialog(ctx, chapter) {
+  if (!(chapter.objectives || '').trim()) {
+    toast('Add a scene plan to this chapter, or use Plan with AI first.', 'error');
+    return;
+  }
+  const state = ctx.state;
+  const settings = state.settings?.generation || {};
+  const model = settings.model || state.ollama?.models?.[0]?.name || '';
+  const host = el('div', { class: 'review-findings' });
+  const draft = el(
+    'button',
+    { class: 'btn btn-primary', type: 'button', disabled: true },
+    icon('layers'),
+    'Draft with answers'
+  );
+  let collected = [];
+  const modal = openModal({
+    title: `Discuss chapter ${chapter.position}`,
+    wide: true,
+    body: [
+      el(
+        'p',
+        { class: 'hint' },
+        'Novellire compares the saved scene plan with the summary, documents, and memory, and asks what it still needs to know. Answers go to the draft only; the plan is not changed.'
+      ),
+      host,
+    ],
+    footer: [
+      el(
+        'button',
+        { class: 'btn btn-ghost', type: 'button', onClick: () => modal.close() },
+        'Close'
+      ),
+      draft,
+    ],
+  });
+  draft.addEventListener('click', () => {
+    const instructions = collected
+      .filter((item) => item.answer.value.trim())
+      .map((item) => `Q: ${item.question}\nA: ${item.answer.value.trim()}`)
+      .join('\n\n');
+    modal.close();
+    draftSequence(ctx, chapter, null, { instructions });
+  });
+
+  const render = (result) => {
+    const questions = result.questions || [];
+    collected = questions.map((item) => ({
+      question: item.question,
+      answer: textarea({ rows: 2, placeholder: 'Your answer (optional)' }),
+    }));
+    host.replaceChildren(
+      el(
+        'p',
+        {},
+        result.summary ||
+          (result.ready
+            ? 'The plan looks ready to draft.'
+            : 'The plan needs a few decisions before drafting.')
+      ),
+      questions.length
+        ? el(
+            'div',
+            { class: 'review-list' },
+            collected.map((item, index) =>
+              el(
+                'div',
+                { class: 'review-finding' },
+                el(
+                  'div',
+                  { class: 'review-finding-head' },
+                  el('span', { class: 'chip accent' }, `Question ${index + 1}`),
+                  el('strong', {}, item.question)
+                ),
+                questions[index].why
+                  ? el('p', { class: 'hint' }, questions[index].why)
+                  : null,
+                item.answer
+              )
+            )
+          )
+        : el(
+            'p',
+            { class: 'hint' },
+            'Nothing to clarify. Draft when you are ready.'
+          )
+    );
+    draft.disabled = false;
+  };
+
+  if (!model) {
+    host.replaceChildren(
+      el('p', { class: 'hint' }, 'Choose a model in Settings before discussing a plan.')
+    );
+    return;
+  }
+  host.replaceChildren(el('p', { class: 'hint' }, 'Reading the plan…'));
+  api
+    .post(`/api/chapters/${chapter.id}/discuss`, {
+      model,
+      temperature: Number(settings.temperature ?? 0.3),
+      top_p: Number(settings.top_p ?? 0.9),
+      num_predict: Number(settings.num_predict ?? 700),
+      context_window: Number(settings.context_window ?? 4096),
+    })
+    .then(render)
+    .catch((error) => {
+      host.replaceChildren(el('p', { class: 'hint' }, error.message));
+    });
+}
+
 async function summariseChapter(ctx, chapter, button) {
   const state = ctx.state;
   const model =
@@ -1425,7 +1548,7 @@ function openChapterDialog(ctx) {
 
 /* -- generation ----------------------------------------------------------- */
 
-async function draftSequence(ctx, chapter, button) {
+async function draftSequence(ctx, chapter, button, { instructions = '' } = {}) {
   const state = ctx.state;
   if (!(chapter.objectives || '').trim()) {
     toast('Add a scene plan to this chapter, or use Plan with AI first.', 'error');
@@ -1438,12 +1561,14 @@ async function draftSequence(ctx, chapter, button) {
     toast('Choose a model in Settings first.', 'error');
     return;
   }
-  button.disabled = true;
-  button.replaceChildren(icon('refresh'), 'Drafting scenes…');
+  if (button) {
+    button.disabled = true;
+    button.replaceChildren(icon('refresh'), 'Drafting scenes…');
+  }
   try {
     const record = await api.post(`/api/chapters/${chapter.id}/draft-sequence`, {
       model,
-      instructions: '',
+      instructions,
       target_words: Number(chapter.target_word_count || 1200),
       temperature: Number(saved.temperature),
       top_p: Number(saved.top_p),
@@ -1459,8 +1584,10 @@ async function draftSequence(ctx, chapter, button) {
   } catch (error) {
     toast(error.message, 'error');
   } finally {
-    button.disabled = false;
-    button.replaceChildren(icon('layers'), 'Draft scene by scene');
+    if (button) {
+      button.disabled = false;
+      button.replaceChildren(icon('layers'), 'Draft scene by scene');
+    }
   }
 }
 

@@ -176,10 +176,12 @@ Implemented first slice:
   plan, documents, canon, character state, and retrieved memory. Only findings
   that quote the draft exactly once are kept, and applying one rewrites the
   draft, never the chapter; the model proposes text and executes nothing.
+- Pre-draft discussion: one inference asks up to five questions the plan leaves
+  undecided, the author answers what matters, and those answers become the draft
+  instruction. The plan is not rewritten and answers are not stored as canon.
 
 Remaining:
 
-- The discuss step before prose.
 - Broader model-proposed actions beyond review findings (outline changes,
   approvals, reordering), all validated server-side before anything runs.
 - Approval remains the final lock on prose.

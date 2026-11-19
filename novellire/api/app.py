@@ -31,6 +31,7 @@ from ..core.characters import FIELD_LABELS as CHARACTER_FIELD_LABELS
 from ..core.characters import PROFILE_FIELDS, CharacterService
 from ..core.chat import ChatService
 from ..core.context import GenerationContextBuilder
+from ..core.discussion import ChapterDiscussionService
 from ..core.documents import ProjectDocumentService, WORKSPACE_DOCUMENTS
 from ..core.events import EventExtractionService
 from ..core.export import ExportService
@@ -289,6 +290,14 @@ class ChatRevisionRequest(BaseModel):
     context_window: int = Field(default=4096, ge=512, le=32768)
 
 
+class PlanDiscussionRequest(BaseModel):
+    model: str
+    temperature: float = Field(default=0.3, ge=0.0, le=2.0)
+    top_p: float = Field(default=0.9, gt=0.0, le=1.0)
+    num_predict: int = Field(default=700, ge=32, le=8192)
+    context_window: int = Field(default=4096, ge=512, le=32768)
+
+
 class ChapterReviewRequest(BaseModel):
     model: str
     draft: str | None = None
@@ -394,6 +403,7 @@ class ApiServices:
     chat: ChatService
     orchestration: ChapterDraftSequence
     review: ChapterReviewService
+    discussion: ChapterDiscussionService
 
 
 def build_services(
@@ -523,6 +533,9 @@ def build_services(
         chat=chat_service,
         orchestration=ChapterDraftSequence(generation_service, context_builder),
         review=ChapterReviewService(
+            provider, project_repository, chapter_service, context_builder
+        ),
+        discussion=ChapterDiscussionService(
             provider, project_repository, chapter_service, context_builder
         ),
     )
@@ -1807,6 +1820,32 @@ def _build_router(services: ApiServices) -> APIRouter:
                 for scene in outcome.scenes
             ],
             "context": {"chapters": [], "events": []},
+        }
+
+    @router.post("/chapters/{chapter_id}/discuss")
+    def discuss_chapter_plan(
+        chapter_id: int, payload: PlanDiscussionRequest
+    ) -> dict[str, Any]:
+        """Ask what the saved scene plan still leaves undecided.
+
+        Read-only: the plan is not rewritten and no prose is generated. The
+        author's answers are passed to the draft, never stored as canon.
+        """
+        result = services.discussion.discuss(
+            chapter_id,
+            settings=GenerationSettings(
+                model=payload.model,
+                temperature=payload.temperature,
+                top_p=payload.top_p,
+                num_predict=payload.num_predict,
+                context_window=payload.context_window,
+            ),
+        )
+        return {
+            "ready": result.ready,
+            "summary": result.summary,
+            "model": result.model,
+            "questions": [asdict(question) for question in result.questions],
         }
 
     @router.post("/chapters/{chapter_id}/review")

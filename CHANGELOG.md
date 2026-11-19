@@ -3,6 +3,25 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.4.14] — 2026-11-19
+
+Novellire can discuss a scene plan before drafting it.
+
+### Added
+
+- **Discuss plan** in the chapter editor. One inference compares the saved scene
+  plan with the chapter summary, documents, canon, character state, and
+  retrieved memory, and asks up to five questions whose answers would change the
+  prose. Duplicate and empty questions are dropped.
+- Each question has an optional answer field, and **Draft with answers** passes
+  the answered pairs to the scene-by-scene draft as its author instruction. The
+  plan itself is never rewritten, and answers are not stored as canon.
+- `POST /api/chapters/{id}/discuss` is read-only. A chapter without a scene plan
+  or a plan over 6,000 characters is refused rather than clipped, and a
+  malformed response is reported as a 502.
+
+Schema stays at 15.
+
 ## [0.4.13] — 2026-11-19
 
 A draft can be reviewed before it reaches the chapter.
