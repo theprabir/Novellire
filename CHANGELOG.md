@@ -3,6 +3,33 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.4.8] — 2026-11-19
+
+A side-by-side chapter pane for Chat and a context drawer for its replies.
+Schema goes to 12 so the retrieval behind a reply survives a reload.
+
+### Added
+
+- **Chapter pane.** A chapter-scoped conversation shows its chapter beside the
+  messages: position, title, workflow status, word count, and the prose as it
+  stands. The pane refreshes after an insert, hides behind the header button
+  with the choice remembered per browser, and offers **Open in editor** for
+  manual correction. Below 1080px it slides over the conversation instead of
+  squeezing the feed.
+- **Context drawer.** Each model reply can expand to show what retrieval gave
+  it: the earlier chapters used, by position and title, and how many memory
+  events were retrieved. The context is stored on the message
+  (`chat_messages.context_json`), so it is still there after a reload rather
+  than only in the tab that produced the reply.
+- `GET /api/chat/threads/{id}` and both chat send endpoints now return
+  `context` on each message: `{"chapters": [...], "events": 0}`, or `null` for
+  an author message and for replies stored before schema 12.
+
+### Migrations
+
+- Schema 12 adds `context_json` to `chat_messages`; existing conversations keep
+  their messages and gain an empty context.
+
 ## [0.4.7] — 2026-11-18
 
 Per-conversation drafts and inserting Write replies into chapters. Schema stays

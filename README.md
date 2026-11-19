@@ -184,8 +184,11 @@ The interface has these surfaces:
   the round action button becomes **Stop**, which keeps the text received so far.
   In Write mode, a reply can be **inserted into its chapter** — appended, or used
   to replace the chapter text — with the previous text kept in revision history
-  and approved chapters refused until reopened. Conversations live in a
-  slide-over drawer, and a reload reopens the stored conversation and the draft
+  and approved chapters refused until reopened. A chapter-scoped conversation
+  shows its chapter in a **side-by-side pane** that refreshes after an insert,
+  and every reply can expand a **context drawer** listing the earlier chapters
+  and memory events retrieval gave it. Conversations live in a slide-over
+  drawer, and a reload reopens the stored conversation, its pane, and the draft
   belonging to it.
 - **Continuity** — a designed scope. Its layout, filters, and detail panes are
   reserved and labelled with the phase that will connect them; it shows no
@@ -329,15 +332,19 @@ by Git. Never commit a novel project's database.
 | 9 | `chapter_revisions` snapshots of earlier chapter text |
 | 10 | `analysis_state` content hashes and `chapter_insights` derived proposals |
 | 11 | `chat_threads` and `chat_messages` for persistent conversations |
+| 12 | chat message `context_json`, the retrieval each reply was given |
 
 Migrations are applied in order inside transactions; an existing database is
 upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.4.7** (schema version 11). `v0.4.7` scopes chat drafts per
-conversation and adds **Insert into chapter** for Write-mode replies, respecting
-the approval lock and keeping a revision snapshot. `v0.4.6` rebuilds Chat as a
+Current release: **v0.4.8** (schema version 12). `v0.4.8` adds a
+side-by-side chapter pane to Chat and a context drawer showing the retrieval
+behind each reply, stored with the message so it survives a reload. `v0.4.7`
+scopes chat drafts per conversation and adds **Insert into chapter** for
+Write-mode replies, respecting the approval lock and keeping a revision
+snapshot. `v0.4.6` rebuilds Chat as a
 full-height conversation surface: a centred scrolling feed, markdown replies, a
 pinned floating composer, a Plan/Write switch inside the chat, and one
 Send/Stop button. `v0.4.5` streams Chat replies as the model

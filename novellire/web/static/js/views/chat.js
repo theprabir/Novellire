@@ -17,6 +17,7 @@ const MODES = [
 ];
 const NEW_THREAD_TITLE = 'New conversation';
 const DRAFT_PREFIX = 'novellire.chat.draft.';
+const PANE_KEY = 'novellire.chat.pane';
 
 function chapterFor(state, thread) {
   if (!thread?.chapter_id) return null;
@@ -83,6 +84,18 @@ export function renderChat(ctx) {
 
   const titleNode = el('strong', { class: 'chat-title' }, 'New chat');
   const subtitleNode = el('span', { class: 'chat-subtitle' }, project.name);
+  const paneButton = el(
+    'button',
+    {
+      class: 'icon-btn',
+      type: 'button',
+      title: 'Show chapter pane',
+      'aria-label': 'Show chapter pane',
+      hidden: true,
+      onClick: () => togglePane(),
+    },
+    icon('book')
+  );
   const notesButton = el(
     'button',
     {
@@ -113,6 +126,7 @@ export function renderChat(ctx) {
     el(
       'div',
       { class: 'chat-header-actions' },
+      paneButton,
       notesButton,
       el(
         'button',
@@ -216,8 +230,71 @@ export function renderChat(ctx) {
     )
   );
 
+  /* -- chapter pane ---------------------------------------------------- */
+
+  const paneLabel = el('span', { class: 'chat-pane-label' }, 'Chapter');
+  const paneTitle = el('strong', { class: 'chat-pane-title' });
+  const paneStatus = el('span', { class: 'chat-pane-status' });
+  const paneWords = el('span', { class: 'chat-pane-words' });
+  const paneText = el('div', { class: 'chat-pane-text' });
+  const paneEmpty = el('p', { class: 'chat-pane-empty' });
+  const paneBody = el('div', { class: 'chat-pane-body' }, paneText, paneEmpty);
+  const pane = el(
+    'aside',
+    { class: 'chat-chapter', 'aria-label': 'Chapter' },
+    el(
+      'div',
+      { class: 'chat-pane-head' },
+      el(
+        'div',
+        { class: 'chat-pane-heading' },
+        paneLabel,
+        paneTitle,
+        el('div', { class: 'chat-pane-meta' }, paneStatus, paneWords)
+      ),
+      el(
+        'div',
+        { class: 'chat-pane-actions' },
+        el(
+          'button',
+          {
+            class: 'icon-btn',
+            type: 'button',
+            title: 'Refresh chapter',
+            'aria-label': 'Refresh chapter',
+            onClick: () => refreshPaneData(),
+          },
+          icon('refresh')
+        ),
+        el(
+          'button',
+          {
+            class: 'icon-btn',
+            type: 'button',
+            title: 'Open in editor',
+            'aria-label': 'Open in editor',
+            onClick: () => openChapter(),
+          },
+          icon('arrow-right')
+        ),
+        el(
+          'button',
+          {
+            class: 'icon-btn',
+            type: 'button',
+            title: 'Hide chapter pane',
+            'aria-label': 'Hide chapter pane',
+            onClick: () => togglePane(false),
+          },
+          icon('x')
+        )
+      )
+    ),
+    paneBody
+  );
+
   const column = el('div', { class: 'chat-column' }, scroll, dock);
-  root.append(header, el('div', { class: 'chat-body' }, drawer, scrim, column));
+  root.append(header, el('div', { class: 'chat-body' }, drawer, scrim, column, pane));
 
   /* -- state ----------------------------------------------------------- */
 
@@ -228,6 +305,7 @@ export function renderChat(ctx) {
   let notesOpen = false;
   let abortController = null;
   let pinned = true;
+  let paneOpen = readPanePreference();
 
   scroll.addEventListener('scroll', () => {
     pinned = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 120;
@@ -305,6 +383,78 @@ export function renderChat(ctx) {
       : project.name;
     subtitleNode.textContent = `${scope} · ${modeLabel()}`;
     notesButton.hidden = !(active && active.mode === 'plan');
+    renderPane();
+  }
+
+  function readPanePreference() {
+    try {
+      return window.localStorage.getItem(PANE_KEY) !== '0';
+    } catch (error) {
+      return true;
+    }
+  }
+
+  function activeChapter() {
+    return active ? chapterFor(state, active) : null;
+  }
+
+  function renderPane() {
+    const chapter = activeChapter();
+    paneButton.hidden = !chapter;
+    const open = Boolean(chapter) && paneOpen;
+    root.classList.toggle('pane-open', open);
+    paneButton.classList.toggle('active', open);
+    const label = open ? 'Hide chapter pane' : 'Show chapter pane';
+    paneButton.title = label;
+    paneButton.setAttribute('aria-label', label);
+    if (!chapter) return;
+    const approved = chapter.status === 'approved';
+    paneLabel.textContent = `Chapter ${chapter.position}`;
+    paneTitle.textContent = chapter.title || 'Untitled chapter';
+    paneStatus.textContent = approved
+      ? 'Approved'
+      : chapter.status
+        ? chapter.status[0].toUpperCase() + chapter.status.slice(1)
+        : 'Draft';
+    paneStatus.classList.toggle('approved', approved);
+    paneWords.textContent = `${(chapter.word_count || 0).toLocaleString()} words`;
+    const text = (chapter.content || '').trim();
+    paneText.textContent = text;
+    paneText.hidden = !text;
+    paneEmpty.hidden = Boolean(text);
+    paneEmpty.textContent = approved
+      ? 'This chapter is approved and locked. Reopen it to change the prose.'
+      : 'This chapter is empty. Ask for a scene in Write mode, then insert the reply.';
+  }
+
+  function togglePane(open) {
+    if (!activeChapter()) return;
+    paneOpen = typeof open === 'boolean' ? open : !paneOpen;
+    try {
+      window.localStorage.setItem(PANE_KEY, paneOpen ? '1' : '0');
+    } catch (error) { /* the preference is optional */ }
+    renderPane();
+    if (paneOpen) scrollPaneToEnd();
+  }
+
+  function scrollPaneToEnd() {
+    paneBody.scrollTop = paneBody.scrollHeight;
+  }
+
+  function openChapter() {
+    const chapter = activeChapter();
+    if (!chapter) return;
+    window.location.hash = `#/workspace/chapters/${chapter.id}`;
+  }
+
+  async function refreshPaneData() {
+    try {
+      state.manuscript = await api.get(`/api/projects/${project.id}/manuscript`);
+      renderPane();
+      scrollPaneToEnd();
+    } catch (error) {
+      toast(error.message, 'error');
+    }
   }
 
   function renderMode() {
@@ -380,13 +530,78 @@ export function renderChat(ctx) {
     );
   }
 
-  function footNode(message) {
-    return el(
+  function contextPanel(message) {
+    const context = message.context;
+    if (!context || typeof context !== 'object') return null;
+    const chapters = Array.isArray(context.chapters) ? context.chapters : [];
+    const events = Number(context.events || 0);
+    if (!chapters.length && !events) return null;
+    const panel = el('div', { class: 'msg-context', hidden: true });
+    if (chapters.length) {
+      panel.append(
+        el(
+          'p',
+          { class: 'msg-context-lead' },
+          chapters.length === 1
+            ? 'Built with one earlier chapter:'
+            : `Built with ${chapters.length} earlier chapters:`
+        ),
+        el(
+          'ul',
+          { class: 'msg-context-list' },
+          chapters.map((item) =>
+            el('li', {}, `Chapter ${item.position} — ${item.title}`)
+          )
+        )
+      );
+    }
+    if (events) {
+      panel.append(
+        el(
+          'p',
+          { class: 'msg-context-lead' },
+          events === 1 ? '1 memory event retrieved.' : `${events} memory events retrieved.`
+        )
+      );
+    }
+    const toggle = el(
+      'button',
+      {
+        class: 'msg-action',
+        type: 'button',
+        'aria-expanded': 'false',
+        title: 'Show the context this reply was given',
+        onClick: () => {
+          const open = panel.hidden;
+          panel.hidden = !open;
+          toggle.classList.toggle('active', open);
+          toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        },
+      },
+      icon('layers', 'icon sm'),
+      'Context'
+    );
+    return { toggle, panel };
+  }
+
+  function footContent(message) {
+    const meta = message.model
+      ? el('span', { class: 'msg-meta' }, message.model)
+      : null;
+    const context = contextPanel(message);
+    const actions = insertActions(message);
+    if (!meta && !context && !actions) return [];
+    const row = el(
       'div',
       { class: 'msg-foot' },
-      message.model ? el('span', { class: 'msg-meta' }, message.model) : null,
-      insertActions(message)
+      el('div', { class: 'msg-foot-left' }, meta, context ? context.toggle : null),
+      actions
     );
+    return context ? [row, context.panel] : [row];
+  }
+
+  function footNode(message) {
+    return el('div', { class: 'msg-foot-wrap' }, ...footContent(message));
   }
 
   function messageNode(message) {
@@ -405,7 +620,7 @@ export function renderChat(ctx) {
   function streamingMessage() {
     const text = document.createTextNode('');
     const body = el('div', { class: 'msg-body md streaming' }, text);
-    const foot = el('div', { class: 'msg-foot' });
+    const foot = el('div', { class: 'msg-foot-wrap' });
     const node = el('article', { class: 'msg msg-assistant' }, body, foot);
     return {
       node,
@@ -415,10 +630,10 @@ export function renderChat(ctx) {
       finish(model, content, message) {
         body.classList.remove('streaming');
         body.replaceChildren(renderMarkdown(content));
-        foot.replaceChildren(
-          model ? el('span', { class: 'msg-meta' }, model) : null,
-          message ? insertActions(message) : null
-        );
+        const final = message
+          ? { ...message, model: message.model || model }
+          : { role: 'assistant', content, model };
+        foot.replaceChildren(...footContent(final));
       },
     };
   }
@@ -556,6 +771,8 @@ export function renderChat(ctx) {
       state.manuscript = manuscript;
       state.tree = tree;
       ctx.renderShell?.();
+      renderPane();
+      scrollPaneToEnd();
       toast(
         `Inserted into Chapter ${chapter.position} — ${chapter.title} ` +
           `(${chapter.word_count.toLocaleString()} words).`,
@@ -872,6 +1089,7 @@ export function renderChat(ctx) {
 
   renderMode();
   renderComposer();
+  renderPane();
   loadThreads();
   window.requestAnimationFrame(() => {
     autoGrow();

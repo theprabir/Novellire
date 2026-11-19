@@ -141,10 +141,13 @@ Implemented first slice:
   composer, and unsent drafts are stored per conversation.
 - A Write-mode reply can be inserted into its chapter (append or replace) through
   the normal chapter edit path, so the approval lock and revision history apply.
+- The selected chapter sits in a side-by-side pane that refreshes after an
+  insert, with the pane preference remembered per browser.
+- Every reply carries an expandable context drawer: the earlier chapters and
+  memory events retrieval gave it, stored with the message (schema 12).
 
 Remaining:
 
-- Side-by-side chapter pane and an expandable context drawer.
 - Chat draft checkpoints that survive an interrupted generation.
 
 Acceptance: a planning discussion survives a page reload as compact notes; Write

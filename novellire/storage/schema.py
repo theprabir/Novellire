@@ -456,6 +456,11 @@ CREATE INDEX idx_chat_messages_thread
     ON chat_messages (thread_id, id)
 """
 
+MIGRATION_12_CHAT_MESSAGE_CONTEXT = """
+ALTER TABLE chat_messages
+    ADD COLUMN context_json TEXT NOT NULL DEFAULT ''
+"""
+
 MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
     (
         1,
@@ -555,6 +560,10 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
                 MIGRATION_11_CHAT_MESSAGES,
                 MIGRATION_11_CHAT_MESSAGES_INDEX,
             ),
+        ),
+        (
+            12,
+            (MIGRATION_12_CHAT_MESSAGE_CONTEXT,),
         ),
     )
 

@@ -196,7 +196,10 @@ class ChatService:
                 "The model returned an empty response. Try again."
             )
         assistant_message, updated = self._finish_turn(
-            turn.thread, reply, result.model or turn.model
+            turn.thread,
+            reply,
+            result.model or turn.model,
+            context=_turn_context(turn),
         )
         return ChatReply(
             thread=updated,
@@ -364,22 +367,19 @@ class ChatService:
                     "The model returned an empty response. Try again."
                 )
             assistant_message, thread = self._finish_turn(
-                turn.thread, text, model
+                turn.thread, text, model, context=_turn_context(turn)
             )
             yield {
                 "type": "done",
                 "thread": asdict(thread),
                 "assistant": asdict(assistant_message),
-                "context": {
-                    "chapters": list(turn.context_chapters),
-                    "events": turn.context_events,
-                },
+                "context": _turn_context(turn),
             }
         except GeneratorExit:
             # The author stopped the reply or closed the page. Keep what arrived.
             partial = "".join(pieces).strip()
             if partial:
-                self._save_interrupted(turn.thread, partial, model)
+                self._save_interrupted(turn.thread, partial, model, _turn_context(turn))
             raise
         except NovellireError as exc:
             yield {"type": "error", "message": str(exc)}
@@ -391,7 +391,12 @@ class ChatService:
             }
 
     def _finish_turn(
-        self, thread: ChatThread, text: str, model: str
+        self,
+        thread: ChatThread,
+        text: str,
+        model: str,
+        *,
+        context: dict[str, object] | None = None,
     ) -> tuple[ChatMessage, ChatThread]:
         if thread.mode == "plan":
             suggested, text = _extract_planning_notes(text)
@@ -404,6 +409,7 @@ class ChatService:
             role="assistant",
             content=text,
             model=model,
+            context=context,
         )
         refreshed = self._threads.get_thread(thread.id)
         if refreshed is None:
@@ -411,10 +417,14 @@ class ChatService:
         return assistant_message, refreshed
 
     def _save_interrupted(
-        self, thread: ChatThread, text: str, model: str
+        self,
+        thread: ChatThread,
+        text: str,
+        model: str,
+        context: dict[str, object] | None = None,
     ) -> None:
         try:
-            self._finish_turn(thread, text, model)
+            self._finish_turn(thread, text, model, context=context)
         except Exception:  # noqa: BLE001 - the connection is already gone
             logger.warning("Could not store an interrupted chat reply")
 
@@ -469,6 +479,14 @@ class ChatService:
         if thread is None:
             raise RecordNotFoundError("That conversation no longer exists.")
         return thread
+
+
+def _turn_context(turn: _ChatTurn) -> dict[str, object]:
+    """What retrieval handed this reply, kept with the message for the drawer."""
+    return {
+        "chapters": list(turn.context_chapters),
+        "events": turn.context_events,
+    }
 
 
 def _context_blocks(context: GenerationContext) -> dict[str, str]:

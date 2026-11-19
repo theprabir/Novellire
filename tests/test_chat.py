@@ -163,6 +163,49 @@ def test_write_chat_uses_chapter_prose_and_context(
         assert "Write the requested prose now." in prompt
 
 
+def test_chat_reply_keeps_the_context_it_was_given(
+    tmp_path: Path, fake_provider_factory
+) -> None:
+    """The retrieval a reply used is stored with it, for the context drawer."""
+    provider = fake_provider_factory(
+        result=GenerationResult(
+            text="Mira waits at the gate.", model="fake-model", duration_ms=10
+        )
+    )
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        client.post(
+            f"/api/projects/{project['id']}/chapters",
+            json={
+                "title": "The Letter",
+                "content": "Mira finds a letter beneath the gate.",
+            },
+        )
+        second = client.post(
+            f"/api/projects/{project['id']}/chapters",
+            json={"title": "The Gate", "content": ""},
+        ).json()
+        thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads",
+            json={"mode": "write", "chapter_id": second["id"]},
+        ).json()
+
+        reply = client.post(
+            f"/api/chat/threads/{thread['id']}/messages",
+            json={
+                "instructions": "Continue at the gate with the letter.",
+                "model": "fake-model",
+            },
+        ).json()
+        context = reply["assistant"]["context"]
+        assert [item["title"] for item in context["chapters"]] == ["The Letter"]
+        assert context["events"] == 0
+
+        bundle = client.get(f"/api/chat/threads/{thread['id']}").json()
+        assert bundle["messages"][0]["context"] is None
+        assert bundle["messages"][1]["context"] == context
+
+
 class StreamingProvider:
     """Provider stub that streams fixed chunks instead of generating at once."""
 

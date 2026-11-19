@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 from .database import Database, utc_now_iso
@@ -31,6 +32,7 @@ class ChatMessage:
     content: str
     model: str
     created_at: str
+    context: dict[str, object] | None = None
 
 
 class ChatRepository:
@@ -127,7 +129,8 @@ class ChatRepository:
         with self._database.connection() as connection:
             rows = connection.execute(
                 """
-                SELECT id, thread_id, role, content, model, created_at
+                SELECT id, thread_id, role, content, model, created_at,
+                       context_json
                 FROM chat_messages WHERE thread_id = ? ORDER BY id
                 """,
                 (thread_id,),
@@ -138,7 +141,8 @@ class ChatRepository:
         with self._database.connection() as connection:
             row = connection.execute(
                 """
-                SELECT id, thread_id, role, content, model, created_at
+                SELECT id, thread_id, role, content, model, created_at,
+                       context_json
                 FROM chat_messages WHERE id = ?
                 """,
                 (message_id,),
@@ -146,17 +150,24 @@ class ChatRepository:
         return _message_from_row(row) if row is not None else None
 
     def add_message(
-        self, thread_id: int, *, role: str, content: str, model: str = ""
+        self,
+        thread_id: int,
+        *,
+        role: str,
+        content: str,
+        model: str = "",
+        context: dict[str, object] | None = None,
     ) -> ChatMessage:
         now = utc_now_iso()
+        context_json = json.dumps(context, ensure_ascii=False) if context else ""
         with self._database.transaction() as connection:
             cursor = connection.execute(
                 """
                 INSERT INTO chat_messages
-                    (thread_id, role, content, model, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                    (thread_id, role, content, model, created_at, context_json)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (thread_id, role, content, model, now),
+                (thread_id, role, content, model, now, context_json),
             )
             message_id = int(cursor.lastrowid)
             connection.execute(
@@ -165,7 +176,8 @@ class ChatRepository:
             )
             row = connection.execute(
                 """
-                SELECT id, thread_id, role, content, model, created_at
+                SELECT id, thread_id, role, content, model, created_at,
+                       context_json
                 FROM chat_messages WHERE id = ?
                 """,
                 (message_id,),
@@ -198,4 +210,15 @@ def _message_from_row(row) -> ChatMessage:  # noqa: ANN001 - sqlite3.Row
         content=str(row["content"]),
         model=str(row["model"]),
         created_at=str(row["created_at"]),
+        context=_context_from_json(row["context_json"]),
     )
+
+
+def _context_from_json(raw: object) -> dict[str, object] | None:
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(str(raw))
+    except (TypeError, ValueError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
