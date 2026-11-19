@@ -686,16 +686,29 @@ function chapterEditor(ctx, chapter) {
               { class: 'chip ok', title: 'Reopen this chapter to draft into it.' },
               'Approved'
             )
-          : el(
-              'button',
-              {
-                class: 'btn btn-ghost',
-                type: 'button',
-                onClick: () => openGenerateDialog(ctx, chapter),
-              },
-              icon('wand'),
-              'Draft with AI'
-            )
+          : [
+              el(
+                'button',
+                {
+                  class: 'btn btn-ghost',
+                  type: 'button',
+                  onClick: () => openGenerateDialog(ctx, chapter),
+                },
+                icon('wand'),
+                'Draft with AI'
+              ),
+              el(
+                'button',
+                {
+                  class: 'btn btn-ghost',
+                  type: 'button',
+                  title: 'One inference per beat in the saved scene plan',
+                  onClick: (event) => draftSequence(ctx, chapter, event.currentTarget),
+                },
+                icon('layers'),
+                'Draft scene by scene'
+              ),
+            ]
     )
   );
 
@@ -1411,6 +1424,45 @@ function openChapterDialog(ctx) {
 }
 
 /* -- generation ----------------------------------------------------------- */
+
+async function draftSequence(ctx, chapter, button) {
+  const state = ctx.state;
+  if (!(chapter.objectives || '').trim()) {
+    toast('Add a scene plan to this chapter, or use Plan with AI first.', 'error');
+    return;
+  }
+  const models = (state.ollama?.models || []).map((model) => model.name);
+  const saved = state.settings.generation;
+  const model = models.includes(saved.model) ? saved.model : models[0] || '';
+  if (!model) {
+    toast('Choose a model in Settings first.', 'error');
+    return;
+  }
+  button.disabled = true;
+  button.replaceChildren(icon('refresh'), 'Drafting scenes…');
+  try {
+    const record = await api.post(`/api/chapters/${chapter.id}/draft-sequence`, {
+      model,
+      instructions: '',
+      target_words: Number(chapter.target_word_count || 1200),
+      temperature: Number(saved.temperature),
+      top_p: Number(saved.top_p),
+      num_predict: Number(saved.num_predict),
+      context_window: Number(saved.context_window),
+    });
+    const scenes = record.scenes?.length || 0;
+    toast(
+      `Drafted ${scenes} scene${scenes === 1 ? '' : 's'}. Review before inserting.`,
+      'success'
+    );
+    showDraft(ctx, record, chapter);
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    button.disabled = false;
+    button.replaceChildren(icon('layers'), 'Draft scene by scene');
+  }
+}
 
 function openGenerateDialog(ctx, chapter) {
   const state = ctx.state;

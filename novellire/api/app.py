@@ -37,6 +37,7 @@ from ..core.export import ExportService
 from ..core.generation import GenerationService
 from ..core.insights import ChapterInsightService
 from ..core.memory import MemoryService
+from ..core.orchestration import ChapterDraftSequence
 from ..core.outline import OutlineService
 from ..core.projects import ProjectService
 from ..core.relationships import (
@@ -287,6 +288,16 @@ class ChatRevisionRequest(BaseModel):
     context_window: int = Field(default=4096, ge=512, le=32768)
 
 
+class SequenceDraftRequest(BaseModel):
+    model: str
+    instructions: str = ""
+    target_words: int = Field(default=1200, ge=50, le=6000)
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    top_p: float = Field(default=0.9, gt=0.0, le=1.0)
+    num_predict: int = Field(default=700, ge=32, le=8192)
+    context_window: int = Field(default=4096, ge=512, le=32768)
+
+
 class StyleGuideRequest(BaseModel):
     model: str = ""
     temperature: float = Field(default=0.3, ge=0.0, le=2.0)
@@ -371,6 +382,7 @@ class ApiServices:
     analysis_state: AnalysisStateRepository
     analysis_scheduler: AnalysisScheduler
     chat: ChatService
+    orchestration: ChapterDraftSequence
 
 
 def build_services(
@@ -449,6 +461,9 @@ def build_services(
         ChatRepository(database),
         context_builder,
     )
+    generation_service = GenerationService(
+        provider, project_repository, generation_repository
+    )
 
     return ApiServices(
         settings=settings,
@@ -456,9 +471,7 @@ def build_services(
         provider=provider,
         projects=ProjectService(project_repository),
         projects_repository=project_repository,
-        generation=GenerationService(
-            provider, project_repository, generation_repository
-        ),
+        generation=generation_service,
         app_settings=app_settings_service,
         story_bible=StoryBibleService(bible_repository, project_repository),
         characters=CharacterService(character_repository, project_repository),
@@ -497,6 +510,7 @@ def build_services(
         analysis_state=analysis_state_repository,
         analysis_scheduler=analysis_scheduler,
         chat=chat_service,
+        orchestration=ChapterDraftSequence(generation_service, context_builder),
     )
 
 
@@ -1734,6 +1748,52 @@ def _build_router(services: ApiServices) -> APIRouter:
             ],
         }
         return result
+
+    @router.post("/chapters/{chapter_id}/draft-sequence")
+    def draft_chapter_sequence(
+        chapter_id: int, payload: SequenceDraftRequest
+    ) -> dict[str, Any]:
+        """Draft a chapter scene by scene from its saved scene plan.
+
+        The server owns the loop: one inference per beat, in order, assembled
+        into one editable draft. The model never chooses what runs next, and the
+        chapter is not changed until the author inserts the draft.
+        """
+        chapter = services.chapters.require_chapter(chapter_id)
+        if chapter.origin == "imported":
+            raise InvalidInputError(
+                "That chapter is pre-written, so Novellire will not change it. "
+                "Draft into a new chapter instead."
+            )
+        outcome = services.orchestration.draft(
+            project_id=chapter.project_id,
+            chapter=chapter,
+            settings=GenerationSettings(
+                model=payload.model,
+                temperature=payload.temperature,
+                top_p=payload.top_p,
+                num_predict=payload.num_predict,
+                context_window=payload.context_window,
+            ),
+            target_words=payload.target_words,
+            instructions=payload.instructions,
+        )
+        return {
+            "model": outcome.model,
+            "output": outcome.text,
+            "word_count": outcome.word_count,
+            "truncated": False,
+            "scenes": [
+                {
+                    "index": scene.index,
+                    "beat": scene.beat,
+                    "word_count": scene.word_count,
+                    "model": scene.model,
+                }
+                for scene in outcome.scenes
+            ],
+            "context": {"chapters": [], "events": []},
+        }
 
     @router.post("/chapters/{chapter_id}/plan")
     def plan_chapter(

@@ -3,6 +3,29 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.4.12] — 2026-11-19
+
+A chapter can be drafted scene by scene from its saved plan.
+
+### Added
+
+- **Draft scene by scene** in the chapter editor. The saved scene plan is split
+  into beats and drafted with one inference per beat, in order, each continuing
+  from the end of the previous scene. The assembled text opens in the normal
+  editable draft dialog, so nothing reaches the chapter until the author inserts
+  it and the approval lock and revision snapshot still apply.
+- `POST /api/chapters/{id}/draft-sequence`. The server owns the loop: the model
+  never chooses what runs next. At most six beats per run, and each scene gets a
+  fair share of the target length.
+- A chapter with no scene plan, an approved chapter, an imported chapter, and a
+  plan with more beats than one run drafts are refused with a clear message
+  before any inference starts.
+
+### Changed
+
+- Inserting a draft or revision already queues background analysis, so a
+  completed chapter gains memory without a separate action.
+
 ## [0.4.11] — 2026-11-19
 
 A revision can rewrite one selected passage. Schema 15 records the passage it

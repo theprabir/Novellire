@@ -167,13 +167,17 @@ Implemented first slice:
 - Selected-text revision: a passage selected in the chapter pane is revised on
   its own (schema 15) and applied back only to that passage, so a long chapter
   can be improved one piece at a time.
+- Scene-by-scene drafting from the saved scene plan: one sequential inference
+  per beat, each continuing from the previous scene, assembled into one editable
+  draft (at most six beats a run). The server owns the loop.
+- Inserting a draft or revision already queues automatic analysis, so completed
+  prose gains memory without a separate action.
 
 Remaining:
 
-- Bounded orchestration: discuss, plan, draft scene by scene, assemble, review,
-  revise.
+- The discuss and review steps of the orchestration, and one reviewed pass
+  that assembles, reviews, and revises a draft.
 - The server validates model-proposed actions; the model never executes tools.
-- Automatic analysis after draft completion.
 - Approval remains the final lock on prose.
 
 Acceptance: the author can plan, write, revise, and approve a complete chapter in

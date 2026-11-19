@@ -347,7 +347,9 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.4.11** (schema version 15). `v0.4.11` lets the author
+Current release: **v0.4.12** (schema version 15). `v0.4.12` drafts a chapter
+scene by scene from its saved plan, one sequential inference per beat, into one
+editable draft. `v0.4.11` lets the author
 revise one selected passage in Chat and apply it in place, leaving the rest of
 the chapter untouched. `v0.4.10` adds revision to
 Chat: the author can rewrite a chosen reply, or the whole chapter, from fresh
