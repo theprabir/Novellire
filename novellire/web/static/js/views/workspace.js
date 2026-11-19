@@ -1576,6 +1576,55 @@ function showDraft(ctx, record, chapter) {
   const output = textarea({ value: record.output, rows: 16, class: 'textarea chapter-text' });
   const append = input({ type: 'checkbox' });
   append.checked = Boolean(existing);
+  const reviewHost = el('div', { class: 'review-findings' });
+  const review = el(
+    'button',
+    { class: 'btn btn-ghost btn-sm', type: 'button', onClick: () => requestReview() },
+    icon('search'),
+    'Review draft'
+  );
+
+  async function requestReview() {
+    const text = output.value.trim();
+    if (!text) {
+      toast('There is no draft to review.', 'error');
+      return;
+    }
+    const state = ctx.state;
+    const models = (state.ollama?.models || []).map((model) => model.name);
+    const saved = state.settings.generation;
+    const model = models.includes(saved.model) ? saved.model : models[0] || '';
+    if (!model) {
+      toast('Choose a model in Settings first.', 'error');
+      return;
+    }
+    review.disabled = true;
+    review.replaceChildren(icon('refresh'), 'Reviewing…');
+    try {
+      const result = await api.post(`/api/chapters/${chapter.id}/review`, {
+        model,
+        draft: text,
+        temperature: 0.2,
+        top_p: Number(saved.top_p),
+        num_predict: Number(saved.num_predict),
+        context_window: Number(saved.context_window),
+      });
+      renderReview(reviewHost, result, (finding) => {
+        if (!finding.replacement) return;
+        if (!output.value.includes(finding.quote)) {
+          toast('That passage is no longer in the draft.', 'error');
+          return;
+        }
+        output.value = output.value.replace(finding.quote, finding.replacement);
+        toast('Revision applied to the draft.', 'success');
+      });
+    } catch (error) {
+      toast(error.message, 'error');
+    } finally {
+      review.disabled = false;
+      review.replaceChildren(icon('search'), 'Review draft');
+    }
+  }
 
   const insert = el(
     'button',
@@ -1621,10 +1670,16 @@ function showDraft(ctx, record, chapter) {
           record.truncated ? el('span', { class: 'chip warn' }, 'Hit output limit') : null,
           record.style_guide_inferred ? el('span', { class: 'chip ok' }, 'Style guide learned') : null
         ),
-        el('span', { class: 'hint' }, 'Edit before inserting if needed.')
+        el(
+          'div',
+          { style: { display: 'flex', gap: '10px', alignItems: 'center' } },
+          el('span', { class: 'hint' }, 'Edit before inserting if needed.'),
+          review
+        )
       ),
       used.length || usedEvents.length ? contextUsed(used, usedEvents) : null,
       output,
+      reviewHost,
       approved
         ? el(
             'p',
@@ -1647,6 +1702,41 @@ function showDraft(ctx, record, chapter) {
       insert,
     ],
   });
+}
+
+function renderReview(host, result, onApply) {
+  const findings = result.findings || [];
+  const cards = findings.map((finding) =>
+    el(
+      'div',
+      { class: 'review-finding' },
+      el(
+        'div',
+        { class: 'review-finding-head' },
+        el('span', { class: 'chip accent' }, finding.kind),
+        el('strong', {}, finding.issue || 'Finding')
+      ),
+      el('blockquote', { class: 'review-quote' }, finding.quote),
+      finding.replacement
+        ? el('p', { class: 'review-replacement' }, finding.replacement)
+        : el('p', { class: 'hint' }, 'No automatic replacement; this is your call.'),
+      finding.reason ? el('p', { class: 'hint' }, finding.reason) : null,
+      finding.replacement
+        ? el(
+            'button',
+            { class: 'btn btn-sm', type: 'button', onClick: () => onApply(finding) },
+            'Apply to draft'
+          )
+        : null
+    )
+  );
+  host.replaceChildren(
+    el('p', { class: 'hint' }, `Reviewed ${count(result.reviewed_chars)} characters.`),
+    result.overall ? el('p', {}, result.overall) : null,
+    findings.length
+      ? el('div', { class: 'review-list' }, cards)
+      : el('p', { class: 'hint' }, 'No concrete problems found in this draft.')
+  );
 }
 
 function contextUsed(chapters, events) {

@@ -2116,3 +2116,25 @@ input[type="range"]::-webkit-slider-thumb {
   text-transform: uppercase;
   color: var(--muted);
 }
+
+/* -- draft review ------------------------------------------------------- */
+
+.review-findings { display: grid; gap: 12px; margin-top: 14px; }
+.review-list { display: grid; gap: 10px; }
+.review-finding {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.review-finding-head { display: flex; gap: 8px; align-items: center; }
+.review-quote {
+  margin: 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+.review-replacement { margin: 0; white-space: pre-wrap; }

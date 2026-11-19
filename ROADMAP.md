@@ -172,12 +172,16 @@ Implemented first slice:
   draft (at most six beats a run). The server owns the loop.
 - Inserting a draft or revision already queues automatic analysis, so completed
   prose gains memory without a separate action.
+- Server-owned review pass: one structured inference compares a draft with its
+  plan, documents, canon, character state, and retrieved memory. Only findings
+  that quote the draft exactly once are kept, and applying one rewrites the
+  draft, never the chapter; the model proposes text and executes nothing.
 
 Remaining:
 
-- The discuss and review steps of the orchestration, and one reviewed pass
-  that assembles, reviews, and revises a draft.
-- The server validates model-proposed actions; the model never executes tools.
+- The discuss step before prose.
+- Broader model-proposed actions beyond review findings (outline changes,
+  approvals, reordering), all validated server-side before anything runs.
 - Approval remains the final lock on prose.
 
 Acceptance: the author can plan, write, revise, and approve a complete chapter in

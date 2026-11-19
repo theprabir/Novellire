@@ -33,7 +33,7 @@ from ..storage.chat_repository import (
 from ..storage.repositories import ProjectRepository
 from ..storage.story_repositories import ChapterRecord
 from .chapters import ChapterService
-from .context import GenerationContext, GenerationContextBuilder
+from .context import GenerationContext, GenerationContextBuilder, prompt_blocks
 from .settings_service import GenerationSettings
 
 CHAT_INSTRUCTION_LIMIT = 8_000
@@ -270,7 +270,7 @@ class ChatService:
             ),
             planning_notes=thread.planning_notes,
             history=history,
-            **_context_blocks(context),
+            **prompt_blocks(context),
         )
         return self._turn(
             thread,
@@ -460,7 +460,7 @@ class ChatService:
             chapter_title=chapter.title if chapter else "",
             chapter_plan=context.chapter_plan,
             planning_notes=thread.planning_notes,
-            **_context_blocks(context),
+            **prompt_blocks(context),
         )
         return self._turn(
             thread,
@@ -808,32 +808,6 @@ def _turn_context(turn: _ChatTurn) -> dict[str, object]:
     return {
         "chapters": list(turn.context_chapters),
         "events": turn.context_events,
-    }
-
-
-def _context_blocks(context: GenerationContext) -> dict[str, str]:
-    def clip(value: str, limit: int) -> str:
-        return (value or "")[:limit]
-
-    return {
-        "master_bible": clip(
-            context.master_bible, context.budget.master_bible_chars
-        ),
-        "character_bible": clip(
-            context.character_bible, context.budget.character_bible_chars
-        ),
-        "chapter_map": clip(
-            context.chapter_map, context.budget.chapter_map_chars
-        ),
-        "style_guide": clip(
-            context.style_guide, context.budget.style_guide_chars
-        ),
-        "earlier_chapters": context.earlier_chapters,
-        "earlier_events": context.earlier_events,
-        "bible_entries": context.bible_entries,
-        "character_profiles": context.character_profiles,
-        "relationship_records": context.relationship_records,
-        "character_states": context.character_states,
     }
 
 

@@ -38,6 +38,7 @@ from ..core.generation import GenerationService
 from ..core.insights import ChapterInsightService
 from ..core.memory import MemoryService
 from ..core.orchestration import ChapterDraftSequence
+from ..core.review import ChapterReviewService
 from ..core.outline import OutlineService
 from ..core.projects import ProjectService
 from ..core.relationships import (
@@ -288,6 +289,15 @@ class ChatRevisionRequest(BaseModel):
     context_window: int = Field(default=4096, ge=512, le=32768)
 
 
+class ChapterReviewRequest(BaseModel):
+    model: str
+    draft: str | None = None
+    temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    top_p: float = Field(default=0.9, gt=0.0, le=1.0)
+    num_predict: int = Field(default=700, ge=32, le=8192)
+    context_window: int = Field(default=4096, ge=512, le=32768)
+
+
 class SequenceDraftRequest(BaseModel):
     model: str
     instructions: str = ""
@@ -383,6 +393,7 @@ class ApiServices:
     analysis_scheduler: AnalysisScheduler
     chat: ChatService
     orchestration: ChapterDraftSequence
+    review: ChapterReviewService
 
 
 def build_services(
@@ -511,6 +522,9 @@ def build_services(
         analysis_scheduler=analysis_scheduler,
         chat=chat_service,
         orchestration=ChapterDraftSequence(generation_service, context_builder),
+        review=ChapterReviewService(
+            provider, project_repository, chapter_service, context_builder
+        ),
     )
 
 
@@ -1793,6 +1807,34 @@ def _build_router(services: ApiServices) -> APIRouter:
                 for scene in outcome.scenes
             ],
             "context": {"chapters": [], "events": []},
+        }
+
+    @router.post("/chapters/{chapter_id}/review")
+    def review_chapter(
+        chapter_id: int, payload: ChapterReviewRequest
+    ) -> dict[str, Any]:
+        """Review a draft against the plan and canon and propose edits.
+
+        The review is read-only. Readings are one inference; every finding must
+        quote the reviewed text exactly once, and the model executes nothing.
+        """
+        result = services.review.review(
+            chapter_id,
+            settings=GenerationSettings(
+                model=payload.model,
+                temperature=payload.temperature,
+                top_p=payload.top_p,
+                num_predict=payload.num_predict,
+                context_window=payload.context_window,
+            ),
+            draft=payload.draft,
+        )
+        return {
+            "source": result.source,
+            "overall": result.overall,
+            "model": result.model,
+            "reviewed_chars": result.reviewed_chars,
+            "findings": [asdict(finding) for finding in result.findings],
         }
 
     @router.post("/chapters/{chapter_id}/plan")

@@ -215,6 +215,34 @@ class GenerationContext:
         }
 
 
+def prompt_blocks(context: GenerationContext) -> dict[str, str]:
+    """Clip every context block to its share of the prompt budget."""
+
+    def clip(value: str, limit: int) -> str:
+        return (value or "")[:limit]
+
+    return {
+        "master_bible": clip(
+            context.master_bible, context.budget.master_bible_chars
+        ),
+        "character_bible": clip(
+            context.character_bible, context.budget.character_bible_chars
+        ),
+        "chapter_map": clip(
+            context.chapter_map, context.budget.chapter_map_chars
+        ),
+        "style_guide": clip(
+            context.style_guide, context.budget.style_guide_chars
+        ),
+        "earlier_chapters": context.earlier_chapters,
+        "earlier_events": context.earlier_events,
+        "bible_entries": context.bible_entries,
+        "character_profiles": context.character_profiles,
+        "relationship_records": context.relationship_records,
+        "character_states": context.character_states,
+    }
+
+
 class GenerationContextBuilder:
     """Assemble workspace documents and relevance-ranked canon for a request."""
 

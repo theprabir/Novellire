@@ -3,6 +3,28 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.4.13] — 2026-11-19
+
+A draft can be reviewed before it reaches the chapter.
+
+### Added
+
+- **Review draft** in the generated-draft dialog. One inference compares the
+  draft with the saved scene plan, documents, canon, character state, and
+  retrieved memory, and returns an overall note plus up to eight findings:
+  `continuity`, `plan`, `pacing`, or `prose`.
+- Every finding must quote prose that appears exactly once in the reviewed
+  draft. The server drops a finding whose quote is absent, ambiguous, too long,
+  or identical to its replacement, so an applied edit can only change words
+  that are actually there. The model proposes text; it executes nothing.
+- Applying a finding rewrites the visible draft. The chapter still changes only
+  through the normal insert, so the approval lock and revision snapshot apply.
+- `POST /api/chapters/{id}/review` reviews either an unsaved `draft` or the
+  saved chapter text, without modifying either. Prose over the 12,000-character
+  review budget is refused rather than clipped.
+
+Schema stays at 15.
+
 ## [0.4.12] — 2026-11-19
 
 A chapter can be drafted scene by scene from its saved plan.
