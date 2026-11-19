@@ -490,6 +490,27 @@ ALTER TABLE chat_messages
     ADD COLUMN revision_source TEXT NOT NULL DEFAULT ''
 """
 
+MIGRATION_16_THREAD_RESOLUTIONS = """
+CREATE TABLE thread_resolutions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    thread_key TEXT NOT NULL,
+    thread TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'resolved'
+        CHECK (status IN ('open', 'resolved')),
+    note TEXT NOT NULL DEFAULT '',
+    chapter_id INTEGER REFERENCES chapters(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (project_id, thread_key)
+)
+"""
+
+MIGRATION_16_THREAD_RESOLUTIONS_INDEX = """
+CREATE INDEX idx_thread_resolutions_project
+    ON thread_resolutions(project_id)
+"""
+
 MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
     (
         1,
@@ -608,6 +629,13 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
         (
             15,
             (MIGRATION_15_CHAT_REVISION_SOURCE,),
+        ),
+        (
+            16,
+            (
+                MIGRATION_16_THREAD_RESOLUTIONS,
+                MIGRATION_16_THREAD_RESOLUTIONS_INDEX,
+            ),
         ),
     )
 

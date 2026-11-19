@@ -32,6 +32,7 @@ from ..core.characters import PROFILE_FIELDS, CharacterService
 from ..core.chat import ChatService
 from ..core.context import GenerationContextBuilder
 from ..core.continuity import ContinuityCheckService, ContinuityLedgerService
+from ..core.threads import ThreadService
 from ..core.discussion import ChapterDiscussionService
 from ..core.documents import ProjectDocumentService, WORKSPACE_DOCUMENTS
 from ..core.events import EventExtractionService
@@ -90,6 +91,7 @@ from ..storage.search_repository import SearchRepository
 from ..storage.relationship_repository import RelationshipRepository
 from ..storage.revision_repository import RevisionRepository
 from ..storage.state_repository import CharacterStateRepository
+from ..storage.thread_repository import ThreadResolutionRepository
 from ..storage.repositories import (
     AppSettingsRepository,
     GenerationRecord,
@@ -299,6 +301,13 @@ class PlanDiscussionRequest(BaseModel):
     context_window: int = Field(default=4096, ge=512, le=32768)
 
 
+class ThreadStatusRequest(BaseModel):
+    thread: str
+    status: str = "resolved"
+    note: str = ""
+    chapter_id: int | None = None
+
+
 class ContinuityCheckRequest(BaseModel):
     model: str
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)
@@ -415,6 +424,7 @@ class ApiServices:
     discussion: ChapterDiscussionService
     continuity: ContinuityCheckService
     ledger: ContinuityLedgerService
+    threads: ThreadService
 
 
 def build_services(
@@ -429,6 +439,7 @@ def build_services(
     event_repository = EventRepository(database)
     relationship_repository = RelationshipRepository(database)
     state_repository = CharacterStateRepository(database)
+    thread_repository = ThreadResolutionRepository(database)
     insight_repository = ChapterInsightRepository(database)
     analysis_state_repository = AnalysisStateRepository(database)
     chapter_service = ChapterService(
@@ -565,6 +576,10 @@ def build_services(
             character_repository,
             state_repository,
             event_repository,
+            thread_repository,
+        ),
+        threads=ThreadService(
+            project_repository, chapter_repository, thread_repository
         ),
     )
 
@@ -1848,6 +1863,23 @@ def _build_router(services: ApiServices) -> APIRouter:
                 for scene in outcome.scenes
             ],
             "context": {"chapters": [], "events": []},
+        }
+
+    @router.put("/projects/{project_id}/threads")
+    def set_thread_status(
+        project_id: int, payload: ThreadStatusRequest
+    ) -> dict[str, Any]:
+        """Resolve a recorded thread, or reopen it. The events stay untouched."""
+        resolution = services.threads.set_status(
+            project_id,
+            thread=payload.thread,
+            status=payload.status,
+            note=payload.note,
+            chapter_id=payload.chapter_id,
+        )
+        return {
+            "status": "resolved" if resolution is not None else "open",
+            "resolution": asdict(resolution) if resolution is not None else None,
         }
 
     @router.get("/projects/{project_id}/continuity")

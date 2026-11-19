@@ -1,5 +1,15 @@
 import { api } from '../api.js';
-import { count, el, emptyState, icon, toast } from '../ui.js';
+import {
+  count,
+  el,
+  emptyState,
+  field,
+  icon,
+  openModal,
+  select,
+  textarea,
+  toast,
+} from '../ui.js';
 
 const FIELD_LABELS = {
   location: 'Location',
@@ -56,7 +66,7 @@ export function renderContinuity(ctx) {
 
   api
     .get(`/api/projects/${state.activeProjectId}/continuity`)
-    .then((ledger) => body.replaceChildren(...ledgerSections(ledger)))
+    .then((ledger) => body.replaceChildren(...ledgerSections(ledger, ctx)))
     .catch((error) => {
       toast(error.message, 'error');
       body.replaceChildren(el('p', { class: 'hint' }, error.message));
@@ -64,7 +74,8 @@ export function renderContinuity(ctx) {
   return wrap;
 }
 
-function ledgerSections(ledger) {
+function ledgerSections(ledger, ctx) {
+  const projectId = ctx.state.activeProjectId;
   const counts = ledger.counts || {};
   const sections = [
     el(
@@ -73,7 +84,7 @@ function ledgerSections(ledger) {
       statCard('Chapters', counts.chapters || 0),
       statCard('Recorded events', counts.events || 0),
       statCard('State snapshots', counts.states || 0),
-      statCard('Unresolved threads', counts.threads || 0)
+      statCard('Open threads', counts.open_threads || 0)
     ),
   ];
 
@@ -179,11 +190,12 @@ function ledgerSections(ledger) {
   );
 
   const threads = ledger.threads || [];
+  const timelineRows = ledger.timeline || [];
   sections.push(
     el(
       'section',
       { class: 'card form-card' },
-      el('h2', { class: 'section-title' }, 'Unresolved threads'),
+      el('h2', { class: 'section-title' }, 'Plot threads'),
       threads.length
         ? el(
             'div',
@@ -195,7 +207,16 @@ function ledgerSections(ledger) {
                 el(
                   'div',
                   { class: 'review-finding-head' },
-                  el('span', { class: 'chip accent' }, 'open'),
+                  el(
+                    'span',
+                    {
+                      class:
+                        thread.status === 'resolved'
+                          ? 'chip severity-low'
+                          : 'chip accent',
+                    },
+                    thread.status || 'open'
+                  ),
                   el('strong', {}, thread.thread)
                 ),
                 el(
@@ -206,6 +227,41 @@ function ledgerSections(ledger) {
                     .join(', ')} · ${thread.event_count} event${
                     thread.event_count === 1 ? '' : 's'
                   }`
+                ),
+                thread.status === 'resolved'
+                  ? el(
+                      'p',
+                      { class: 'hint' },
+                      `Resolved${
+                        thread.resolved_chapter
+                          ? ` in chapter ${thread.resolved_chapter.position} “${thread.resolved_chapter.title}”`
+                          : ''
+                      }${thread.note ? ` · ${thread.note}` : ''}`
+                    )
+                  : null,
+                el(
+                  'div',
+                  { class: 'review-finding-head' },
+                  thread.status === 'resolved'
+                    ? el(
+                        'button',
+                        {
+                          class: 'btn btn-sm',
+                          type: 'button',
+                          onClick: () => reopenThread(ctx, projectId, thread),
+                        },
+                        'Reopen'
+                      )
+                    : el(
+                        'button',
+                        {
+                          class: 'btn btn-sm',
+                          type: 'button',
+                          onClick: () =>
+                            resolveThread(ctx, projectId, thread, timelineRows),
+                        },
+                        'Resolve'
+                      )
                 )
               )
             )
@@ -213,12 +269,73 @@ function ledgerSections(ledger) {
         : el(
             'p',
             { class: 'hint' },
-            'No unresolved threads recorded. Extract events for a chapter to collect them.'
+            'No threads recorded. Extract events for a chapter to collect them.'
           )
     )
   );
 
   return sections;
+}
+
+function resolveThread(ctx, projectId, thread, chapters) {
+  const note = textarea({
+    rows: 3,
+    placeholder: 'How it pays off, if useful later.',
+  });
+  const chapter = select([
+    { value: '', label: 'No chapter' },
+    ...chapters.map((row) => ({
+      value: row.id,
+      label: `${row.position}. ${row.title}`,
+    })),
+  ]);
+  const save = el('button', { class: 'btn btn-primary', type: 'button' }, 'Resolve');
+  const modal = openModal({
+    title: 'Resolve thread',
+    body: [
+      el('p', { class: 'review-quote' }, thread.thread),
+      field('Resolution note', note, 'Optional. Stored with the thread, not written into prose.'),
+      field('Paid off in', chapter, 'Optional chapter provenance.'),
+    ],
+    footer: [
+      el(
+        'button',
+        { class: 'btn btn-ghost', type: 'button', onClick: () => modal.close() },
+        'Cancel'
+      ),
+      save,
+    ],
+  });
+  save.addEventListener('click', async () => {
+    save.disabled = true;
+    try {
+      await api.put(`/api/projects/${projectId}/threads`, {
+        thread: thread.thread,
+        status: 'resolved',
+        note: note.value,
+        chapter_id: chapter.value ? Number(chapter.value) : null,
+      });
+      modal.close();
+      toast('Thread resolved.', 'success');
+      await ctx.refresh();
+    } catch (error) {
+      toast(error.message, 'error');
+      save.disabled = false;
+    }
+  });
+}
+
+async function reopenThread(ctx, projectId, thread) {
+  try {
+    await api.put(`/api/projects/${projectId}/threads`, {
+      thread: thread.thread,
+      status: 'open',
+    });
+    toast('Thread reopened.', 'success');
+    await ctx.refresh();
+  } catch (error) {
+    toast(error.message, 'error');
+  }
 }
 
 function statCard(label, value) {

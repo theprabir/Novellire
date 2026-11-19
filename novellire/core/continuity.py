@@ -27,6 +27,8 @@ from ..storage.story_repositories import (
     CharacterRepository,
     StoryBibleRepository,
 )
+from ..storage.thread_repository import ThreadResolutionRepository
+from .threads import thread_key
 from .settings_service import GenerationSettings
 
 CONTINUITY_SOURCE_CHARS = 12_000
@@ -250,12 +252,14 @@ class ContinuityLedgerService:
         characters: CharacterRepository,
         states: CharacterStateRepository,
         events: EventRepository,
+        threads: ThreadResolutionRepository,
     ) -> None:
         self._projects = projects
         self._chapters = chapters
         self._characters = characters
         self._states = states
         self._events = events
+        self._threads = threads
 
     def ledger(self, project_id: int) -> dict[str, object]:
         if self._projects.get(project_id) is None:
@@ -273,6 +277,7 @@ class ContinuityLedgerService:
 
         timeline = [
             {
+                "id": chapter.id,
                 "position": chapter.position,
                 "title": chapter.title,
                 "status": chapter.status,
@@ -350,6 +355,22 @@ class ContinuityLedgerService:
                     entry["chapters"].append(
                         {"position": chapter.position, "title": chapter.title}
                     )
+        resolutions = {
+            resolution.thread_key: resolution
+            for resolution in self._threads.list_for_project(project_id)
+        }
+        for key, entry in threads.items():
+            resolution = resolutions.get(thread_key(str(entry["thread"])))
+            entry["status"] = "resolved" if resolution else "open"
+            entry["note"] = resolution.note if resolution else ""
+            entry["resolved_chapter"] = (
+                {
+                    "position": resolution.chapter_position,
+                    "title": resolution.chapter_title,
+                }
+                if resolution is not None and resolution.chapter_position is not None
+                else None
+            )
         thread_rows = sorted(
             threads.values(),
             key=lambda item: (
@@ -364,6 +385,9 @@ class ContinuityLedgerService:
                 "events": len(events),
                 "states": len(states),
                 "threads": len(thread_rows),
+                "open_threads": sum(
+                    1 for row in thread_rows if row["status"] == "open"
+                ),
             },
             "timeline": timeline,
             "characters": character_ledger,

@@ -347,7 +347,9 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.5.1** (schema version 15). `v0.5.1` turns the Continuity
+Current release: **v0.5.2** (schema version 16). `v0.5.2` lets the author
+resolve or reopen a recorded plot thread, keeping the note and the chapter where
+it paid off. `v0.5.1` turns the Continuity
 page into a deterministic ledger of the recorded canon: the chapter timeline,
 each character's state changes, and unresolved threads, all with chapter
 provenance. `v0.5.0` starts continuity

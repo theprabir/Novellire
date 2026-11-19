@@ -3,6 +3,27 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.5.2] — 2026-11-19
+
+Plot-thread management, schema version 16.
+
+### Added
+
+- A recorded thread can be **resolved** from the Continuity view with an optional
+  note and the chapter where it paid off, or **reopened**. The decision is
+  matched case- and spacing-insensitively, so the same thread always has at most
+  one decision, and resolving twice updates it instead of duplicating it.
+- `PUT /api/projects/{id}/threads` sets the status. Reopening removes the
+  decision; the events that raised the thread are never touched.
+- The ledger now reports `status`, `note`, and the resolving chapter for each
+  thread, plus an `open_threads` count, and the Continuity view shows resolved
+  threads with their provenance.
+
+### Schema
+
+- Migration 16 adds `thread_resolutions`, unique per project and thread key, with
+  `ON DELETE CASCADE` from the project and `ON DELETE SET NULL` for its chapter.
+
 ## [0.5.1] — 2026-11-19
 
 The Continuity surface is live and deterministic.

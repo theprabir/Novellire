@@ -197,6 +197,9 @@ Chat while memory updates automatically.
 - Deterministic continuity ledger in the Continuity view: recorded chapter
   timeline, per-character state changes, and unresolved thread provenance, all
   read-only and without inference (`0.5.1`).
+- Plot-thread management: resolve a recorded thread with a note and the chapter
+  where it paid off, or reopen it; the ledger reports open/resolved with
+  provenance (`0.5.2`).
 - Timeline validation.
 - Character knowledge tracking.
 - Relationship evolution.

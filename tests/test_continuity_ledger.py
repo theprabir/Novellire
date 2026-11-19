@@ -159,6 +159,7 @@ def test_an_empty_project_has_an_empty_ledger(tmp_path: Path) -> None:
             "events": 0,
             "states": 0,
             "threads": 0,
+            "open_threads": 0,
         }
         assert ledger["timeline"] == []
         assert ledger["characters"] == []
