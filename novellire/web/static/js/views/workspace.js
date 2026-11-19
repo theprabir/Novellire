@@ -1,4 +1,5 @@
 import { api } from '../api.js';
+import { openStateProposalDialog } from './state-proposals.js?v=0.5.3';
 import {
   closeModal,
   confirmDialog,
@@ -730,6 +731,17 @@ function chapterEditor(ctx, chapter) {
                 },
                 icon('shield'),
                 'Check continuity'
+              ),
+              el(
+                'button',
+                {
+                  class: 'btn btn-ghost',
+                  type: 'button',
+                  title: 'Propose character state changes from this chapter',
+                  onClick: () => openStateProposalDialog(ctx, chapter),
+                },
+                icon('user'),
+                'Suggest state updates'
               ),
             ]
     )

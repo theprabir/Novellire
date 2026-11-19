@@ -3,6 +3,29 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.5.3] — 2026-11-19
+
+Knowledge tracking: proposed character-state updates from a chapter.
+
+### Added
+
+- **Suggest state updates** in the chapter editor. One inference reads the saved
+  chapter against the character roster (names and aliases) and each character's
+  most recent recorded state, and proposes location, status, goals, and
+  knowledge changes.
+- The server resolves every proposed name to a real character, dropping unknown
+  names, duplicates, and proposals without any detail, and clamps each field to
+  the recorded-state limits. The chapter text is refused over 12,000 characters
+  rather than clipped.
+- Proposals are shown with editable fields and checkboxes. **Apply selected**
+  records them as snapshots for that chapter, updating an existing snapshot for
+  the same character and chapter instead of duplicating it.
+- `POST /api/chapters/{id}/state-proposals` proposes; `/apply` re-checks every
+  character against the project before writing. Nothing is written by the first
+  call, so the model still cannot change canon on its own.
+
+Schema stays at 16.
+
 ## [0.5.2] — 2026-11-19
 
 Plot-thread management, schema version 16.

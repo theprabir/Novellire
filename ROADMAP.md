@@ -200,8 +200,10 @@ Chat while memory updates automatically.
 - Plot-thread management: resolve a recorded thread with a note and the chapter
   where it paid off, or reopen it; the ledger reports open/resolved with
   provenance (`0.5.2`).
+- Character knowledge tracking: propose location, status, goals, and knowledge
+  updates from a finished chapter, review them field by field, and apply them as
+  snapshots (`0.5.3`).
 - Timeline validation.
-- Character knowledge tracking.
 - Relationship evolution.
 - Contradiction detection.
 - Plot-thread management.

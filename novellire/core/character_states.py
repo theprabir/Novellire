@@ -60,7 +60,7 @@ class CharacterStateService:
         chapter = self._chapters.get(chapter_id)
         if chapter is None or chapter.project_id != project_id:
             raise InvalidInputError("Choose a chapter from this project.")
-        fields = _clean_fields(location, status, goals, knowledge)
+        fields = clean_state_fields(location, status, goals, knowledge)
         return self._states.create(
             project_id=project_id,
             character_id=character_id,
@@ -81,7 +81,7 @@ class CharacterStateService:
         return _present(
             self._states.update(
                 state_id,
-                **_clean_fields(location, status, goals, knowledge),
+                **clean_state_fields(location, status, goals, knowledge),
             )
         )
 
@@ -101,7 +101,7 @@ class CharacterStateService:
         return record
 
 
-def _clean_fields(
+def clean_state_fields(
     location: str, status: str, goals: str, knowledge: str
 ) -> dict[str, str]:
     values = {

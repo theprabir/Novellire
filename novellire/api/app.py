@@ -32,6 +32,10 @@ from ..core.characters import PROFILE_FIELDS, CharacterService
 from ..core.chat import ChatService
 from ..core.context import GenerationContextBuilder
 from ..core.continuity import ContinuityCheckService, ContinuityLedgerService
+from ..core.state_proposals import (
+    CharacterStateProposalService,
+    StateUpdateInput,
+)
 from ..core.threads import ThreadService
 from ..core.discussion import ChapterDiscussionService
 from ..core.documents import ProjectDocumentService, WORKSPACE_DOCUMENTS
@@ -301,6 +305,18 @@ class PlanDiscussionRequest(BaseModel):
     context_window: int = Field(default=4096, ge=512, le=32768)
 
 
+class StateUpdateItem(BaseModel):
+    character_id: int
+    location: str = ""
+    status: str = ""
+    goals: str = ""
+    knowledge: str = ""
+
+
+class StateUpdateApplyRequest(BaseModel):
+    updates: list[StateUpdateItem] = Field(default_factory=list)
+
+
 class ThreadStatusRequest(BaseModel):
     thread: str
     status: str = "resolved"
@@ -425,6 +441,7 @@ class ApiServices:
     continuity: ContinuityCheckService
     ledger: ContinuityLedgerService
     threads: ThreadService
+    state_proposals: CharacterStateProposalService
 
 
 def build_services(
@@ -507,6 +524,12 @@ def build_services(
     generation_service = GenerationService(
         provider, project_repository, generation_repository
     )
+    state_service = CharacterStateService(
+        project_repository,
+        character_repository,
+        chapter_repository,
+        state_repository,
+    )
 
     return ApiServices(
         settings=settings,
@@ -536,11 +559,14 @@ def build_services(
             event_repository,
             relationship_repository,
         ),
-        character_states=CharacterStateService(
+        character_states=state_service,
+        state_proposals=CharacterStateProposalService(
+            provider,
             project_repository,
-            character_repository,
             chapter_repository,
+            character_repository,
             state_repository,
+            state_service,
         ),
         backup=BackupService(database),
         context=context_builder,
@@ -1864,6 +1890,46 @@ def _build_router(services: ApiServices) -> APIRouter:
             ],
             "context": {"chapters": [], "events": []},
         }
+
+    @router.post("/chapters/{chapter_id}/state-proposals")
+    def propose_state_updates(
+        chapter_id: int, payload: PlanDiscussionRequest
+    ) -> dict[str, Any]:
+        """Propose character-state updates. Writes nothing until applied."""
+        proposals = services.state_proposals.propose(
+            chapter_id,
+            settings=GenerationSettings(
+                model=payload.model,
+                temperature=payload.temperature,
+                top_p=payload.top_p,
+                num_predict=payload.num_predict,
+                context_window=payload.context_window,
+            ),
+        )
+        return {
+            "proposals": [asdict(proposal) for proposal in proposals],
+            "model": payload.model,
+        }
+
+    @router.post("/chapters/{chapter_id}/state-proposals/apply")
+    def apply_state_updates(
+        chapter_id: int, payload: StateUpdateApplyRequest
+    ) -> dict[str, Any]:
+        """Apply reviewed proposals as snapshots for this chapter."""
+        states = services.state_proposals.apply(
+            chapter_id,
+            [
+                StateUpdateInput(
+                    character_id=update.character_id,
+                    location=update.location,
+                    status=update.status,
+                    goals=update.goals,
+                    knowledge=update.knowledge,
+                )
+                for update in payload.updates
+            ],
+        )
+        return {"states": [asdict(state) for state in states]}
 
     @router.put("/projects/{project_id}/threads")
     def set_thread_status(
