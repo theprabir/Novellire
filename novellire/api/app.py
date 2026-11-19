@@ -866,6 +866,7 @@ def _build_router(services: ApiServices) -> APIRouter:
         return {
             "thread": asdict(bundle.thread),
             "messages": [asdict(message) for message in bundle.messages],
+            "draft": asdict(bundle.draft) if bundle.draft is not None else None,
         }
 
     @router.patch("/chat/threads/{thread_id}")
@@ -943,6 +944,16 @@ def _build_router(services: ApiServices) -> APIRouter:
                 "X-Accel-Buffering": "no",
             },
         )
+
+    @router.post("/chat/threads/{thread_id}/draft/recover")
+    def recover_chat_draft(thread_id: int) -> dict[str, Any]:
+        """Keep the checkpoint of an interrupted reply as a model message."""
+        return asdict(services.chat.recover_draft(thread_id))
+
+    @router.delete("/chat/threads/{thread_id}/draft")
+    def discard_chat_draft(thread_id: int) -> dict[str, Any]:
+        services.chat.discard_draft(thread_id)
+        return {"deleted": True}
 
     @router.post("/chat/threads/{thread_id}/messages/{message_id}/insert")
     def insert_chat_message(

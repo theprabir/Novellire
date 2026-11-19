@@ -173,6 +173,34 @@ export function renderChat(ctx) {
     el('div', { class: 'chat-notes-actions' }, notesSave)
   );
 
+  /* -- interrupted reply ------------------------------------------------ */
+
+  const recoveredMeta = el('span', { class: 'chat-recovered-meta' });
+  const recoveredText = el('div', { class: 'chat-recovered-text md' });
+  const recoveredKeep = el(
+    'button',
+    { class: 'btn btn-primary btn-sm', type: 'button', onClick: () => keepInterrupted() },
+    icon('check'),
+    'Keep as reply'
+  );
+  const recoveredDiscard = el(
+    'button',
+    { class: 'btn btn-ghost btn-sm', type: 'button', onClick: () => discardInterrupted() },
+    'Discard'
+  );
+  const recoveredPanel = el(
+    'section',
+    { class: 'chat-recovered', hidden: true, 'aria-label': 'Interrupted reply' },
+    el(
+      'div',
+      { class: 'chat-recovered-head' },
+      el('strong', {}, 'Interrupted reply'),
+      recoveredMeta
+    ),
+    recoveredText,
+    el('div', { class: 'chat-recovered-actions' }, recoveredDiscard, recoveredKeep)
+  );
+
   /* -- composer -------------------------------------------------------- */
 
   const inputBox = el('textarea', {
@@ -220,6 +248,7 @@ export function renderChat(ctx) {
     el(
       'div',
       { class: 'chat-dock-inner' },
+      recoveredPanel,
       notesPanel,
       form,
       el(
@@ -300,6 +329,7 @@ export function renderChat(ctx) {
 
   let threads = [];
   let active = null;
+  let draft = null;
   let pendingMode = 'plan';
   let busy = false;
   let notesOpen = false;
@@ -472,18 +502,35 @@ export function renderChat(ctx) {
 
   function renderComposer() {
     const generating = busy;
+    const blocked = Boolean(draft);
     actionButton.replaceChildren(icon(generating ? 'square' : 'arrow-up'));
     actionButton.classList.toggle('is-stop', generating);
     const label = generating ? 'Stop generating' : 'Send message';
     actionButton.title = label;
     actionButton.setAttribute('aria-label', label);
-    actionButton.disabled = !generating && !inputBox.value.trim();
-    dockHint.textContent = generating ? 'Generating…' : '';
+    actionButton.disabled = !generating && (!inputBox.value.trim() || blocked);
+    dockHint.textContent = generating
+      ? 'Generating…'
+      : blocked
+        ? 'Keep or discard the interrupted reply first.'
+        : '';
     inputBox.placeholder = active
       ? active.mode === 'write'
         ? 'Describe the scene to draft, or ask for a revision…'
         : 'Ask about canon, characters, or what happens next…'
       : 'Message Novellire…';
+  }
+
+  function renderDraft() {
+    recoveredPanel.hidden = !draft;
+    if (!draft) {
+      recoveredText.replaceChildren();
+      recoveredMeta.textContent = '';
+      return;
+    }
+    recoveredMeta.textContent = draft.model ? `partial · ${draft.model}` : 'partial';
+    recoveredText.replaceChildren(renderMarkdown(draft.content || ''));
+    recoveredText.scrollTop = recoveredText.scrollHeight;
   }
 
   function renderNotes() {
@@ -802,6 +849,41 @@ export function renderChat(ctx) {
     }
   }
 
+  async function keepInterrupted() {
+    if (!active || !draft) return;
+    recoveredKeep.disabled = true;
+    recoveredDiscard.disabled = true;
+    try {
+      await api.post(`/api/chat/threads/${active.id}/draft/recover`);
+      draft = null;
+      await reloadThread();
+      toast('Interrupted reply kept.', 'success');
+    } catch (error) {
+      toast(error.message, 'error');
+    } finally {
+      recoveredKeep.disabled = false;
+      recoveredDiscard.disabled = false;
+    }
+  }
+
+  async function discardInterrupted() {
+    if (!active || !draft) return;
+    recoveredKeep.disabled = true;
+    recoveredDiscard.disabled = true;
+    try {
+      await api.del(`/api/chat/threads/${active.id}/draft`);
+      draft = null;
+      renderDraft();
+      renderComposer();
+      toast('Interrupted reply discarded.', 'success');
+    } catch (error) {
+      toast(error.message, 'error');
+    } finally {
+      recoveredKeep.disabled = false;
+      recoveredDiscard.disabled = false;
+    }
+  }
+
   async function setMode(mode) {
     if (busy || mode === (active?.mode || pendingMode)) return;
     pendingMode = mode;
@@ -853,12 +935,15 @@ export function renderChat(ctx) {
       active = bundle.thread;
       state.chatThreadId = active.id;
       pendingMode = active.mode;
+      draft = bundle.draft || null;
       notesOpen = false;
       renderHeader();
       renderDrawer();
       renderMode();
       renderMessages(bundle.messages);
       renderNotes();
+      renderDraft();
+      renderComposer();
       loadDraft();
       toggleDrawer(false);
     } catch (error) {
@@ -881,10 +966,13 @@ export function renderChat(ctx) {
       const bundle = await api.get(`/api/chat/threads/${active.id}`);
       active = bundle.thread;
       pendingMode = active.mode;
+      draft = bundle.draft || null;
       renderHeader();
       renderMode();
       renderMessages(bundle.messages);
       renderNotes();
+      renderDraft();
+      renderComposer();
     } catch (error) {
       /* the next page load will recover the conversation */
     }
@@ -900,9 +988,12 @@ export function renderChat(ctx) {
         await selectThread(target.id);
       } else {
         active = null;
+        draft = null;
         renderHeader();
         renderMode();
         renderMessages([]);
+        renderDraft();
+        renderComposer();
         loadDraft();
       }
     } catch (error) {
@@ -960,17 +1051,21 @@ export function renderChat(ctx) {
         active = created;
         state.chatThreadId = created.id;
         threads = [created, ...threads];
+        draft = null;
         notesOpen = false;
         renderHeader();
         renderDrawer();
         renderMode();
         renderMessages([]);
         renderNotes();
+        renderDraft();
+        renderComposer();
         if (carried) {
           inputBox.value = carried;
           autoGrow();
           saveDraft();
           clearDraft(`${DRAFT_PREFIX}new`);
+          renderComposer();
         } else {
           loadDraft();
         }
@@ -1054,6 +1149,9 @@ export function renderChat(ctx) {
             active = event.thread;
             state.chatThreadId = active.id;
             pendingMode = active.mode;
+            draft = null;
+            renderDraft();
+            renderComposer();
             reply.finish(event.assistant?.model || model, collected, event.assistant);
             const item = threads.find((thread) => thread.id === active.id);
             if (item) Object.assign(item, active);
@@ -1088,6 +1186,7 @@ export function renderChat(ctx) {
   }
 
   renderMode();
+  renderDraft();
   renderComposer();
   renderPane();
   loadThreads();

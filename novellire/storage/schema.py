@@ -461,6 +461,18 @@ ALTER TABLE chat_messages
     ADD COLUMN context_json TEXT NOT NULL DEFAULT ''
 """
 
+MIGRATION_13_CHAT_DRAFTS = """
+CREATE TABLE chat_drafts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id INTEGER NOT NULL UNIQUE
+        REFERENCES chat_threads(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    model TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+)
+"""
+
 MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
     (
         1,
@@ -564,6 +576,10 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
         (
             12,
             (MIGRATION_12_CHAT_MESSAGE_CONTEXT,),
+        ),
+        (
+            13,
+            (MIGRATION_13_CHAT_DRAFTS,),
         ),
     )
 

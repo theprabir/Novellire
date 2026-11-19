@@ -1402,6 +1402,28 @@ input[type="range"]::-webkit-slider-thumb {
 .chat-notes-input:focus { border-color: var(--accent-line); }
 .chat-notes-actions { display: flex; justify-content: flex-end; }
 
+.chat-recovered[hidden] { display: none; }
+.chat-recovered {
+  background: var(--panel);
+  border: 1px solid var(--accent-line);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chat-recovered-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: var(--fs-sm); }
+.chat-recovered-meta { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint); }
+.chat-recovered-text {
+  max-height: 168px;
+  overflow-y: auto;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  color: var(--muted);
+}
+.chat-recovered-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
 /* -- conversation drawer --------------------------------------------------- */
 
 .chat-drawer {

@@ -187,9 +187,11 @@ The interface has these surfaces:
   and approved chapters refused until reopened. A chapter-scoped conversation
   shows its chapter in a **side-by-side pane** that refreshes after an insert,
   and every reply can expand a **context drawer** listing the earlier chapters
-  and memory events retrieval gave it. Conversations live in a slide-over
-  drawer, and a reload reopens the stored conversation, its pane, and the draft
-  belonging to it.
+  and memory events retrieval gave it. A reply in progress is checkpointed while
+  it streams, so a crash, a closed browser, or a shutdown leaves an **interrupted
+  reply** above the composer to keep as a message or discard. Conversations live
+  in a slide-over drawer, and a reload reopens the stored conversation, its pane,
+  and the draft belonging to it.
 - **Continuity** — a designed scope. Its layout, filters, and detail panes are
   reserved and labelled with the phase that will connect them; it shows no
   project data yet.
@@ -333,13 +335,16 @@ by Git. Never commit a novel project's database.
 | 10 | `analysis_state` content hashes and `chapter_insights` derived proposals |
 | 11 | `chat_threads` and `chat_messages` for persistent conversations |
 | 12 | chat message `context_json`, the retrieval each reply was given |
+| 13 | `chat_drafts` checkpoints of a reply that was still streaming |
 
 Migrations are applied in order inside transactions; an existing database is
 upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.4.8** (schema version 12). `v0.4.8` adds a
+Current release: **v0.4.9** (schema version 13). `v0.4.9` checkpoints a chat
+reply while it streams, so a crashed process, a closed browser, or a shutdown
+leaves recoverable text that the author can keep or discard. `v0.4.8` adds a
 side-by-side chapter pane to Chat and a context drawer showing the retrieval
 behind each reply, stored with the message so it survives a reload. `v0.4.7`
 scopes chat drafts per conversation and adds **Insert into chapter** for
@@ -378,7 +383,7 @@ Workspace and added chapter and scene ordering.
 
 The Phase 1 foundation, the Phase 2 narrative data model, and local manuscript
 memory are complete, and the interface is a browser harness. Still missing:
-semantic (embedding) retrieval, continuity validation, and cloud API providers. Chat and Continuity exist as designed UI scopes only. The older story bible entry, character, and scene endpoints remain
+semantic (embedding) retrieval, continuity validation, and cloud API providers. Continuity exists as a designed UI scope only. The older story bible entry, character, and scene endpoints remain
 for compatibility but are no longer part of the Workspace.
 
 ## License

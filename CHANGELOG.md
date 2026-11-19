@@ -3,6 +3,34 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.4.9] — 2026-11-19
+
+Chat replies survive an interruption. Schema 13 adds reply checkpoints.
+
+### Added
+
+- **A streaming reply is checkpointed while it is written.** Text that has
+  arrived is saved at most once per 1,200 characters or two seconds, so a
+  crashed process, a closed browser, or a shutdown no longer loses a reply that
+  was already on screen. Finished replies and author-stopped replies clear their
+  checkpoint; a checkpoint is never shown as a message on its own.
+- A conversation with an interrupted reply shows it above the composer with
+  **Keep as reply** and **Discard**. Keeping stores it as a model message with
+  its model and timestamp; discarding removes it.
+- `GET /api/chat/threads/{id}` returns `draft` (the checkpoint, or `null`),
+  `POST /api/chat/threads/{id}/draft/recover` keeps it as a message, and
+  `DELETE /api/chat/threads/{id}/draft` discards it.
+- A reply that fails mid-stream keeps its checkpoint, so the text produced
+  before the failure can still be kept. Planning notes are not re-derived from
+  recovered partial text.
+- Sending a new message while an interrupted reply is unresolved is refused with
+  a clear message instead of silently overwriting the checkpoint.
+
+### Migrations
+
+- Schema 13 adds `chat_drafts`: at most one in-progress reply per conversation,
+  cascaded with its thread. Existing conversations are unaffected.
+
 ## [0.4.8] — 2026-11-19
 
 A side-by-side chapter pane for Chat and a context drawer for its replies.

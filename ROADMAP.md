@@ -145,10 +145,9 @@ Implemented first slice:
   insert, with the pane preference remembered per browser.
 - Every reply carries an expandable context drawer: the earlier chapters and
   memory events retrieval gave it, stored with the message (schema 12).
-
-Remaining:
-
-- Chat draft checkpoints that survive an interrupted generation.
+- A reply is checkpointed while it streams (schema 13). A crash, a closed
+  browser, or a shutdown leaves the partial text above the composer, where the
+  author keeps it as a message or discards it.
 
 Acceptance: a planning discussion survives a page reload as compact notes; Write
 mode starts from fresh context and streams prose into the chapter pane.

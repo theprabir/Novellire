@@ -9,6 +9,7 @@ in the conversation without changing chapter text.
 from __future__ import annotations
 
 import re
+import time
 from collections.abc import Iterator
 from dataclasses import asdict, dataclass
 
@@ -24,6 +25,7 @@ from ..logging_setup import get_logger
 from ..prompts.templates import build_chat_prompt
 from ..storage.chat_repository import (
     CHAT_MODES,
+    ChatDraft,
     ChatMessage,
     ChatRepository,
     ChatThread,
@@ -41,6 +43,8 @@ CHAT_HISTORY_MESSAGES = 12
 CHAT_HISTORY_CHARS = 1_200
 CHAT_CHAPTER_CHARS = 6_000
 CHAT_OUTPUT_TOKENS = 900
+CHAT_CHECKPOINT_CHARS = 1_200
+CHAT_CHECKPOINT_SECONDS = 2.0
 NEW_THREAD_TITLE = "New conversation"
 
 logger = get_logger("core.chat")
@@ -54,6 +58,7 @@ _PLANNING_BLOCK = re.compile(
 class ChatThreadBundle:
     thread: ChatThread
     messages: tuple[ChatMessage, ...]
+    draft: ChatDraft | None = None
 
 
 @dataclass(frozen=True)
@@ -129,6 +134,7 @@ class ChatService:
         return ChatThreadBundle(
             thread=thread,
             messages=tuple(self._threads.list_messages(thread.id)),
+            draft=self._threads.get_draft(thread.id),
         )
 
     def update_thread(
@@ -237,6 +243,11 @@ class ChatService:
                 "Choose a model before chatting. Install one with "
                 "`ollama pull qwen2.5:1.5b` if the list is empty."
             )
+        if self._threads.get_draft(thread.id) is not None:
+            raise InvalidInputError(
+                "This conversation has an interrupted reply. Keep or discard it "
+                "before sending another message."
+            )
 
         chapter = (
             self._chapters.get_chapter(thread.chapter_id)
@@ -342,6 +353,9 @@ class ChatService:
         )
         pieces: list[str] = []
         model = turn.model
+        # A reply is checkpointed while it streams so a crash, a closed browser,
+        # or a shutdown leaves recoverable text instead of nothing.
+        checkpoint = _Checkpoint(self._threads, turn.thread.id)
         try:
             stream = getattr(self._provider, "generate_stream", None)
             if stream is None:
@@ -359,6 +373,7 @@ class ChatService:
                     if chunk.text:
                         pieces.append(chunk.text)
                         yield {"type": "delta", "text": chunk.text}
+                        checkpoint.observe(chunk.text, pieces, model)
                     if chunk.model:
                         model = chunk.model
             text = "".join(pieces).strip()
@@ -369,6 +384,7 @@ class ChatService:
             assistant_message, thread = self._finish_turn(
                 turn.thread, text, model, context=_turn_context(turn)
             )
+            checkpoint.clear()
             yield {
                 "type": "done",
                 "thread": asdict(thread),
@@ -380,8 +396,11 @@ class ChatService:
             partial = "".join(pieces).strip()
             if partial:
                 self._save_interrupted(turn.thread, partial, model, _turn_context(turn))
+            checkpoint.clear()
             raise
         except NovellireError as exc:
+            # Any checkpoint stays, so the partial reply can be kept or
+            # discarded once the failure is reported.
             yield {"type": "error", "message": str(exc)}
         except Exception:  # noqa: BLE001 - a stream must end with a readable event
             logger.exception("Chat stream failed unexpectedly")
@@ -466,6 +485,29 @@ class ChatService:
         # ChapterService enforces the approval lock and snapshots the revision.
         return self._chapters.update_chapter(chapter.id, content=content)
 
+    def recover_draft(self, thread_id: int) -> ChatMessage:
+        """Keep an interrupted reply checkpoint as a stored model message.
+
+        Planning notes are not re-derived from a partial reply; the author can
+        still edit the notes by hand.
+        """
+        thread = self._require_thread(thread_id)
+        draft = self._threads.get_draft(thread.id)
+        if draft is None:
+            raise RecordNotFoundError("There is no interrupted reply to keep.")
+        message = self._threads.add_message(
+            thread.id,
+            role="assistant",
+            content=draft.content,
+            model=draft.model,
+        )
+        self._threads.clear_draft(thread.id)
+        return message
+
+    def discard_draft(self, thread_id: int) -> None:
+        thread = self._require_thread(thread_id)
+        self._threads.clear_draft(thread.id)
+
     def _require_project(self, project_id: int):  # noqa: ANN202 - project record
         project = self._projects.get(project_id)
         if project is None:
@@ -479,6 +521,55 @@ class ChatService:
         if thread is None:
             raise RecordNotFoundError("That conversation no longer exists.")
         return thread
+
+
+class _Checkpoint:
+    """Best-effort persistence of a reply while it streams.
+
+    A checkpoint is written at most once per ``CHAT_CHECKPOINT_CHARS`` characters
+    or ``CHAT_CHECKPOINT_SECONDS`` seconds, so recovery costs a handful of small
+    writes rather than one per token. A failed checkpoint is logged and never
+    interrupts the reply itself.
+    """
+
+    def __init__(self, threads: ChatRepository, thread_id: int) -> None:
+        self._threads = threads
+        self._thread_id = thread_id
+        self._observed = 0
+        self._saved = 0
+        self._saved_at = time.monotonic()
+
+    def observe(self, chunk: str, pieces: list[str], model: str) -> None:
+        if not chunk:
+            return
+        self._observed += len(chunk)
+        now = time.monotonic()
+        if (
+            self._observed - self._saved < CHAT_CHECKPOINT_CHARS
+            and now - self._saved_at < CHAT_CHECKPOINT_SECONDS
+        ):
+            return
+        self._write(pieces, model, now)
+
+    def _write(self, pieces: list[str], model: str, now: float) -> None:
+        content = "".join(pieces).strip()
+        if not content:
+            return
+        try:
+            self._threads.save_draft(
+                self._thread_id, content=content, model=model
+            )
+        except Exception:  # noqa: BLE001 - a checkpoint must not break the reply
+            logger.warning("Could not checkpoint an in-progress chat reply")
+            return
+        self._saved = self._observed
+        self._saved_at = now
+
+    def clear(self) -> None:
+        try:
+            self._threads.clear_draft(self._thread_id)
+        except Exception:  # noqa: BLE001 - the reply or its message already exists
+            logger.warning("Could not clear a chat reply checkpoint")
 
 
 def _turn_context(turn: _ChatTurn) -> dict[str, object]:

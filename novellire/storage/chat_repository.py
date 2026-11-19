@@ -25,6 +25,22 @@ class ChatThread:
 
 
 @dataclass(frozen=True)
+class ChatDraft:
+    """A checkpoint of a reply that was still streaming when it stopped.
+
+    A draft is never shown as a message. The author either keeps it, which
+    stores it as a model reply, or discards it.
+    """
+
+    id: int
+    thread_id: int
+    content: str
+    model: str
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
 class ChatMessage:
     id: int
     thread_id: int
@@ -187,6 +203,47 @@ class ChatRepository:
         return _message_from_row(row)
 
 
+    def get_draft(self, thread_id: int) -> ChatDraft | None:
+        with self._database.connection() as connection:
+            row = connection.execute(
+                """
+                SELECT id, thread_id, content, model, created_at, updated_at
+                FROM chat_drafts WHERE thread_id = ?
+                """,
+                (thread_id,),
+            ).fetchone()
+        return _draft_from_row(row) if row is not None else None
+
+    def save_draft(
+        self, thread_id: int, *, content: str, model: str = ""
+    ) -> ChatDraft:
+        """Write or replace the one in-progress reply checkpoint of a thread."""
+        now = utc_now_iso()
+        with self._database.transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO chat_drafts
+                    (thread_id, content, model, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (thread_id) DO UPDATE SET
+                    content = excluded.content,
+                    model = excluded.model,
+                    updated_at = excluded.updated_at
+                """,
+                (thread_id, content, model, now, now),
+            )
+        draft = self.get_draft(thread_id)
+        if draft is None:
+            raise RuntimeError("Chat draft disappeared after writing.")
+        return draft
+
+    def clear_draft(self, thread_id: int) -> None:
+        with self._database.transaction() as connection:
+            connection.execute(
+                "DELETE FROM chat_drafts WHERE thread_id = ?", (thread_id,)
+            )
+
+
 def _thread_from_row(row) -> ChatThread:  # noqa: ANN001 - sqlite3.Row
     return ChatThread(
         id=int(row["id"]),
@@ -199,6 +256,17 @@ def _thread_from_row(row) -> ChatThread:  # noqa: ANN001 - sqlite3.Row
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
         message_count=int(row["message_count"]),
+    )
+
+
+def _draft_from_row(row) -> ChatDraft:  # noqa: ANN001 - sqlite3.Row
+    return ChatDraft(
+        id=int(row["id"]),
+        thread_id=int(row["thread_id"]),
+        content=str(row["content"]),
+        model=str(row["model"]),
+        created_at=str(row["created_at"]),
+        updated_at=str(row["updated_at"]),
     )
 
 

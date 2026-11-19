@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from novellire.api.app import create_app
 from novellire.config import AnalysisSettings, GenerationDefaults, Settings
+from novellire.errors import LLMResponseError
 from novellire.llm.base import GenerationChunk, GenerationResult, ModelInfo
 from novellire.storage.database import Database
 
@@ -530,3 +532,182 @@ def test_chat_rejects_a_chapter_from_another_project(
 
         assert response.status_code == 400
         assert "another project" in response.json()["detail"]
+
+
+CHECKPOINT_TEXT = "Mira waits at the gate. " * 70
+
+
+def _stored_drafts(path: Path) -> list[str]:
+    """Read checkpoints through a separate connection, like a reload would."""
+    connection = sqlite3.connect(path)
+    try:
+        rows = connection.execute("SELECT content FROM chat_drafts").fetchall()
+    finally:
+        connection.close()
+    return [row[0] for row in rows]
+
+
+class CheckpointProbeProvider:
+    """Streams two chunks and inspects the database between them."""
+
+    def __init__(self, chunks: list[GenerationChunk], probe) -> None:  # noqa: ANN001
+        self.chunks = chunks
+        self.probe = probe
+        self.requests = []
+        self.checkpoints: list[str | None] = []
+
+    def is_available(self) -> bool:
+        return True
+
+    def list_models(self) -> list[ModelInfo]:
+        return [ModelInfo(name="fake-model")]
+
+    def generate(self, request):  # noqa: ANN001, ANN201 - must not be used
+        raise AssertionError("the stream endpoint should stream")
+
+    def generate_stream(self, request):  # noqa: ANN001, ANN201
+        self.requests.append(request)
+        for index, chunk in enumerate(self.chunks):
+            if index == 1:
+                self.checkpoints.append(self.probe())
+            yield chunk
+
+
+class FailingStreamProvider:
+    """Streams one chunk, then fails the way a dropped model connection does."""
+
+    def __init__(self, first: str) -> None:
+        self.first = first
+        self.requests = []
+
+    def is_available(self) -> bool:
+        return True
+
+    def list_models(self) -> list[ModelInfo]:
+        return [ModelInfo(name="fake-model")]
+
+    def generate(self, request):  # noqa: ANN001, ANN201
+        self.requests.append(request)
+        return GenerationResult(
+            text="Second reply.", model="fake-model", duration_ms=5
+        )
+
+    def generate_stream(self, request):  # noqa: ANN001, ANN201
+        self.requests.append(request)
+        yield GenerationChunk(text=self.first)
+        raise LLMResponseError("The model stopped responding.")
+
+
+def test_chat_stream_checkpoints_an_in_progress_reply(tmp_path: Path) -> None:
+    """Text that has streamed is already on disk, and cleared once stored."""
+    database_path = tmp_path / "data" / "novellire.db"
+    provider = CheckpointProbeProvider(
+        [
+            GenerationChunk(text=CHECKPOINT_TEXT),
+            GenerationChunk(text="The gate stays shut."),
+            GenerationChunk(model="fake-model", done=True),
+        ],
+        probe=lambda: (_stored_drafts(database_path) or [None])[0],
+    )
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        chapter = client.post(
+            f"/api/projects/{project['id']}/chapters",
+            json={"title": "The Gate", "content": "Mira waits."},
+        ).json()
+        thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads",
+            json={"mode": "plan", "chapter_id": chapter["id"]},
+        ).json()
+
+        response = client.post(
+            f"/api/chat/threads/{thread['id']}/messages/stream",
+            json={"instructions": "What happens next?", "model": "fake-model"},
+        )
+
+        assert response.status_code == 200, response.text
+        assert provider.checkpoints, "the reply was never checkpointed"
+        assert provider.checkpoints[0] == CHECKPOINT_TEXT.strip()
+
+        events = _events(response)
+        assert events[-1]["type"] == "done"
+        assert _stored_drafts(database_path) == []
+
+        bundle = client.get(f"/api/chat/threads/{thread['id']}").json()
+        assert bundle["draft"] is None
+        assert bundle["messages"][-1]["content"] == (
+            CHECKPOINT_TEXT + "The gate stays shut."
+        )
+
+
+def test_a_failed_stream_keeps_its_checkpoint_for_recovery(tmp_path: Path) -> None:
+    database_path = tmp_path / "data" / "novellire.db"
+    provider = FailingStreamProvider(CHECKPOINT_TEXT)
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads", json={"mode": "plan"}
+        ).json()
+
+        response = client.post(
+            f"/api/chat/threads/{thread['id']}/messages/stream",
+            json={"instructions": "What happens next?", "model": "fake-model"},
+        )
+        events = _events(response)
+        assert events[-1]["type"] == "error"
+        assert "stopped responding" in events[-1]["message"]
+
+        bundle = client.get(f"/api/chat/threads/{thread['id']}").json()
+        assert bundle["draft"]["content"] == CHECKPOINT_TEXT.strip()
+        assert bundle["draft"]["model"] == "fake-model"
+
+        blocked = client.post(
+            f"/api/chat/threads/{thread['id']}/messages",
+            json={"instructions": "Try again.", "model": "fake-model"},
+        )
+        assert blocked.status_code == 400
+        assert "interrupted reply" in blocked.json()["detail"]
+
+        kept = client.post(f"/api/chat/threads/{thread['id']}/draft/recover")
+        assert kept.status_code == 200, kept.text
+        assert kept.json()["role"] == "assistant"
+        assert kept.json()["content"] == CHECKPOINT_TEXT.strip()
+
+        bundle = client.get(f"/api/chat/threads/{thread['id']}").json()
+        assert bundle["draft"] is None
+        assert [message["role"] for message in bundle["messages"]] == [
+            "user",
+            "assistant",
+        ]
+        assert _stored_drafts(database_path) == []
+
+        again = client.post(f"/api/chat/threads/{thread['id']}/draft/recover")
+        assert again.status_code == 404
+
+
+def test_an_interrupted_reply_can_be_discarded(tmp_path: Path) -> None:
+    provider = FailingStreamProvider(CHECKPOINT_TEXT)
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads", json={"mode": "plan"}
+        ).json()
+        client.post(
+            f"/api/chat/threads/{thread['id']}/messages/stream",
+            json={"instructions": "What happens next?", "model": "fake-model"},
+        )
+
+        discarded = client.delete(f"/api/chat/threads/{thread['id']}/draft")
+        assert discarded.status_code == 200, discarded.text
+        assert discarded.json() == {"deleted": True}
+
+        bundle = client.get(f"/api/chat/threads/{thread['id']}").json()
+        assert bundle["draft"] is None
+        assert [message["role"] for message in bundle["messages"]] == ["user"]
+
+        sent = client.post(
+            f"/api/chat/threads/{thread['id']}/messages",
+            json={"instructions": "Try again.", "model": "fake-model"},
+        )
+        assert sent.status_code == 200, sent.text
+        assert sent.json()["assistant"]["content"] == "Second reply."
