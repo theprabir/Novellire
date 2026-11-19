@@ -279,6 +279,18 @@ export function renderChat(ctx) {
     },
     icon('pencil')
   );
+  const paneSelection = el(
+    'button',
+    {
+      class: 'btn btn-ghost btn-sm',
+      type: 'button',
+      title: 'Revise the passage you select in the pane',
+      // Pressing a button normally collapses the selection first.
+      onMousedown: (event) => event.preventDefault(),
+      onClick: () => offerSelectionRevision(),
+    },
+    'Revise selection'
+  );
   const pane = el(
     'aside',
     { class: 'chat-chapter', 'aria-label': 'Chapter' },
@@ -295,6 +307,7 @@ export function renderChat(ctx) {
       el(
         'div',
         { class: 'chat-pane-actions' },
+        paneSelection,
         paneRevise,
         el(
           'button',
@@ -477,6 +490,19 @@ export function renderChat(ctx) {
           : 'Revise this chapter';
     paneRevise.title = reviseTitle;
     paneRevise.setAttribute('aria-label', reviseTitle);
+    paneSelection.disabled = paneRevise.disabled;
+    paneSelection.title = paneRevise.disabled
+      ? reviseTitle
+      : 'Revise the passage you select in the pane';
+  }
+
+  function selectedPassage() {
+    const selection = window.getSelection();
+    if (!selection || !selection.rangeCount || selection.isCollapsed) return '';
+    if (!paneBody.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+      return '';
+    }
+    return selection.toString().trim();
   }
 
   function togglePane(open) {
@@ -578,6 +604,7 @@ export function renderChat(ctx) {
     if (message.role !== 'assistant') return null;
     const chapter = chapterFor(state, active);
     const locked = Boolean(chapter) && chapter.status === 'approved';
+    const passage = Boolean(message.revision_source);
     return el(
       'div',
       { class: 'msg-actions' },
@@ -602,11 +629,14 @@ export function renderChat(ctx) {
               disabled: locked,
               title: locked
                 ? 'This chapter is approved. Reopen it before inserting.'
-                : 'Insert this reply into the chapter',
-              onClick: () => offerInsert(message),
+                : passage
+                  ? 'Replace the selected passage with this revision'
+                  : 'Insert this reply into the chapter',
+              onClick: () =>
+                passage ? offerPassageApply(message) : offerInsert(message),
             },
             icon('arrow-down', 'icon sm'),
-            'Insert into chapter'
+            passage ? 'Apply to passage' : 'Insert into chapter'
           )
         : null
     );
@@ -688,7 +718,12 @@ export function renderChat(ctx) {
 
   function revisionTag(message) {
     if (message.revision_scope === 'chapter') {
-      return el('div', { class: 'msg-revision' }, icon('pencil', 'icon sm'), 'Chapter revision');
+      return el(
+        'div',
+        { class: 'msg-revision' },
+        icon('pencil', 'icon sm'),
+        message.revision_source ? 'Passage revision' : 'Chapter revision'
+      );
     }
     if (message.revision_scope === 'reply') {
       return el('div', { class: 'msg-revision' }, icon('pencil', 'icon sm'), 'Revised reply');
@@ -856,6 +891,33 @@ export function renderChat(ctx) {
     });
   }
 
+  function offerPassageApply(message) {
+    const chapter = active ? chapterFor(state, active) : null;
+    if (!chapter) return;
+    if (chapter.status === 'approved') {
+      toast('This chapter is approved. Reopen it before inserting.', 'error');
+      return;
+    }
+    openModal({
+      title: 'Apply the revised passage',
+      body: el(
+        'p',
+        { class: 'hint' },
+        `Replace the selected passage in Chapter ${chapter.position} — ` +
+          `${chapter.title} with this revision? The rest of the chapter stays ` +
+          'as it is, and the previous prose is kept in revision history.'
+      ),
+      footer: [
+        el('button', { class: 'btn btn-ghost', type: 'button', onClick: closeModal }, 'Cancel'),
+        el(
+          'button',
+          { class: 'btn btn-primary', type: 'button', onClick: () => insertReply(message, false) },
+          'Apply to passage'
+        ),
+      ],
+    });
+  }
+
   function offerRevision(message) {
     if (busy) {
       toast('Wait for the current reply to finish, or stop it.', 'error');
@@ -889,6 +951,32 @@ export function renderChat(ctx) {
       'Novellire rewrites the whole chapter from fresh context. The chapter stays unchanged until you insert the revision.',
       (instruction) =>
         startRevision({ scope: 'chapter', messageId: null, instruction })
+    );
+  }
+
+  function offerSelectionRevision() {
+    const chapter = activeChapter();
+    if (!chapter || !active) return;
+    if (active.mode !== 'write') {
+      toast('Switch to Write mode to revise prose.', 'error');
+      return;
+    }
+    if (chapter.status === 'approved') {
+      toast('This chapter is approved. Reopen it before revising.', 'error');
+      return;
+    }
+    const passage = selectedPassage();
+    if (!passage) {
+      toast('Select a passage in the chapter pane first.', 'error');
+      return;
+    }
+    openRevisionForm(
+      'Revise the selection',
+      `Novellire rewrites only the ${passage.length.toLocaleString()} characters you ` +
+        'selected. The rest of the chapter is untouched, and the revision replaces ' +
+        'the passage only when you apply it.',
+      (instruction) =>
+        startRevision({ scope: 'chapter', sourceText: passage, instruction })
     );
   }
 
@@ -926,7 +1014,7 @@ export function renderChat(ctx) {
     window.requestAnimationFrame(() => textarea.focus());
   }
 
-  async function startRevision({ scope, messageId, instruction }) {
+  async function startRevision({ scope, messageId, sourceText, instruction }) {
     if (!active) return;
     if (busy) {
       toast('Wait for the current reply to finish, or stop it.', 'error');
@@ -949,6 +1037,7 @@ export function renderChat(ctx) {
         model,
         scope,
         message_id: messageId ?? null,
+        source_text: sourceText || '',
         temperature: Number(settings.temperature ?? 0.7),
         top_p: Number(settings.top_p ?? 0.9),
         num_predict: Number(settings.num_predict ?? 700),

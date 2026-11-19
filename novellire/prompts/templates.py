@@ -600,6 +600,8 @@ Revision instruction:
 {{ instructions }}
 
 {% if scope == 'reply' %}Return the full revised reply.
+{% elif passage %}Return only the revised passage, with no commentary, headings, or
+surrounding quotation marks.
 {% else %}Return the full revised chapter prose.
 {% endif %}"""
 )
@@ -611,6 +613,7 @@ def build_chat_revision_prompt(
     genre: str,
     narrative_style: str,
     scope: str,
+    passage: bool = False,
     instructions: str,
     source_text: str,
     chapter_title: str = "",
@@ -633,6 +636,7 @@ def build_chat_revision_prompt(
         "genre": genre,
         "narrative_style": narrative_style,
         "scope": scope,
+        "passage": passage,
         "instructions": instructions,
         "source_text": source_text,
         "chapter_title": chapter_title,

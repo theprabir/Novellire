@@ -87,6 +87,7 @@ class _ChatTurn:
     context_events: int
     revision_scope: str = ""
     revision_of: int | None = None
+    revision_source: str = ""
 
 
 class ChatService:
@@ -311,6 +312,7 @@ class ChatService:
         settings: GenerationSettings,
         scope: str = "reply",
         message_id: int | None = None,
+        source_text: str = "",
     ) -> ChatReply:
         turn = self._prepare_revision_turn(
             thread_id,
@@ -318,6 +320,7 @@ class ChatService:
             message_id=message_id,
             instructions=instructions,
             settings=settings,
+            source_text=source_text,
         )
         return self._generate(turn, settings)
 
@@ -329,6 +332,7 @@ class ChatService:
         settings: GenerationSettings,
         scope: str = "reply",
         message_id: int | None = None,
+        source_text: str = "",
     ) -> Iterator[dict[str, object]]:
         """Stream a revision without changing the prose it came from."""
         turn = self._prepare_revision_turn(
@@ -337,6 +341,7 @@ class ChatService:
             message_id=message_id,
             instructions=instructions,
             settings=settings,
+            source_text=source_text,
         )
         return self._reply_events(turn, settings)
 
@@ -348,12 +353,15 @@ class ChatService:
         message_id: int | None,
         instructions: str,
         settings: GenerationSettings,
+        source_text: str = "",
     ) -> _ChatTurn:
         """Validate a revision request and build its prompt.
 
         A revision never overwrites the prose it came from. The result is a new
         message that the author can compare with the original, and insert into
-        the chapter through the normal locked edit path.
+        the chapter through the normal locked edit path. A chapter revision may
+        carry one selected passage instead of the whole chapter; that passage is
+        stored with the reply so applying it replaces only those words.
         """
         thread = self._require_thread(thread_id)
         project = self._require_project(thread.project_id)
@@ -377,8 +385,14 @@ class ChatService:
         model = self._require_model(settings, "revising prose")
         self._require_no_draft(thread, "revising")
         chapter = self._chapter_for(thread)
+        passage = (source_text or "").strip()
         revision_of: int | None = None
         if normalized_scope == "reply":
+            if passage:
+                raise InvalidInputError(
+                    "A reply revision uses the reply's own text. Choose the "
+                    "chapter to revise a passage."
+                )
             target = (
                 self._threads.get_message(message_id)
                 if message_id is not None
@@ -392,8 +406,8 @@ class ChatService:
                 or target.role != "assistant"
             ):
                 raise InvalidInputError("There is no model reply to revise.")
-            source_text = target.content.strip()
-            if not source_text:
+            prose = target.content.strip()
+            if not prose:
                 raise InvalidInputError("That reply is empty.")
             revision_of = target.id
         else:
@@ -406,15 +420,23 @@ class ChatService:
                 raise InvalidInputError(
                     "This chapter is approved. Reopen it before revising it."
                 )
-            source_text = chapter.content.strip()
-            if not source_text:
+            if passage and passage not in chapter.content:
+                raise InvalidInputError(
+                    "That passage is not in the current chapter. Select it in "
+                    "the chapter pane again."
+                )
+            prose = passage or chapter.content.strip()
+            if not prose:
                 raise InvalidInputError("Add chapter text before revising it.")
         # A clipped source would let a partial revision replace the whole
         # chapter, so prose over the budget is refused instead.
-        if len(source_text) > CHAT_REVISION_SOURCE_CHARS:
-            noun = "chapter" if normalized_scope == "chapter" else "reply"
+        if len(prose) > CHAT_REVISION_SOURCE_CHARS:
+            if normalized_scope == "reply":
+                noun = "reply"
+            else:
+                noun = "passage" if passage else "chapter"
             raise InvalidInputError(
-                f"This {noun} is {len(source_text):,} characters, more than one "
+                f"This {noun} is {len(prose):,} characters, more than one "
                 f"revision can carry ({CHAT_REVISION_SOURCE_CHARS:,}). Split it "
                 "or revise a shorter passage, so no part of the prose is dropped."
             )
@@ -432,8 +454,9 @@ class ChatService:
             genre=project.genre,
             narrative_style=project.narrative_style,
             scope=normalized_scope,
+            passage=bool(passage),
             instructions=text,
-            source_text=source_text,
+            source_text=prose,
             chapter_title=chapter.title if chapter else "",
             chapter_plan=context.chapter_plan,
             planning_notes=thread.planning_notes,
@@ -449,6 +472,7 @@ class ChatService:
             user_prompt=user_prompt,
             revision_scope=normalized_scope,
             revision_of=revision_of,
+            revision_source=passage,
         )
 
     def _reply_events(
@@ -542,6 +566,7 @@ class ChatService:
             context=_turn_context(turn),
             revision_scope=turn.revision_scope,
             revision_of=turn.revision_of,
+            revision_source=turn.revision_source,
         )
         refreshed = self._threads.get_thread(thread.id)
         if refreshed is None:
@@ -585,8 +610,22 @@ class ChatService:
         prose = message.content.strip()
         if not prose:
             raise InvalidInputError("That reply is empty.")
-        existing = chapter.content.rstrip()
-        content = prose if replace or not existing else f"{existing}\n\n{prose}"
+        passage = message.revision_source.strip()
+        if passage:
+            # A passage revision may only change the words it came from.
+            if replace:
+                raise InvalidInputError(
+                    "This revision replaces one passage, not the whole chapter."
+                )
+            if passage not in chapter.content:
+                raise InvalidInputError(
+                    "The passage this revision came from is no longer in the "
+                    "chapter. Revise the current text again."
+                )
+            content = chapter.content.replace(passage, prose, 1)
+        else:
+            existing = chapter.content.rstrip()
+            content = prose if replace or not existing else f"{existing}\n\n{prose}"
         if content == chapter.content:
             return chapter
         # ChapterService enforces the approval lock and snapshots the revision.
@@ -677,6 +716,7 @@ class ChatService:
         user_prompt: str,
         revision_scope: str = "",
         revision_of: int | None = None,
+        revision_source: str = "",
     ) -> _ChatTurn:
         """Store the author message and finish describing one prepared turn."""
         user_message = self._threads.add_message(
@@ -696,6 +736,7 @@ class ChatService:
             context_events=len(context.memory_events),
             revision_scope=revision_scope,
             revision_of=revision_of,
+            revision_source=revision_source,
         )
 
     def _auto_title(self, thread: ChatThread, text: str) -> ChatThread:

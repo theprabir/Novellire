@@ -3,6 +3,35 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.4.11] — 2026-11-19
+
+A revision can rewrite one selected passage. Schema 15 records the passage it
+came from.
+
+### Added
+
+- **A selected passage can be revised in place.** Select text in the Chat
+  chapter pane, choose **Revise selection**, and Novellire rewrites only those
+  words. The result is a new message labelled *Passage revision*; **Apply to
+  passage** replaces exactly that passage and leaves the rest of the chapter
+  untouched, through the normal approval-locked edit path that snapshots the
+  previous prose.
+- `POST /api/chat/threads/{id}/revisions` and `.../revisions/stream` accept an
+  optional `source_text` with a `chapter` scope. The passage is stored on the
+  reply, so it can still be applied after a reload.
+- A passage that is not in the current chapter is refused before any model
+  call, so a revision cannot be applied to text it did not come from.
+
+### Changed
+
+- A passage revision refuses `replace: true` when it is applied. It may only
+  change the words it came from, never the whole chapter.
+
+### Migrations
+
+- Schema 15 adds `chat_messages.revision_source`. Existing messages keep an
+  empty value and behave exactly as before.
+
 ## [0.4.10] — 2026-11-19
 
 Chat can revise prose. Schema 14 records what a revision came from.

@@ -164,13 +164,15 @@ Implemented first slice:
   chapter plan, retrieval, character state, and relationships.
 - Prose longer than the 6,000-character revision budget is refused rather than
   clipped, so a partial revision can never replace a whole chapter.
+- Selected-text revision: a passage selected in the chapter pane is revised on
+  its own (schema 15) and applied back only to that passage, so a long chapter
+  can be improved one piece at a time.
 
 Remaining:
 
 - Bounded orchestration: discuss, plan, draft scene by scene, assemble, review,
   revise.
 - The server validates model-proposed actions; the model never executes tools.
-- Selected-text revision.
 - Automatic analysis after draft completion.
 - Approval remains the final lock on prose.
 

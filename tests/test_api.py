@@ -46,8 +46,8 @@ def test_health_reports_version_and_schema(client: TestClient) -> None:
     payload = client.get("/api/health").json()
 
     assert payload["status"] == "ok"
-    assert payload["schema_version"] == 14
-    assert payload["version"] == "0.4.10"
+    assert payload["schema_version"] == 15
+    assert payload["version"] == "0.4.11"
 
 
 def test_meta_exposes_labels_for_the_client(client: TestClient) -> None:

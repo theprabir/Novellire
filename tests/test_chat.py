@@ -852,6 +852,128 @@ def test_a_whole_chapter_can_be_revised_and_inserted(tmp_path: Path) -> None:
         assert revisions and "Mira waits" in revisions[0]["excerpt"]
 
 
+def test_a_selected_passage_is_revised_and_applied_in_place(
+    tmp_path: Path,
+) -> None:
+    provider = RevisionProvider(["before the rusted gate"])
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        original = "Mira waits before the gate. Rain fills the street."
+        chapter = client.post(
+            f"/api/projects/{project['id']}/chapters",
+            json={"title": "The Gate", "content": original},
+        ).json()
+        thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads",
+            json={"mode": "write", "chapter_id": chapter["id"]},
+        ).json()
+
+        response = client.post(
+            f"/api/chat/threads/{thread['id']}/revisions/stream",
+            json={
+                "instructions": "Make the gate old.",
+                "model": "fake-model",
+                "scope": "chapter",
+                "source_text": "before the gate",
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        events = _events(response)
+        assert events[-1]["type"] == "done"
+        revised = events[-1]["assistant"]
+        assert revised["revision_scope"] == "chapter"
+        assert revised["revision_source"] == "before the gate"
+
+        prompt = provider.requests[0].prompt
+        assert "Prose to revise:\nbefore the gate" in prompt
+        assert "Return only the revised passage" in prompt
+        assert _chapter_content(client, project["id"]) == original
+
+        applied = client.post(
+            f"/api/chat/threads/{thread['id']}/messages/{revised['id']}/insert",
+            json={"replace": False},
+        )
+        assert applied.status_code == 200, applied.text
+        assert applied.json()["content"] == (
+            "Mira waits before the rusted gate. Rain fills the street."
+        )
+        assert _chapter_content(client, project["id"]) == (
+            "Mira waits before the rusted gate. Rain fills the street."
+        )
+        revisions = client.get(f"/api/chapters/{chapter['id']}/revisions").json()
+        assert revisions and "before the gate" in revisions[0]["excerpt"]
+
+
+def test_a_passage_that_is_not_in_the_chapter_is_refused(tmp_path: Path) -> None:
+    provider = RevisionProvider([])
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        chapter = client.post(
+            f"/api/projects/{project['id']}/chapters",
+            json={"title": "The Gate", "content": "Mira waits before the gate."},
+        ).json()
+        thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads",
+            json={"mode": "write", "chapter_id": chapter["id"]},
+        ).json()
+
+        response = client.post(
+            f"/api/chat/threads/{thread['id']}/revisions",
+            json={
+                "instructions": "Tighten this.",
+                "model": "fake-model",
+                "scope": "chapter",
+                "source_text": "A line that is not in the chapter.",
+            },
+        )
+
+        assert response.status_code == 400, response.text
+        assert "not in the current chapter" in response.json()["detail"]
+        assert provider.requests == []
+        bundle = client.get(f"/api/chat/threads/{thread['id']}").json()
+        assert bundle["messages"] == []
+        assert (
+            _chapter_content(client, project["id"])
+            == "Mira waits before the gate."
+        )
+
+
+def test_a_passage_revision_cannot_replace_the_whole_chapter(
+    tmp_path: Path,
+) -> None:
+    provider = RevisionProvider(["before the rusted gate"])
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        original = "Mira waits before the gate. Rain fills the street."
+        chapter = client.post(
+            f"/api/projects/{project['id']}/chapters",
+            json={"title": "The Gate", "content": original},
+        ).json()
+        thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads",
+            json={"mode": "write", "chapter_id": chapter["id"]},
+        ).json()
+        revised = client.post(
+            f"/api/chat/threads/{thread['id']}/revisions",
+            json={
+                "instructions": "Make the gate old.",
+                "model": "fake-model",
+                "scope": "chapter",
+                "source_text": "before the gate",
+            },
+        ).json()["assistant"]
+
+        response = client.post(
+            f"/api/chat/threads/{thread['id']}/messages/{revised['id']}/insert",
+            json={"replace": True},
+        )
+
+        assert response.status_code == 400, response.text
+        assert "one passage" in response.json()["detail"]
+        assert _chapter_content(client, project["id"]) == original
+
+
 def test_revision_requires_write_mode(tmp_path: Path) -> None:
     provider = RevisionProvider([])
     with _client(tmp_path, provider) as client:

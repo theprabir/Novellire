@@ -280,6 +280,7 @@ class ChatRevisionRequest(BaseModel):
     model: str
     scope: str = "reply"
     message_id: int | None = None
+    source_text: str = ""
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     top_p: float = Field(default=0.9, gt=0.0, le=1.0)
     num_predict: int = Field(default=700, ge=32, le=8192)
@@ -966,6 +967,7 @@ def _build_router(services: ApiServices) -> APIRouter:
             scope=payload.scope,
             message_id=payload.message_id,
             instructions=payload.instructions,
+            source_text=payload.source_text,
             settings=GenerationSettings(
                 model=payload.model,
                 temperature=payload.temperature,
@@ -1002,6 +1004,7 @@ def _build_router(services: ApiServices) -> APIRouter:
             message_id=payload.message_id,
             instructions=payload.instructions,
             settings=settings,
+            source_text=payload.source_text,
         )
 
         def lines() -> Iterator[str]:

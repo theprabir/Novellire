@@ -485,6 +485,11 @@ ALTER TABLE chat_messages
         REFERENCES chat_messages(id) ON DELETE SET NULL
 """
 
+MIGRATION_15_CHAT_REVISION_SOURCE = """
+ALTER TABLE chat_messages
+    ADD COLUMN revision_source TEXT NOT NULL DEFAULT ''
+"""
+
 MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
     (
         1,
@@ -599,6 +604,10 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
                 MIGRATION_14_CHAT_MESSAGE_REVISIONS,
                 MIGRATION_14_CHAT_MESSAGE_REVISION_OF,
             ),
+        ),
+        (
+            15,
+            (MIGRATION_15_CHAT_REVISION_SOURCE,),
         ),
     )
 

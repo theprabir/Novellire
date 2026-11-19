@@ -340,13 +340,16 @@ by Git. Never commit a novel project's database.
 | 12 | chat message `context_json`, the retrieval each reply was given |
 | 13 | `chat_drafts` checkpoints of a reply that was still streaming |
 | 14 | chat message revision scope and the reply a revision came from |
+| 15 | the chapter passage a revision rewrote, so it applies only there |
 
 Migrations are applied in order inside transactions; an existing database is
 upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.4.10** (schema version 14). `v0.4.10` adds revision to
+Current release: **v0.4.11** (schema version 15). `v0.4.11` lets the author
+revise one selected passage in Chat and apply it in place, leaving the rest of
+the chapter untouched. `v0.4.10` adds revision to
 Chat: the author can rewrite a chosen reply, or the whole chapter, from fresh
 context, compare the result with the original, and only then insert it into the
 chapter. `v0.4.9` checkpoints a chat

@@ -51,6 +51,7 @@ class ChatMessage:
     context: dict[str, object] | None = None
     revision_scope: str = ""
     revision_of: int | None = None
+    revision_source: str = ""
 
 
 class ChatRepository:
@@ -148,7 +149,8 @@ class ChatRepository:
             rows = connection.execute(
                 """
                 SELECT id, thread_id, role, content, model, created_at,
-                       context_json, revision_scope, revision_of
+                       context_json, revision_scope, revision_of,
+                       revision_source
                 FROM chat_messages WHERE thread_id = ? ORDER BY id
                 """,
                 (thread_id,),
@@ -160,7 +162,8 @@ class ChatRepository:
             row = connection.execute(
                 """
                 SELECT id, thread_id, role, content, model, created_at,
-                       context_json, revision_scope, revision_of
+                       context_json, revision_scope, revision_of,
+                       revision_source
                 FROM chat_messages WHERE id = ?
                 """,
                 (message_id,),
@@ -177,6 +180,7 @@ class ChatRepository:
         context: dict[str, object] | None = None,
         revision_scope: str = "",
         revision_of: int | None = None,
+        revision_source: str = "",
     ) -> ChatMessage:
         now = utc_now_iso()
         context_json = json.dumps(context, ensure_ascii=False) if context else ""
@@ -185,8 +189,8 @@ class ChatRepository:
                 """
                 INSERT INTO chat_messages
                     (thread_id, role, content, model, created_at, context_json,
-                     revision_scope, revision_of)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                     revision_scope, revision_of, revision_source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     thread_id,
@@ -197,6 +201,7 @@ class ChatRepository:
                     context_json,
                     revision_scope,
                     revision_of,
+                    revision_source,
                 ),
             )
             message_id = int(cursor.lastrowid)
@@ -207,7 +212,8 @@ class ChatRepository:
             row = connection.execute(
                 """
                 SELECT id, thread_id, role, content, model, created_at,
-                       context_json, revision_scope, revision_of
+                       context_json, revision_scope, revision_of,
+                       revision_source
                 FROM chat_messages WHERE id = ?
                 """,
                 (message_id,),
@@ -295,6 +301,7 @@ def _message_from_row(row) -> ChatMessage:  # noqa: ANN001 - sqlite3.Row
         context=_context_from_json(row["context_json"]),
         revision_scope=str(row["revision_scope"]),
         revision_of=int(row["revision_of"]) if row["revision_of"] is not None else None,
+        revision_source=str(row["revision_source"]),
     )
 
 
