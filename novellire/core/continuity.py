@@ -52,6 +52,7 @@ _MAX_EVENTS = 10
 _MAX_BIBLE_ENTRIES = 8
 
 _FALLBACK_EXPLANATION = "Contradicts the cited canon record."
+_LEDGER_FIELDS = ("location", "status", "goals", "knowledge")
 
 
 @dataclass(frozen=True)
@@ -233,6 +234,141 @@ class ContinuityCheckService:
             CanonReference(id=f"C{index}", label=label)
             for index, label in enumerate(labels, start=1)
         ]
+
+
+class ContinuityLedgerService:
+    """Compose the recorded timeline, knowledge, and threads for inspection.
+
+    Deterministic: it reads stored records only, never the model. The ledger is
+    what the author checks against, so it shows provenance rather than verdicts.
+    """
+
+    def __init__(
+        self,
+        projects: ProjectRepository,
+        chapters: ChapterRepository,
+        characters: CharacterRepository,
+        states: CharacterStateRepository,
+        events: EventRepository,
+    ) -> None:
+        self._projects = projects
+        self._chapters = chapters
+        self._characters = characters
+        self._states = states
+        self._events = events
+
+    def ledger(self, project_id: int) -> dict[str, object]:
+        if self._projects.get(project_id) is None:
+            raise ProjectNotFoundError(
+                "That project no longer exists. Choose another project."
+            )
+        chapters = self._chapters.list_for_project(project_id)
+        chapter_rows = {chapter.id: chapter for chapter in chapters}
+        characters = self._characters.list_for_project(project_id)
+        names = {character.id: character.name for character in characters}
+        events = self._events.list_for_project(project_id)
+        events_by_chapter: dict[int, list] = {}
+        for event in events:
+            events_by_chapter.setdefault(event.chapter_id, []).append(event)
+
+        timeline = [
+            {
+                "position": chapter.position,
+                "title": chapter.title,
+                "status": chapter.status,
+                "word_count": chapter.word_count,
+                "events": [
+                    {
+                        "id": event.id,
+                        "summary": event.summary,
+                        "threads": list(event.threads),
+                    }
+                    for event in events_by_chapter.get(chapter.id, [])
+                ],
+            }
+            for chapter in chapters
+        ]
+
+        states = self._states.list_for_project(project_id)
+        grouped: dict[int, list] = {}
+        for state in sorted(
+            states,
+            key=lambda item: (
+                chapter_rows[item.chapter_id].position
+                if item.chapter_id in chapter_rows
+                else 0,
+                item.id,
+            ),
+        ):
+            grouped.setdefault(state.character_id, []).append(state)
+        character_ledger = []
+        for character_id in sorted(grouped, key=lambda item: names.get(item, "")):
+            previous: dict[str, str] = {}
+            snapshots = []
+            for state in grouped[character_id]:
+                chapter = chapter_rows.get(state.chapter_id)
+                current = {
+                    "location": state.location,
+                    "status": state.status,
+                    "goals": state.goals,
+                    "knowledge": state.knowledge,
+                }
+                changed = [
+                    field
+                    for field in _LEDGER_FIELDS
+                    if current[field] != previous.get(field, "")
+                ]
+                previous = current
+                snapshots.append(
+                    {
+                        "chapter_position": chapter.position if chapter else 0,
+                        "chapter_title": chapter.title if chapter else "",
+                        **current,
+                        "changed": changed,
+                    }
+                )
+            character_ledger.append(
+                {
+                    "character_id": character_id,
+                    "name": names.get(character_id, "Unknown"),
+                    "snapshots": snapshots,
+                }
+            )
+
+        threads: dict[str, dict[str, object]] = {}
+        for event in events:
+            chapter = chapter_rows.get(event.chapter_id)
+            for thread in event.threads:
+                key = thread.casefold()
+                entry = threads.setdefault(
+                    key, {"thread": thread, "chapters": [], "event_count": 0}
+                )
+                entry["event_count"] = int(entry["event_count"]) + 1
+                if chapter is not None and all(
+                    row["position"] != chapter.position for row in entry["chapters"]
+                ):
+                    entry["chapters"].append(
+                        {"position": chapter.position, "title": chapter.title}
+                    )
+        thread_rows = sorted(
+            threads.values(),
+            key=lambda item: (
+                item["chapters"][0]["position"] if item["chapters"] else 0,
+                str(item["thread"]).casefold(),
+            ),
+        )
+
+        return {
+            "counts": {
+                "chapters": len(chapters),
+                "events": len(events),
+                "states": len(states),
+                "threads": len(thread_rows),
+            },
+            "timeline": timeline,
+            "characters": character_ledger,
+            "threads": thread_rows,
+        }
 
 
 def parse_continuity_payload(

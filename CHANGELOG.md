@@ -3,6 +3,25 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.5.1] — 2026-11-19
+
+The Continuity surface is live and deterministic.
+
+### Added
+
+- **Continuity** (the Phase 5 nav entry) now shows the recorded canon instead of
+  a placeholder: chapter counts, the timeline with each chapter's extracted
+  events, per-character state snapshots with the fields that changed at each
+  chapter, and unresolved threads with the chapters that raised them. No model
+  is involved.
+- `GET /api/projects/{id}/continuity` composes the ledger from chapters, events,
+  character states, and characters. Provenance is the chapter position and
+  title; threads are matched case-insensitively and count their events.
+- The ledger reports only what is stored. A character's state is unique per
+  chapter (existing 409 guard), so it makes no warnings it cannot prove.
+
+Schema stays at 15.
+
 ## [0.5.0] — 2026-11-19
 
 First v0.5 slice: continuity checking with cited provenance.

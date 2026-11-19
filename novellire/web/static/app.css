@@ -2146,3 +2146,29 @@ input[type="range"]::-webkit-slider-thumb {
 }
 .severity-medium { color: var(--accent); }
 .severity-low { color: var(--muted); }
+
+/* -- continuity ledger -------------------------------------------------- */
+
+.ledger-list { display: grid; gap: 10px; }
+.ledger-row {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.ledger-events {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+.ledger-snapshot {
+  display: grid;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.stat-value { margin: 8px 0 0; font-size: var(--fs-lg); font-weight: 600; }

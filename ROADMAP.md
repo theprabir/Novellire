@@ -194,6 +194,9 @@ Chat while memory updates automatically.
 - Continuity check of a saved chapter against cited canon: character state,
   approved relationships, events, and story bible, with provenance for every
   finding (`0.5.0`).
+- Deterministic continuity ledger in the Continuity view: recorded chapter
+  timeline, per-character state changes, and unresolved thread provenance, all
+  read-only and without inference (`0.5.1`).
 - Timeline validation.
 - Character knowledge tracking.
 - Relationship evolution.

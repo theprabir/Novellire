@@ -7,15 +7,15 @@ import {
   toast,
 } from './ui.js';
 import { renderHome } from './views/home.js';
-import { renderMemory } from './views/memory.js?v=0.5.0';
+import { renderMemory } from './views/memory.js?v=0.5.1';
 import { openProjectForm } from './views/projects.js';
 import { renderProjectSettings } from './views/project-settings.js';
-import { renderWorkspace } from './views/workspace.js?v=0.5.0';
+import { renderWorkspace } from './views/workspace.js?v=0.5.1';
 import { renderPreview } from './views/preview.js';
 import { renderExport } from './views/export.js';
 import { renderSettings } from './views/settings.js';
-import { renderChat } from './views/chat.js?v=0.5.0';
-import { renderScope } from './views/scopes.js?v=0.5.0';
+import { renderChat } from './views/chat.js?v=0.5.1';
+import { renderContinuity } from './views/continuity.js?v=0.5.1';
 
 const NAV = [
   { key: 'home', label: 'Home', icon: 'home' },
@@ -291,7 +291,7 @@ function render() {
       node = renderChat(context);
       break;
     case 'continuity':
-      node = renderScope(context, state.route.name);
+      node = renderContinuity(context);
       break;
     default:
       node = renderHome(context);

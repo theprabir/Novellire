@@ -347,7 +347,10 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.5.0** (schema version 15). `v0.5.0` starts continuity
+Current release: **v0.5.1** (schema version 15). `v0.5.1` turns the Continuity
+page into a deterministic ledger of the recorded canon: the chapter timeline,
+each character's state changes, and unresolved threads, all with chapter
+provenance. `v0.5.0` starts continuity
 intelligence: a saved chapter can be checked against its recorded canon, and
 every finding must cite a supplied record and quote the chapter exactly once.
 `v0.4.14` discusses a saved

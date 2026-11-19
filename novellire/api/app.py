@@ -31,7 +31,7 @@ from ..core.characters import FIELD_LABELS as CHARACTER_FIELD_LABELS
 from ..core.characters import PROFILE_FIELDS, CharacterService
 from ..core.chat import ChatService
 from ..core.context import GenerationContextBuilder
-from ..core.continuity import ContinuityCheckService
+from ..core.continuity import ContinuityCheckService, ContinuityLedgerService
 from ..core.discussion import ChapterDiscussionService
 from ..core.documents import ProjectDocumentService, WORKSPACE_DOCUMENTS
 from ..core.events import EventExtractionService
@@ -414,6 +414,7 @@ class ApiServices:
     review: ChapterReviewService
     discussion: ChapterDiscussionService
     continuity: ContinuityCheckService
+    ledger: ContinuityLedgerService
 
 
 def build_services(
@@ -557,6 +558,13 @@ def build_services(
             relationship_repository,
             event_repository,
             bible_repository,
+        ),
+        ledger=ContinuityLedgerService(
+            project_repository,
+            chapter_repository,
+            character_repository,
+            state_repository,
+            event_repository,
         ),
     )
 
@@ -1841,6 +1849,11 @@ def _build_router(services: ApiServices) -> APIRouter:
             ],
             "context": {"chapters": [], "events": []},
         }
+
+    @router.get("/projects/{project_id}/continuity")
+    def get_continuity_ledger(project_id: int) -> dict[str, Any]:
+        """Recorded timeline, knowledge changes, and unresolved threads."""
+        return services.ledger.ledger(project_id)
 
     @router.post("/chapters/{chapter_id}/continuity")
     def check_chapter_continuity(
