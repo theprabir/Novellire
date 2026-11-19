@@ -22,7 +22,7 @@ from ..errors import (
 )
 from ..llm.base import GenerationRequest, LLMProvider
 from ..logging_setup import get_logger
-from ..prompts.templates import build_chat_prompt
+from ..prompts.templates import build_chat_prompt, build_chat_revision_prompt
 from ..storage.chat_repository import (
     CHAT_MODES,
     ChatDraft,
@@ -45,6 +45,9 @@ CHAT_CHAPTER_CHARS = 6_000
 CHAT_OUTPUT_TOKENS = 900
 CHAT_CHECKPOINT_CHARS = 1_200
 CHAT_CHECKPOINT_SECONDS = 2.0
+CHAT_REVISION_SOURCE_CHARS = 6_000
+CHAT_REVISION_TOKENS = 1_800
+REVISION_SCOPES = ("reply", "chapter")
 NEW_THREAD_TITLE = "New conversation"
 
 logger = get_logger("core.chat")
@@ -82,6 +85,8 @@ class _ChatTurn:
     user_message: ChatMessage
     context_chapters: tuple[dict[str, object], ...]
     context_events: int
+    revision_scope: str = ""
+    revision_of: int | None = None
 
 
 class ChatService:
@@ -185,6 +190,10 @@ class ChatService:
             settings=settings,
             target_words=target_words,
         )
+        return self._generate(turn, settings)
+
+    def _generate(self, turn: _ChatTurn, settings: GenerationSettings) -> ChatReply:
+        """Generate one complete reply outside a stream."""
         result = self._provider.generate(
             GenerationRequest(
                 prompt=turn.user_prompt,
@@ -196,16 +205,11 @@ class ChatService:
                 context_window=settings.context_window,
             )
         )
-        reply = (result.text or "").strip()
-        if not reply:
-            raise LLMResponseError(
-                "The model returned an empty response. Try again."
-            )
+        text = (result.text or "").strip()
+        if not text:
+            raise LLMResponseError("The model returned an empty response. Try again.")
         assistant_message, updated = self._finish_turn(
-            turn.thread,
-            reply,
-            result.model or turn.model,
-            context=_turn_context(turn),
+            turn, text, result.model or turn.model
         )
         return ChatReply(
             thread=updated,
@@ -225,11 +229,7 @@ class ChatService:
     ) -> _ChatTurn:
         """Validate, store the author message, and rebuild prompt context."""
         thread = self._require_thread(thread_id)
-        project = self._projects.get(thread.project_id)
-        if project is None:
-            raise ProjectNotFoundError(
-                "That project no longer exists. Choose another project."
-            )
+        project = self._require_project(thread.project_id)
         text = (instructions or "").strip()
         if not text:
             raise InvalidInputError("Write a message before sending.")
@@ -237,45 +237,22 @@ class ChatService:
             raise InvalidInputError(
                 f"Messages must stay under {CHAT_INSTRUCTION_LIMIT} characters."
             )
-        model = (settings.model or "").strip()
-        if not model:
-            raise InvalidInputError(
-                "Choose a model before chatting. Install one with "
-                "`ollama pull qwen2.5:1.5b` if the list is empty."
-            )
-        if self._threads.get_draft(thread.id) is not None:
-            raise InvalidInputError(
-                "This conversation has an interrupted reply. Keep or discard it "
-                "before sending another message."
-            )
-
-        chapter = (
-            self._chapters.get_chapter(thread.chapter_id)
-            if thread.chapter_id is not None
-            else None
-        )
-        user_message = self._threads.add_message(
-            thread.id, role="user", content=text
-        )
-        if thread.title == NEW_THREAD_TITLE:
-            self._threads.set_title(thread.id, _title_from(text))
-            renamed = self._threads.get_thread(thread.id)
-            if renamed is not None:
-                thread = renamed
-        history_messages = self._threads.list_messages(thread.id)[:-1]
-        history = _format_history(history_messages)
+        model = self._require_model(settings, "chatting")
+        self._require_no_draft(thread, "sending another message")
+        chapter = self._chapter_for(thread)
+        # History is every message before this one.
+        history = _format_history(self._threads.list_messages(thread.id))
         prompt_text = text
         if thread.mode == "write":
             target = max(50, min(int(target_words), 6_000))
             prompt_text = f"{text}\n\nTarget length: about {target} words."
 
-        context = self._context_builder.build(
-            project.id,
+        context = self._retrieval(
+            project,
+            thread,
             instructions=prompt_text,
-            chapter_id=thread.chapter_id,
-            chapter_title=chapter.title if chapter else "",
-            context_notes=thread.planning_notes,
-            context_window=settings.context_window,
+            chapter=chapter,
+            settings=settings,
             output_tokens=min(settings.num_predict, CHAT_OUTPUT_TOKENS),
         )
         system_prompt, user_prompt = build_chat_prompt(
@@ -294,22 +271,14 @@ class ChatService:
             history=history,
             **_context_blocks(context),
         )
-        return _ChatTurn(
-            thread=thread,
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
+        return self._turn(
+            thread,
+            text,
             model=model,
             num_predict=min(max(settings.num_predict, 256), CHAT_OUTPUT_TOKENS),
-            user_message=user_message,
-            context_chapters=tuple(
-                {
-                    "id": item.id,
-                    "position": item.position,
-                    "title": item.title,
-                }
-                for item in context.memory_chapters
-            ),
-            context_events=len(context.memory_events),
+            context=context,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
         )
 
     def stream_message(
@@ -333,6 +302,154 @@ class ChatService:
             target_words=target_words,
         )
         return self._reply_events(turn, settings)
+
+    def revise_message(
+        self,
+        thread_id: int,
+        *,
+        instructions: str,
+        settings: GenerationSettings,
+        scope: str = "reply",
+        message_id: int | None = None,
+    ) -> ChatReply:
+        turn = self._prepare_revision_turn(
+            thread_id,
+            scope=scope,
+            message_id=message_id,
+            instructions=instructions,
+            settings=settings,
+        )
+        return self._generate(turn, settings)
+
+    def stream_revision(
+        self,
+        thread_id: int,
+        *,
+        instructions: str,
+        settings: GenerationSettings,
+        scope: str = "reply",
+        message_id: int | None = None,
+    ) -> Iterator[dict[str, object]]:
+        """Stream a revision without changing the prose it came from."""
+        turn = self._prepare_revision_turn(
+            thread_id,
+            scope=scope,
+            message_id=message_id,
+            instructions=instructions,
+            settings=settings,
+        )
+        return self._reply_events(turn, settings)
+
+    def _prepare_revision_turn(
+        self,
+        thread_id: int,
+        *,
+        scope: str,
+        message_id: int | None,
+        instructions: str,
+        settings: GenerationSettings,
+    ) -> _ChatTurn:
+        """Validate a revision request and build its prompt.
+
+        A revision never overwrites the prose it came from. The result is a new
+        message that the author can compare with the original, and insert into
+        the chapter through the normal locked edit path.
+        """
+        thread = self._require_thread(thread_id)
+        project = self._require_project(thread.project_id)
+        normalized_scope = (scope or "").strip().casefold()
+        if normalized_scope not in REVISION_SCOPES:
+            raise InvalidInputError(
+                "Choose whether to revise a reply or the chapter."
+            )
+        if thread.mode != "write":
+            raise InvalidInputError(
+                "Switch this conversation to Write mode before revising prose."
+            )
+        text = (instructions or "").strip()
+        if not text:
+            raise InvalidInputError("Describe how the prose should change.")
+        if len(text) > CHAT_INSTRUCTION_LIMIT:
+            raise InvalidInputError(
+                "Revision instructions must stay under "
+                f"{CHAT_INSTRUCTION_LIMIT} characters."
+            )
+        model = self._require_model(settings, "revising prose")
+        self._require_no_draft(thread, "revising")
+        chapter = self._chapter_for(thread)
+        revision_of: int | None = None
+        if normalized_scope == "reply":
+            target = (
+                self._threads.get_message(message_id)
+                if message_id is not None
+                else _last_assistant_message(
+                    self._threads.list_messages(thread.id)
+                )
+            )
+            if (
+                target is None
+                or target.thread_id != thread.id
+                or target.role != "assistant"
+            ):
+                raise InvalidInputError("There is no model reply to revise.")
+            source_text = target.content.strip()
+            if not source_text:
+                raise InvalidInputError("That reply is empty.")
+            revision_of = target.id
+        else:
+            if chapter is None:
+                raise InvalidInputError(
+                    "This conversation is project-wide. Start a chapter-scoped "
+                    "chat to revise its prose."
+                )
+            if chapter.status == "approved":
+                raise InvalidInputError(
+                    "This chapter is approved. Reopen it before revising it."
+                )
+            source_text = chapter.content.strip()
+            if not source_text:
+                raise InvalidInputError("Add chapter text before revising it.")
+        # A clipped source would let a partial revision replace the whole
+        # chapter, so prose over the budget is refused instead.
+        if len(source_text) > CHAT_REVISION_SOURCE_CHARS:
+            noun = "chapter" if normalized_scope == "chapter" else "reply"
+            raise InvalidInputError(
+                f"This {noun} is {len(source_text):,} characters, more than one "
+                f"revision can carry ({CHAT_REVISION_SOURCE_CHARS:,}). Split it "
+                "or revise a shorter passage, so no part of the prose is dropped."
+            )
+
+        context = self._retrieval(
+            project,
+            thread,
+            instructions=text,
+            chapter=chapter,
+            settings=settings,
+            output_tokens=min(settings.num_predict, CHAT_REVISION_TOKENS),
+        )
+        system_prompt, user_prompt = build_chat_revision_prompt(
+            project_name=project.name,
+            genre=project.genre,
+            narrative_style=project.narrative_style,
+            scope=normalized_scope,
+            instructions=text,
+            source_text=source_text,
+            chapter_title=chapter.title if chapter else "",
+            chapter_plan=context.chapter_plan,
+            planning_notes=thread.planning_notes,
+            **_context_blocks(context),
+        )
+        return self._turn(
+            thread,
+            text,
+            model=model,
+            num_predict=min(max(settings.num_predict, 512), CHAT_REVISION_TOKENS),
+            context=context,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            revision_scope=normalized_scope,
+            revision_of=revision_of,
+        )
 
     def _reply_events(
         self, turn: _ChatTurn, settings: GenerationSettings
@@ -381,9 +498,7 @@ class ChatService:
                 raise LLMResponseError(
                     "The model returned an empty response. Try again."
                 )
-            assistant_message, thread = self._finish_turn(
-                turn.thread, text, model, context=_turn_context(turn)
-            )
+            assistant_message, thread = self._finish_turn(turn, text, model)
             checkpoint.clear()
             yield {
                 "type": "done",
@@ -395,7 +510,7 @@ class ChatService:
             # The author stopped the reply or closed the page. Keep what arrived.
             partial = "".join(pieces).strip()
             if partial:
-                self._save_interrupted(turn.thread, partial, model, _turn_context(turn))
+                self._save_interrupted(turn, partial, model)
             checkpoint.clear()
             raise
         except NovellireError as exc:
@@ -410,13 +525,9 @@ class ChatService:
             }
 
     def _finish_turn(
-        self,
-        thread: ChatThread,
-        text: str,
-        model: str,
-        *,
-        context: dict[str, object] | None = None,
+        self, turn: _ChatTurn, text: str, model: str
     ) -> tuple[ChatMessage, ChatThread]:
+        thread = turn.thread
         if thread.mode == "plan":
             suggested, text = _extract_planning_notes(text)
             if suggested and thread.planning_notes_source != "author":
@@ -428,22 +539,18 @@ class ChatService:
             role="assistant",
             content=text,
             model=model,
-            context=context,
+            context=_turn_context(turn),
+            revision_scope=turn.revision_scope,
+            revision_of=turn.revision_of,
         )
         refreshed = self._threads.get_thread(thread.id)
         if refreshed is None:
             raise RecordNotFoundError("That conversation no longer exists.")
         return assistant_message, refreshed
 
-    def _save_interrupted(
-        self,
-        thread: ChatThread,
-        text: str,
-        model: str,
-        context: dict[str, object] | None = None,
-    ) -> None:
+    def _save_interrupted(self, turn: _ChatTurn, text: str, model: str) -> None:
         try:
-            self._finish_turn(thread, text, model, context=context)
+            self._finish_turn(turn, text, model)
         except Exception:  # noqa: BLE001 - the connection is already gone
             logger.warning("Could not store an interrupted chat reply")
 
@@ -515,6 +622,89 @@ class ChatService:
                 "That project no longer exists. Choose another project."
             )
         return project
+
+    def _require_model(self, settings: GenerationSettings, action: str) -> str:
+        model = (settings.model or "").strip()
+        if not model:
+            raise InvalidInputError(
+                f"Choose a model before {action}. Install one with "
+                "`ollama pull qwen2.5:1.5b` if the list is empty."
+            )
+        return model
+
+    def _require_no_draft(self, thread: ChatThread, action: str) -> None:
+        if self._threads.get_draft(thread.id) is not None:
+            raise InvalidInputError(
+                "This conversation has an interrupted reply. Keep or discard it "
+                f"before {action}."
+            )
+
+    def _chapter_for(self, thread: ChatThread) -> ChapterRecord | None:
+        if thread.chapter_id is None:
+            return None
+        return self._chapters.get_chapter(thread.chapter_id)
+
+    def _retrieval(
+        self,
+        project,  # noqa: ANN001 - project record
+        thread: ChatThread,
+        *,
+        instructions: str,
+        chapter: ChapterRecord | None,
+        settings: GenerationSettings,
+        output_tokens: int,
+    ) -> GenerationContext:
+        """Rebuild the retrieval context shared by chat and revision turns."""
+        return self._context_builder.build(
+            project.id,
+            instructions=instructions,
+            chapter_id=thread.chapter_id,
+            chapter_title=chapter.title if chapter else "",
+            context_notes=thread.planning_notes,
+            context_window=settings.context_window,
+            output_tokens=output_tokens,
+        )
+
+    def _turn(
+        self,
+        thread: ChatThread,
+        instructions: str,
+        *,
+        model: str,
+        num_predict: int,
+        context: GenerationContext,
+        system_prompt: str,
+        user_prompt: str,
+        revision_scope: str = "",
+        revision_of: int | None = None,
+    ) -> _ChatTurn:
+        """Store the author message and finish describing one prepared turn."""
+        user_message = self._threads.add_message(
+            thread.id, role="user", content=instructions
+        )
+        return _ChatTurn(
+            thread=self._auto_title(thread, instructions),
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            model=model,
+            num_predict=num_predict,
+            user_message=user_message,
+            context_chapters=tuple(
+                {"id": item.id, "position": item.position, "title": item.title}
+                for item in context.memory_chapters
+            ),
+            context_events=len(context.memory_events),
+            revision_scope=revision_scope,
+            revision_of=revision_of,
+        )
+
+    def _auto_title(self, thread: ChatThread, text: str) -> ChatThread:
+        """Name a new conversation from its first message."""
+        if thread.title != NEW_THREAD_TITLE:
+            return thread
+        self._threads.set_title(thread.id, _title_from(text))
+        renamed = self._threads.get_thread(thread.id)
+        return renamed or thread
 
     def _require_thread(self, thread_id: int) -> ChatThread:
         thread = self._threads.get_thread(thread_id)
@@ -614,6 +804,13 @@ def _format_history(messages: list[ChatMessage]) -> str:
         content = " ".join(message.content.split())
         lines.append(f"{label}: {content[:CHAT_HISTORY_CHARS]}")
     return "\n\n".join(lines)
+
+
+def _last_assistant_message(messages: list[ChatMessage]) -> ChatMessage | None:
+    for message in reversed(messages):
+        if message.role == "assistant":
+            return message
+    return None
 
 
 def _extract_planning_notes(text: str) -> tuple[str, str]:

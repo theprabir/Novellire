@@ -473,6 +473,18 @@ CREATE TABLE chat_drafts (
 )
 """
 
+MIGRATION_14_CHAT_MESSAGE_REVISIONS = """
+ALTER TABLE chat_messages
+    ADD COLUMN revision_scope TEXT NOT NULL DEFAULT ''
+        CHECK (revision_scope IN ('', 'reply', 'chapter'))
+"""
+
+MIGRATION_14_CHAT_MESSAGE_REVISION_OF = """
+ALTER TABLE chat_messages
+    ADD COLUMN revision_of INTEGER DEFAULT NULL
+        REFERENCES chat_messages(id) ON DELETE SET NULL
+"""
+
 MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
     (
         1,
@@ -580,6 +592,13 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
         (
             13,
             (MIGRATION_13_CHAT_DRAFTS,),
+        ),
+        (
+            14,
+            (
+                MIGRATION_14_CHAT_MESSAGE_REVISIONS,
+                MIGRATION_14_CHAT_MESSAGE_REVISION_OF,
+            ),
         ),
     )
 

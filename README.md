@@ -182,7 +182,10 @@ The interface has these surfaces:
   notes, while Write rebuilds its context from the documents, notes, chapter, and
   memory on every turn. Replies stream token by token and render as markdown;
   the round action button becomes **Stop**, which keeps the text received so far.
-  In Write mode, a reply can be **inserted into its chapter** — appended, or used
+  In Write mode, a reply can be **revised**: Novellire rewrites the chosen reply,
+  or the whole chapter, from fresh context, keeps the original in the transcript
+  for comparison, and leaves the chapter untouched until the revision is
+  inserted. A reply can also be **inserted into its chapter** — appended, or used
   to replace the chapter text — with the previous text kept in revision history
   and approved chapters refused until reopened. A chapter-scoped conversation
   shows its chapter in a **side-by-side pane** that refreshes after an insert,
@@ -336,13 +339,17 @@ by Git. Never commit a novel project's database.
 | 11 | `chat_threads` and `chat_messages` for persistent conversations |
 | 12 | chat message `context_json`, the retrieval each reply was given |
 | 13 | `chat_drafts` checkpoints of a reply that was still streaming |
+| 14 | chat message revision scope and the reply a revision came from |
 
 Migrations are applied in order inside transactions; an existing database is
 upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.4.9** (schema version 13). `v0.4.9` checkpoints a chat
+Current release: **v0.4.10** (schema version 14). `v0.4.10` adds revision to
+Chat: the author can rewrite a chosen reply, or the whole chapter, from fresh
+context, compare the result with the original, and only then insert it into the
+chapter. `v0.4.9` checkpoints a chat
 reply while it streams, so a crashed process, a closed browser, or a shutdown
 leaves recoverable text that the author can keep or discard. `v0.4.8` adds a
 side-by-side chapter pane to Chat and a context drawer showing the retrieval

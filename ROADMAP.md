@@ -154,10 +154,23 @@ mode starts from fresh context and streams prose into the chapter pane.
 
 ### v0.4.5 — Agentic writing and revision
 
+Implemented first slice:
+
+- Whole-chapter and last-response revision in Chat. A revision is a new message
+  with its source recorded (schema 14); the prose it came from is never
+  overwritten, and applying a revision goes through the approval-locked chapter
+  edit path with its revision snapshot.
+- Revision prompts rebuild fresh context from documents, planning notes, the
+  chapter plan, retrieval, character state, and relationships.
+- Prose longer than the 6,000-character revision budget is refused rather than
+  clipped, so a partial revision can never replace a whole chapter.
+
+Remaining:
+
 - Bounded orchestration: discuss, plan, draft scene by scene, assemble, review,
   revise.
 - The server validates model-proposed actions; the model never executes tools.
-- Whole-chapter and last-response revision; selected-text revision follows.
+- Selected-text revision.
 - Automatic analysis after draft completion.
 - Approval remains the final lock on prose.
 

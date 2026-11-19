@@ -3,6 +3,42 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.4.10] — 2026-11-19
+
+Chat can revise prose. Schema 14 records what a revision came from.
+
+### Added
+
+- **A reply can be revised from Chat.** The author picks a model reply, says
+  what should change, and Novellire streams a complete revision as a new
+  message. The original reply stays in the conversation for comparison, so
+  nothing is overwritten before the author chooses.
+- **A whole chapter can be revised the same way.** The revision uses fresh
+  documents, retrieval, planning notes, and the chapter plan. The chapter text
+  is untouched until the author inserts the revision through the normal
+  approval-locked edit path, which snapshots the previous prose first.
+- Revisions are labelled in the transcript with `revision_scope` (`reply` or
+  `chapter`) and, for replies, `revision_of`, the reply that was revised.
+- `POST /api/chat/threads/{id}/revisions` and
+  `POST /api/chat/threads/{id}/revisions/stream`. The revision instruction is
+  stored as an author message, and the prompt carries the exact prose to revise
+  plus the current documents, memory, and planning notes.
+- Plan-mode conversations, approved chapters, empty sources, and a reply
+  revision with no reply to revise are refused with a clear message instead of
+  generating prose that cannot be applied.
+
+### Changed
+
+- A revision whose source is longer than the 6,000-character budget is refused
+  with a message naming the limit, instead of being clipped. A partial revision
+  could otherwise be inserted over the whole chapter.
+
+### Migrations
+
+- Schema 14 adds `chat_messages.revision_scope` and
+  `chat_messages.revision_of`. Existing messages keep empty values and behave
+  exactly as before.
+
 ## [0.4.9] — 2026-11-19
 
 Chat replies survive an interruption. Schema 13 adds reply checkpoints.

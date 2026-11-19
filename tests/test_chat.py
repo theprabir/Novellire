@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from novellire.api.app import create_app
 from novellire.config import AnalysisSettings, GenerationDefaults, Settings
+from novellire.core.chat import CHAT_REVISION_SOURCE_CHARS
 from novellire.errors import LLMResponseError
 from novellire.llm.base import GenerationChunk, GenerationResult, ModelInfo
 from novellire.storage.database import Database
@@ -711,3 +712,289 @@ def test_an_interrupted_reply_can_be_discarded(tmp_path: Path) -> None:
         )
         assert sent.status_code == 200, sent.text
         assert sent.json()["assistant"]["content"] == "Second reply."
+
+
+class RevisionProvider:
+    """Provider stub that answers each turn with the next queued text."""
+
+    def __init__(self, replies: list[str]) -> None:
+        self.replies = list(replies)
+        self.requests = []
+
+    def is_available(self) -> bool:
+        return True
+
+    def list_models(self) -> list[ModelInfo]:
+        return [ModelInfo(name="fake-model")]
+
+    def generate(self, request):  # noqa: ANN001, ANN201
+        self.requests.append(request)
+        text = self.replies.pop(0) if self.replies else "No reply."
+        return GenerationResult(text=text, model="fake-model", duration_ms=5)
+
+
+def _chapter_content(client: TestClient, project_id: int) -> str:
+    chapters = client.get(f"/api/projects/{project_id}/manuscript").json()[
+        "chapters"
+    ]
+    return chapters[0]["content"]
+
+
+def test_a_write_reply_can_be_revised_without_losing_the_original(
+    tmp_path: Path,
+) -> None:
+    provider = RevisionProvider(
+        [
+            "Mira shut the gate. The hinge groaned.",
+            "Mira slammed the gate. The hinge screamed.",
+        ]
+    )
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        chapter = client.post(
+            f"/api/projects/{project['id']}/chapters",
+            json={"title": "The Gate", "content": "Mira waits."},
+        ).json()
+        thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads",
+            json={"mode": "write", "chapter_id": chapter["id"]},
+        ).json()
+        first = client.post(
+            f"/api/chat/threads/{thread['id']}/messages",
+            json={"instructions": "Draft the gate closing.", "model": "fake-model"},
+        ).json()
+        original = first["assistant"]
+
+        response = client.post(
+            f"/api/chat/threads/{thread['id']}/revisions",
+            json={
+                "instructions": "Make the closing beat louder.",
+                "model": "fake-model",
+                "scope": "reply",
+                "message_id": original["id"],
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        revised = response.json()["assistant"]
+        assert revised["content"] == "Mira slammed the gate. The hinge screamed."
+        assert revised["revision_scope"] == "reply"
+        assert revised["revision_of"] == original["id"]
+
+        prompt = provider.requests[1].prompt
+        assert (
+            "Prose to revise:\nMira shut the gate. The hinge groaned." in prompt
+        )
+        assert "Revision instruction:\nMake the closing beat louder." in prompt
+        assert "Return the full revised reply." in prompt
+
+        bundle = client.get(f"/api/chat/threads/{thread['id']}").json()
+        assert [message["role"] for message in bundle["messages"]] == [
+            "user",
+            "assistant",
+            "user",
+            "assistant",
+        ]
+        assert bundle["messages"][1]["content"] == original["content"]
+        assert bundle["messages"][1]["revision_scope"] == ""
+        assert _chapter_content(client, project["id"]) == "Mira waits."
+
+
+def test_a_whole_chapter_can_be_revised_and_inserted(tmp_path: Path) -> None:
+    provider = RevisionProvider(["The gate stays shut for good."])
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        chapter = client.post(
+            f"/api/projects/{project['id']}/chapters",
+            json={"title": "The Gate", "content": "Mira waits before the gate."},
+        ).json()
+        thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads",
+            json={"mode": "write", "chapter_id": chapter["id"]},
+        ).json()
+
+        response = client.post(
+            f"/api/chat/threads/{thread['id']}/revisions/stream",
+            json={
+                "instructions": "End on refusal.",
+                "model": "fake-model",
+                "scope": "chapter",
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        events = _events(response)
+        assert events[-1]["type"] == "done"
+        revised = events[-1]["assistant"]
+        assert revised["revision_scope"] == "chapter"
+        assert revised["revision_of"] is None
+
+        prompt = provider.requests[0].prompt
+        assert "Prose to revise:\nMira waits before the gate." in prompt
+        assert "Return the full revised chapter prose." in prompt
+        assert (
+            _chapter_content(client, project["id"])
+            == "Mira waits before the gate."
+        )
+
+        inserted = client.post(
+            f"/api/chat/threads/{thread['id']}/messages/{revised['id']}/insert",
+            json={"replace": True},
+        )
+        assert inserted.status_code == 200, inserted.text
+        assert inserted.json()["content"] == "The gate stays shut for good."
+        assert _chapter_content(client, project["id"]) == (
+            "The gate stays shut for good."
+        )
+        revisions = client.get(
+            f"/api/chapters/{chapter['id']}/revisions"
+        ).json()
+        assert revisions and "Mira waits" in revisions[0]["excerpt"]
+
+
+def test_revision_requires_write_mode(tmp_path: Path) -> None:
+    provider = RevisionProvider([])
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        chapter = client.post(
+            f"/api/projects/{project['id']}/chapters",
+            json={"title": "The Gate", "content": "Mira waits."},
+        ).json()
+        thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads",
+            json={"mode": "plan", "chapter_id": chapter["id"]},
+        ).json()
+
+        response = client.post(
+            f"/api/chat/threads/{thread['id']}/revisions",
+            json={
+                "instructions": "Tighten this.",
+                "model": "fake-model",
+                "scope": "chapter",
+            },
+        )
+
+        assert response.status_code == 400
+        assert "Write mode" in response.json()["detail"]
+        assert provider.requests == []
+
+
+def test_a_reply_revision_needs_a_reply_to_revise(tmp_path: Path) -> None:
+    provider = RevisionProvider([])
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads", json={"mode": "write"}
+        ).json()
+
+        response = client.post(
+            f"/api/chat/threads/{thread['id']}/revisions",
+            json={"instructions": "Tighten this.", "model": "fake-model"},
+        )
+
+        assert response.status_code == 400
+        assert "no model reply" in response.json()["detail"]
+
+
+def test_an_approved_chapter_cannot_be_revised(tmp_path: Path) -> None:
+    provider = RevisionProvider([])
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        chapter = client.post(
+            f"/api/projects/{project['id']}/chapters",
+            json={
+                "title": "The Gate",
+                "content": "Mira waits.",
+                "status": "approved",
+            },
+        ).json()
+        thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads",
+            json={"mode": "write", "chapter_id": chapter["id"]},
+        ).json()
+
+        response = client.post(
+            f"/api/chat/threads/{thread['id']}/revisions",
+            json={
+                "instructions": "Tighten this.",
+                "model": "fake-model",
+                "scope": "chapter",
+            },
+        )
+
+        assert response.status_code == 400
+        assert "approved" in response.json()["detail"]
+        assert provider.requests == []
+
+
+def test_a_chapter_over_the_revision_budget_is_refused(tmp_path: Path) -> None:
+    provider = RevisionProvider([])
+    long_prose = "word " * (CHAT_REVISION_SOURCE_CHARS // 5 + 10)
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        chapter = client.post(
+            f"/api/projects/{project['id']}/chapters",
+            json={"title": "The Gate", "content": long_prose},
+        ).json()
+        thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads",
+            json={"mode": "write", "chapter_id": chapter["id"]},
+        ).json()
+
+        response = client.post(
+            f"/api/chat/threads/{thread['id']}/revisions/stream",
+            json={
+                "instructions": "Tighten this.",
+                "model": "fake-model",
+                "scope": "chapter",
+            },
+        )
+
+        assert response.status_code == 400, response.text
+        detail = response.json()["detail"]
+        assert "chapter" in detail
+        assert f"{CHAT_REVISION_SOURCE_CHARS:,}" in detail
+        assert provider.requests == []
+        bundle = client.get(f"/api/chat/threads/{thread['id']}").json()
+        assert bundle["messages"] == []
+        assert _chapter_content(client, project["id"]) == long_prose.strip()
+
+
+def test_a_reply_over_the_revision_budget_is_refused(tmp_path: Path) -> None:
+    long_reply = "word " * (CHAT_REVISION_SOURCE_CHARS // 5 + 10)
+    provider = RevisionProvider([long_reply])
+    with _client(tmp_path, provider) as client:
+        project = client.post("/api/projects", json={"name": "Ashfall"}).json()
+        chapter = client.post(
+            f"/api/projects/{project['id']}/chapters",
+            json={"title": "The Gate", "content": "Mira waits."},
+        ).json()
+        thread = client.post(
+            f"/api/projects/{project['id']}/chat/threads",
+            json={"mode": "write", "chapter_id": chapter["id"]},
+        ).json()
+        first = client.post(
+            f"/api/chat/threads/{thread['id']}/messages",
+            json={"instructions": "Draft the gate closing.", "model": "fake-model"},
+        ).json()
+        target = first["assistant"]
+        assert len(target["content"]) > CHAT_REVISION_SOURCE_CHARS
+
+        response = client.post(
+            f"/api/chat/threads/{thread['id']}/revisions",
+            json={
+                "instructions": "Tighten this.",
+                "model": "fake-model",
+                "scope": "reply",
+                "message_id": target["id"],
+            },
+        )
+
+        assert response.status_code == 400, response.text
+        assert "reply" in response.json()["detail"]
+        assert len(provider.requests) == 1
+        bundle = client.get(f"/api/chat/threads/{thread['id']}").json()
+        assert [message["role"] for message in bundle["messages"]] == [
+            "user",
+            "assistant",
+        ]

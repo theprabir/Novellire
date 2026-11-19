@@ -268,6 +268,17 @@ export function renderChat(ctx) {
   const paneText = el('div', { class: 'chat-pane-text' });
   const paneEmpty = el('p', { class: 'chat-pane-empty' });
   const paneBody = el('div', { class: 'chat-pane-body' }, paneText, paneEmpty);
+  const paneRevise = el(
+    'button',
+    {
+      class: 'icon-btn',
+      type: 'button',
+      title: 'Revise this chapter',
+      'aria-label': 'Revise this chapter',
+      onClick: () => offerChapterRevision(),
+    },
+    icon('pencil')
+  );
   const pane = el(
     'aside',
     { class: 'chat-chapter', 'aria-label': 'Chapter' },
@@ -284,6 +295,7 @@ export function renderChat(ctx) {
       el(
         'div',
         { class: 'chat-pane-actions' },
+        paneRevise,
         el(
           'button',
           {
@@ -455,6 +467,16 @@ export function renderChat(ctx) {
     paneEmpty.textContent = approved
       ? 'This chapter is approved and locked. Reopen it to change the prose.'
       : 'This chapter is empty. Ask for a scene in Write mode, then insert the reply.';
+    paneRevise.disabled = approved || !text || active?.mode !== 'write';
+    const reviseTitle = approved
+      ? 'This chapter is approved. Reopen it before revising.'
+      : !text
+        ? 'Add chapter text before revising it.'
+        : active?.mode !== 'write'
+          ? 'Switch to Write mode to revise prose.'
+          : 'Revise this chapter';
+    paneRevise.title = reviseTitle;
+    paneRevise.setAttribute('aria-label', reviseTitle);
   }
 
   function togglePane(open) {
@@ -551,12 +573,11 @@ export function renderChat(ctx) {
     inputBox.style.height = `${Math.min(inputBox.scrollHeight, 220)}px`;
   }
 
-  function insertActions(message) {
-    if (!active || active.mode !== 'write' || !active.chapter_id) return null;
+  function messageActions(message) {
+    if (!active || active.mode !== 'write') return null;
     if (message.role !== 'assistant') return null;
     const chapter = chapterFor(state, active);
-    if (!chapter) return null;
-    const locked = chapter.status === 'approved';
+    const locked = Boolean(chapter) && chapter.status === 'approved';
     return el(
       'div',
       { class: 'msg-actions' },
@@ -565,15 +586,29 @@ export function renderChat(ctx) {
         {
           class: 'msg-action',
           type: 'button',
-          disabled: locked,
-          title: locked
-            ? 'This chapter is approved. Reopen it before inserting.'
-            : 'Insert this reply into the chapter',
-          onClick: () => offerInsert(message),
+          disabled: busy || Boolean(draft),
+          title: 'Revise this reply with an instruction',
+          onClick: () => offerRevision(message),
         },
-        icon('arrow-down', 'icon sm'),
-        'Insert into chapter'
-      )
+        icon('pencil', 'icon sm'),
+        'Revise'
+      ),
+      chapter
+        ? el(
+            'button',
+            {
+              class: 'msg-action',
+              type: 'button',
+              disabled: locked,
+              title: locked
+                ? 'This chapter is approved. Reopen it before inserting.'
+                : 'Insert this reply into the chapter',
+              onClick: () => offerInsert(message),
+            },
+            icon('arrow-down', 'icon sm'),
+            'Insert into chapter'
+          )
+        : null
     );
   }
 
@@ -636,7 +671,7 @@ export function renderChat(ctx) {
       ? el('span', { class: 'msg-meta' }, message.model)
       : null;
     const context = contextPanel(message);
-    const actions = insertActions(message);
+    const actions = messageActions(message);
     if (!meta && !context && !actions) return [];
     const row = el(
       'div',
@@ -651,6 +686,16 @@ export function renderChat(ctx) {
     return el('div', { class: 'msg-foot-wrap' }, ...footContent(message));
   }
 
+  function revisionTag(message) {
+    if (message.revision_scope === 'chapter') {
+      return el('div', { class: 'msg-revision' }, icon('pencil', 'icon sm'), 'Chapter revision');
+    }
+    if (message.revision_scope === 'reply') {
+      return el('div', { class: 'msg-revision' }, icon('pencil', 'icon sm'), 'Revised reply');
+    }
+    return null;
+  }
+
   function messageNode(message) {
     if (message.role === 'user') {
       return el(
@@ -661,7 +706,13 @@ export function renderChat(ctx) {
     }
     const body = el('div', { class: 'msg-body md' });
     body.append(renderMarkdown(message.content));
-    return el('article', { class: 'msg msg-assistant' }, body, footNode(message));
+    return el(
+      'article',
+      { class: 'msg msg-assistant' },
+      revisionTag(message),
+      body,
+      footNode(message)
+    );
   }
 
   function streamingMessage() {
@@ -680,6 +731,8 @@ export function renderChat(ctx) {
         const final = message
           ? { ...message, model: message.model || model }
           : { role: 'assistant', content, model };
+        const tag = revisionTag(final);
+        if (tag) node.insertBefore(tag, body);
         foot.replaceChildren(...footContent(final));
       },
     };
@@ -800,6 +853,108 @@ export function renderChat(ctx) {
           'Append'
         ),
       ],
+    });
+  }
+
+  function offerRevision(message) {
+    if (busy) {
+      toast('Wait for the current reply to finish, or stop it.', 'error');
+      return;
+    }
+    openRevisionForm(
+      'Revise this reply',
+      'Novellire rewrites the reply you chose. The original stays in the conversation, so you can compare them.',
+      (instruction) =>
+        startRevision({ scope: 'reply', messageId: message.id, instruction })
+    );
+  }
+
+  function offerChapterRevision() {
+    const chapter = activeChapter();
+    if (!chapter || !active) return;
+    if (active.mode !== 'write') {
+      toast('Switch to Write mode to revise prose.', 'error');
+      return;
+    }
+    if (chapter.status === 'approved') {
+      toast('This chapter is approved. Reopen it before revising.', 'error');
+      return;
+    }
+    if (!chapter.content?.trim()) {
+      toast('Add chapter text before revising it.', 'error');
+      return;
+    }
+    openRevisionForm(
+      'Revise the chapter',
+      'Novellire rewrites the whole chapter from fresh context. The chapter stays unchanged until you insert the revision.',
+      (instruction) =>
+        startRevision({ scope: 'chapter', messageId: null, instruction })
+    );
+  }
+
+  function openRevisionForm(title, hintText, onSubmit) {
+    const textarea = el('textarea', {
+      class: 'chat-notes-input',
+      rows: 5,
+      placeholder: 'e.g. Make the argument colder and cut the last paragraph.',
+    });
+    const formNode = el(
+      'form',
+      { class: 'form-grid' },
+      el('p', { class: 'hint span-2' }, hintText),
+      el('div', { class: 'field span-2' }, textarea),
+      el(
+        'div',
+        { class: 'form-actions span-2' },
+        el('button', { class: 'btn btn-ghost', type: 'button', onClick: closeModal }, 'Cancel'),
+        el('button', { class: 'btn btn-primary', type: 'submit' }, icon('pencil'), 'Revise')
+      )
+    );
+    const submit = formNode.querySelector('button[type="submit"]');
+    formNode.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const instruction = textarea.value.trim();
+      if (!instruction) {
+        textarea.focus();
+        return;
+      }
+      submit.disabled = true;
+      closeModal();
+      onSubmit(instruction);
+    });
+    openModal({ title, body: formNode });
+    window.requestAnimationFrame(() => textarea.focus());
+  }
+
+  async function startRevision({ scope, messageId, instruction }) {
+    if (!active) return;
+    if (busy) {
+      toast('Wait for the current reply to finish, or stop it.', 'error');
+      return;
+    }
+    if (draft) {
+      toast('Keep or discard the interrupted reply first.', 'error');
+      return;
+    }
+    const settings = state.settings?.generation || {};
+    const model = settings.model || state.ollama?.models?.[0]?.name || '';
+    if (!model) {
+      toast('Choose a model in Settings first.', 'error');
+      return;
+    }
+    await runTurn({
+      url: `/api/chat/threads/${active.id}/revisions/stream`,
+      payload: {
+        instructions: instruction,
+        model,
+        scope,
+        message_id: messageId ?? null,
+        temperature: Number(settings.temperature ?? 0.7),
+        top_p: Number(settings.top_p ?? 0.9),
+        num_predict: Number(settings.num_predict ?? 700),
+        context_window: Number(settings.context_window ?? 4096),
+      },
+      userText: instruction,
     });
   }
 
@@ -1083,6 +1238,67 @@ export function renderChat(ctx) {
     abortController?.abort();
   }
 
+  async function runTurn({ url, payload, userText }) {
+    busy = true;
+    const reply = streamingMessage();
+    renderComposer();
+    renderMode();
+    clearWelcome();
+    feed.append(messageNode({ role: 'user', content: userText }), reply.node);
+    scrollToEnd(true);
+    abortController = new AbortController();
+    let failure = '';
+    let collected = '';
+
+    try {
+      await api.stream(
+        url,
+        payload,
+        (event) => {
+          if (event.type === 'delta') {
+            collected += event.text || '';
+            reply.append(event.text || '');
+            scrollToEnd();
+          } else if (event.type === 'done') {
+            active = event.thread;
+            state.chatThreadId = active.id;
+            pendingMode = active.mode;
+            draft = null;
+            renderDraft();
+            renderComposer();
+            reply.finish(event.assistant?.model || payload.model, collected, event.assistant);
+            const item = threads.find((thread) => thread.id === active.id);
+            if (item) Object.assign(item, active);
+            renderHeader();
+            renderDrawer();
+            renderNotes();
+          } else if (event.type === 'error') {
+            failure = event.message || 'The model did not finish the reply.';
+          }
+        },
+        { signal: abortController.signal }
+      );
+      if (failure) throw new Error(failure);
+      await refreshThreads();
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        // The server stores the text received so far before the stream closes.
+        await new Promise((resolve) => window.setTimeout(resolve, 300));
+        await refreshThreads();
+        await reloadThread();
+      } else {
+        toast(error.message, 'error');
+        await reloadThread();
+      }
+    } finally {
+      abortController = null;
+      busy = false;
+      renderComposer();
+      renderMode();
+      inputBox.focus();
+    }
+  }
+
   async function send() {
     if (busy) return;
     const text = inputBox.value.trim();
@@ -1114,75 +1330,21 @@ export function renderChat(ctx) {
       }
     }
 
-    busy = true;
-    const threadId = active.id;
-    const reply = streamingMessage();
-    renderComposer();
-    renderMode();
-    clearWelcome();
-    feed.append(messageNode({ role: 'user', content: text }), reply.node);
-    scrollToEnd(true);
     inputBox.value = '';
     autoGrow();
     clearDraft(sentKey);
-    abortController = new AbortController();
-    let failure = '';
-    let collected = '';
-
-    try {
-      await api.stream(
-        `/api/chat/threads/${threadId}/messages/stream`,
-        {
-          instructions: text,
-          model,
-          temperature: Number(settings.temperature ?? 0.7),
-          top_p: Number(settings.top_p ?? 0.9),
-          num_predict: Number(settings.num_predict ?? 700),
-          context_window: Number(settings.context_window ?? 4096),
-        },
-        (event) => {
-          if (event.type === 'delta') {
-            collected += event.text || '';
-            reply.append(event.text || '');
-            scrollToEnd();
-          } else if (event.type === 'done') {
-            active = event.thread;
-            state.chatThreadId = active.id;
-            pendingMode = active.mode;
-            draft = null;
-            renderDraft();
-            renderComposer();
-            reply.finish(event.assistant?.model || model, collected, event.assistant);
-            const item = threads.find((thread) => thread.id === active.id);
-            if (item) Object.assign(item, active);
-            renderHeader();
-            renderDrawer();
-            renderNotes();
-          } else if (event.type === 'error') {
-            failure = event.message || 'The model did not finish the reply.';
-          }
-        },
-        { signal: abortController.signal }
-      );
-      if (failure) throw new Error(failure);
-      await refreshThreads();
-    } catch (error) {
-      if (error?.name === 'AbortError') {
-        // The server stores the text received so far before the stream closes.
-        await new Promise((resolve) => window.setTimeout(resolve, 300));
-        await refreshThreads();
-        await reloadThread();
-      } else {
-        toast(error.message, 'error');
-        await reloadThread();
-      }
-    } finally {
-      abortController = null;
-      busy = false;
-      renderComposer();
-      renderMode();
-      inputBox.focus();
-    }
+    await runTurn({
+      url: `/api/chat/threads/${active.id}/messages/stream`,
+      payload: {
+        instructions: text,
+        model,
+        temperature: Number(settings.temperature ?? 0.7),
+        top_p: Number(settings.top_p ?? 0.9),
+        num_predict: Number(settings.num_predict ?? 700),
+        context_window: Number(settings.context_window ?? 4096),
+      },
+      userText: text,
+    });
   }
 
   renderMode();

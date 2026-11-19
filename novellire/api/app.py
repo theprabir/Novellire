@@ -275,6 +275,17 @@ class ChatMessageRequest(BaseModel):
     target_words: int = Field(default=900, ge=50, le=6000)
 
 
+class ChatRevisionRequest(BaseModel):
+    instructions: str
+    model: str
+    scope: str = "reply"
+    message_id: int | None = None
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    top_p: float = Field(default=0.9, gt=0.0, le=1.0)
+    num_predict: int = Field(default=700, ge=32, le=8192)
+    context_window: int = Field(default=4096, ge=512, le=32768)
+
+
 class StyleGuideRequest(BaseModel):
     model: str = ""
     temperature: float = Field(default=0.3, ge=0.0, le=2.0)
@@ -930,6 +941,67 @@ def _build_router(services: ApiServices) -> APIRouter:
             instructions=payload.instructions,
             settings=settings,
             target_words=payload.target_words,
+        )
+
+        def lines() -> Iterator[str]:
+            for event in events:
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+
+        return StreamingResponse(
+            lines(),
+            media_type="application/x-ndjson",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    @router.post("/chat/threads/{thread_id}/revisions")
+    def revise_chat_message(
+        thread_id: int, payload: ChatRevisionRequest
+    ) -> dict[str, Any]:
+        """Revise a reply or the chapter into a new, comparable message."""
+        reply = services.chat.revise_message(
+            thread_id,
+            scope=payload.scope,
+            message_id=payload.message_id,
+            instructions=payload.instructions,
+            settings=GenerationSettings(
+                model=payload.model,
+                temperature=payload.temperature,
+                top_p=payload.top_p,
+                num_predict=payload.num_predict,
+                context_window=payload.context_window,
+            ),
+        )
+        return {
+            "thread": asdict(reply.thread),
+            "user": asdict(reply.user_message),
+            "assistant": asdict(reply.assistant_message),
+            "context": {
+                "chapters": list(reply.context_chapters),
+                "events": reply.context_events,
+            },
+        }
+
+    @router.post("/chat/threads/{thread_id}/revisions/stream")
+    def stream_chat_revision(
+        thread_id: int, payload: ChatRevisionRequest
+    ) -> StreamingResponse:
+        """Stream one revision as newline-delimited JSON events."""
+        settings = GenerationSettings(
+            model=payload.model,
+            temperature=payload.temperature,
+            top_p=payload.top_p,
+            num_predict=payload.num_predict,
+            context_window=payload.context_window,
+        )
+        events = services.chat.stream_revision(
+            thread_id,
+            scope=payload.scope,
+            message_id=payload.message_id,
+            instructions=payload.instructions,
+            settings=settings,
         )
 
         def lines() -> Iterator[str]:
