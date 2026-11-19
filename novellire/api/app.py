@@ -31,6 +31,7 @@ from ..core.characters import FIELD_LABELS as CHARACTER_FIELD_LABELS
 from ..core.characters import PROFILE_FIELDS, CharacterService
 from ..core.chat import ChatService
 from ..core.context import GenerationContextBuilder
+from ..core.continuity import ContinuityCheckService
 from ..core.discussion import ChapterDiscussionService
 from ..core.documents import ProjectDocumentService, WORKSPACE_DOCUMENTS
 from ..core.events import EventExtractionService
@@ -298,6 +299,14 @@ class PlanDiscussionRequest(BaseModel):
     context_window: int = Field(default=4096, ge=512, le=32768)
 
 
+class ContinuityCheckRequest(BaseModel):
+    model: str
+    temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    top_p: float = Field(default=0.9, gt=0.0, le=1.0)
+    num_predict: int = Field(default=700, ge=32, le=8192)
+    context_window: int = Field(default=4096, ge=512, le=32768)
+
+
 class ChapterReviewRequest(BaseModel):
     model: str
     draft: str | None = None
@@ -404,6 +413,7 @@ class ApiServices:
     orchestration: ChapterDraftSequence
     review: ChapterReviewService
     discussion: ChapterDiscussionService
+    continuity: ContinuityCheckService
 
 
 def build_services(
@@ -537,6 +547,16 @@ def build_services(
         ),
         discussion=ChapterDiscussionService(
             provider, project_repository, chapter_service, context_builder
+        ),
+        continuity=ContinuityCheckService(
+            provider,
+            project_repository,
+            chapter_repository,
+            character_repository,
+            state_repository,
+            relationship_repository,
+            event_repository,
+            bible_repository,
         ),
     )
 
@@ -1820,6 +1840,27 @@ def _build_router(services: ApiServices) -> APIRouter:
                 for scene in outcome.scenes
             ],
             "context": {"chapters": [], "events": []},
+        }
+
+    @router.post("/chapters/{chapter_id}/continuity")
+    def check_chapter_continuity(
+        chapter_id: int, payload: ContinuityCheckRequest
+    ) -> dict[str, Any]:
+        """Check a saved chapter against cited canon. Read-only."""
+        result = services.continuity.check(
+            chapter_id,
+            settings=GenerationSettings(
+                model=payload.model,
+                temperature=payload.temperature,
+                top_p=payload.top_p,
+                num_predict=payload.num_predict,
+                context_window=payload.context_window,
+            ),
+        )
+        return {
+            "canon_count": result.canon_count,
+            "model": result.model,
+            "findings": [asdict(finding) for finding in result.findings],
         }
 
     @router.post("/chapters/{chapter_id}/discuss")

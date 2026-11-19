@@ -720,6 +720,17 @@ function chapterEditor(ctx, chapter) {
                 icon('layers'),
                 'Draft scene by scene'
               ),
+              el(
+                'button',
+                {
+                  class: 'btn btn-ghost',
+                  type: 'button',
+                  title: 'Check the saved chapter against recorded canon',
+                  onClick: () => openContinuityDialog(ctx, chapter),
+                },
+                icon('shield'),
+                'Check continuity'
+              ),
             ]
     )
   );
@@ -1589,6 +1600,97 @@ async function draftSequence(ctx, chapter, button, { instructions = '' } = {}) {
       button.replaceChildren(icon('layers'), 'Draft scene by scene');
     }
   }
+}
+
+function openContinuityDialog(ctx, chapter) {
+  const state = ctx.state;
+  const settings = state.settings?.generation || {};
+  const model = settings.model || state.ollama?.models?.[0]?.name || '';
+  const host = el('div', { class: 'review-findings' });
+  const modal = openModal({
+    title: `Continuity · chapter ${chapter.position}`,
+    wide: true,
+    body: [
+      el(
+        'p',
+        { class: 'hint' },
+        'Compares the saved chapter with its character state, approved relationships, extracted events, and story bible. Every finding cites the record it contradicts and quotes this chapter.'
+      ),
+      host,
+    ],
+    footer: [
+      el(
+        'button',
+        { class: 'btn btn-ghost', type: 'button', onClick: () => modal.close() },
+        'Close'
+      ),
+    ],
+  });
+
+  if (!(chapter.content || '').trim()) {
+    host.replaceChildren(
+      el('p', { class: 'hint' }, 'Write or draft this chapter before checking it.')
+    );
+    return;
+  }
+  if (!model) {
+    host.replaceChildren(
+      el('p', { class: 'hint' }, 'Choose a model in Settings before checking continuity.')
+    );
+    return;
+  }
+  host.replaceChildren(el('p', { class: 'hint' }, 'Comparing with canon…'));
+  api
+    .post(`/api/chapters/${chapter.id}/continuity`, {
+      model,
+      temperature: Number(settings.temperature ?? 0.2),
+      top_p: Number(settings.top_p ?? 0.9),
+      num_predict: Number(settings.num_predict ?? 700),
+      context_window: Number(settings.context_window ?? 4096),
+    })
+    .then((result) => {
+      const findings = result.findings || [];
+      host.replaceChildren(
+        el(
+          'p',
+          { class: 'hint' },
+          `Checked against ${count(result.canon_count)} canon record${
+            result.canon_count === 1 ? '' : 's'
+          }.`
+        ),
+        findings.length
+          ? el(
+              'div',
+              { class: 'review-list' },
+              findings.map((finding) =>
+                el(
+                  'div',
+                  { class: 'review-finding' },
+                  el(
+                    'div',
+                    { class: 'review-finding-head' },
+                    el(
+                      'span',
+                      { class: `chip severity-${finding.severity}` },
+                      finding.severity
+                    ),
+                    el('span', { class: 'chip' }, finding.kind)
+                  ),
+                  el('p', { class: 'review-quote' }, `“${finding.quote}”`),
+                  el('p', { class: 'continuity-source' }, `Against · ${finding.source}`),
+                  el('p', {}, finding.explanation),
+                  finding.suggestion
+                    ? el('p', { class: 'review-replacement' }, finding.suggestion)
+                    : null
+                )
+              )
+            )
+          : el('p', {}, 'No contradictions found in the recorded canon.')
+      );
+    })
+    .catch((error) => {
+      host.replaceChildren(el('p', { class: 'hint' }, error.message));
+    });
 }
 
 function openGenerateDialog(ctx, chapter) {

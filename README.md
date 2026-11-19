@@ -347,7 +347,10 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.4.14** (schema version 15). `v0.4.14` discusses a saved
+Current release: **v0.5.0** (schema version 15). `v0.5.0` starts continuity
+intelligence: a saved chapter can be checked against its recorded canon, and
+every finding must cite a supplied record and quote the chapter exactly once.
+`v0.4.14` discusses a saved
 scene plan before drafting: Novellire asks what the plan leaves undecided, and
 the author's answers feed the scene-by-scene draft. `v0.4.13` reviews a generated
 draft against its plan and canon and proposes findings, each quoting prose the

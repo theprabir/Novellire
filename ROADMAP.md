@@ -191,6 +191,9 @@ Chat while memory updates automatically.
 
 ### v0.5 — Continuity intelligence
 
+- Continuity check of a saved chapter against cited canon: character state,
+  approved relationships, events, and story bible, with provenance for every
+  finding (`0.5.0`).
 - Timeline validation.
 - Character knowledge tracking.
 - Relationship evolution.

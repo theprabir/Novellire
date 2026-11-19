@@ -3,6 +3,27 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.5.0] — 2026-11-19
+
+First v0.5 slice: continuity checking with cited provenance.
+
+### Added
+
+- **Check continuity** in the chapter editor compares the saved chapter with its
+  recorded canon: character-state snapshots up to that chapter, approved
+  relationships, extracted events, and story bible entries. Every supplied
+  record gets an id (`C1`, `C2`…).
+- A finding is kept only when it cites one of those ids and quotes the chapter
+  exactly once (at most 300 characters, one occurrence). Ids are replaced with
+  the record's own label, so provenance is never invented by the model.
+  Kind and severity are clamped to fixed lists, duplicates are dropped, and at
+  most six findings are returned.
+- `POST /api/chapters/{id}/continuity` is read-only and works on approved
+  chapters. Without content, without any canon, or beyond 12,000 characters it
+  refuses with an explanation instead of checking a partial picture.
+
+Schema stays at 15.
+
 ## [0.4.14] — 2026-11-19
 
 Novellire can discuss a scene plan before drafting it.
