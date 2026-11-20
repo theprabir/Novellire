@@ -166,6 +166,10 @@ class ContinuityCheckService:
             model=result.model or model,
         )
 
+    def canon_records(self, project_id: int, position: int) -> list[CanonReference]:
+        """The numbered canon a check may cite, up to a chapter position."""
+        return self._canon(project_id, position)
+
     def _canon(self, project_id: int, position: int) -> list[CanonReference]:
         names = {
             character.id: character.name

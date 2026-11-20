@@ -209,7 +209,9 @@ Chat while memory updates automatically.
 - Relationship evolution: propose how a pair of characters now stands from a
   finished chapter, apply the reviewed change, and record each chapter's
   relationship state so the ledger shows how it changed (`0.5.5`).
-- Contradiction detection.
+- Contradiction detection: a deterministic audit of conflicting relationship
+  types and threads raised after resolution, plus a read-only inference that
+  compares canon records and must cite two of them (`0.5.6`).
 - Plot-thread management.
 - Canon-change review and supersession.
 - Provenance display for every continuity finding.

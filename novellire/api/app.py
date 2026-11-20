@@ -31,6 +31,10 @@ from ..core.characters import FIELD_LABELS as CHARACTER_FIELD_LABELS
 from ..core.characters import PROFILE_FIELDS, CharacterService
 from ..core.chat import ChatService
 from ..core.context import GenerationContextBuilder
+from ..core.contradictions import (
+    ContradictionAuditService,
+    ContradictionScanService,
+)
 from ..core.continuity import ContinuityCheckService, ContinuityLedgerService
 from ..core.relationship_evolution import (
     RelationshipEvolutionService,
@@ -465,6 +469,8 @@ class ApiServices:
     timeline: TimelineValidationService
     state_proposals: CharacterStateProposalService
     relationship_evolution: RelationshipEvolutionService
+    contradictions: ContradictionAuditService
+    contradiction_scan: ContradictionScanService
 
 
 def build_services(
@@ -560,6 +566,16 @@ def build_services(
         event_repository,
         relationship_repository,
     )
+    continuity_service = ContinuityCheckService(
+        provider,
+        project_repository,
+        chapter_repository,
+        character_repository,
+        state_repository,
+        relationship_repository,
+        event_repository,
+        bible_repository,
+    )
 
     return ApiServices(
         settings=settings,
@@ -602,6 +618,15 @@ def build_services(
             relationship_service,
             relationship_snapshot_repository,
         ),
+        contradictions=ContradictionAuditService(
+            project_repository,
+            relationship_repository,
+            event_repository,
+            thread_repository,
+        ),
+        contradiction_scan=ContradictionScanService(
+            provider, project_repository, continuity_service
+        ),
         backup=BackupService(database),
         context=context_builder,
         style_guide=StyleGuideService(
@@ -620,16 +645,7 @@ def build_services(
         discussion=ChapterDiscussionService(
             provider, project_repository, chapter_service, context_builder
         ),
-        continuity=ContinuityCheckService(
-            provider,
-            project_repository,
-            chapter_repository,
-            character_repository,
-            state_repository,
-            relationship_repository,
-            event_repository,
-            bible_repository,
-        ),
+        continuity=continuity_service,
         ledger=ContinuityLedgerService(
             project_repository,
             chapter_repository,
@@ -2039,6 +2055,32 @@ def _build_router(services: ApiServices) -> APIRouter:
     def get_timeline_validation(project_id: int) -> dict[str, Any]:
         """Validate recorded story days against chapter order. No model."""
         return services.timeline.validate(project_id)
+
+    @router.get("/projects/{project_id}/contradictions")
+    def get_contradiction_audit(project_id: int) -> dict[str, Any]:
+        """Deterministic checks over canon records that must agree. No model."""
+        return services.contradictions.audit(project_id)
+
+    @router.post("/projects/{project_id}/contradictions/scan")
+    def scan_canon_contradictions(
+        project_id: int, payload: ContinuityCheckRequest
+    ) -> dict[str, Any]:
+        """Compare canon records with each other. Read-only; writes nothing."""
+        result = services.contradiction_scan.scan(
+            project_id,
+            settings=GenerationSettings(
+                model=payload.model,
+                temperature=payload.temperature,
+                top_p=payload.top_p,
+                num_predict=payload.num_predict,
+                context_window=payload.context_window,
+            ),
+        )
+        return {
+            "canon_count": result.canon_count,
+            "model": result.model,
+            "findings": [asdict(finding) for finding in result.findings],
+        }
 
     @router.post("/chapters/{chapter_id}/continuity")
     def check_chapter_continuity(

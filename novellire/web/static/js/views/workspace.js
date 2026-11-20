@@ -1,6 +1,6 @@
 import { api } from '../api.js';
-import { openStateProposalDialog } from './state-proposals.js?v=0.5.5';
-import { openRelationshipProposalDialog } from './relationship-proposals.js?v=0.5.5';
+import { openStateProposalDialog } from './state-proposals.js?v=0.5.6';
+import { openRelationshipProposalDialog } from './relationship-proposals.js?v=0.5.6';
 import {
   closeModal,
   confirmDialog,

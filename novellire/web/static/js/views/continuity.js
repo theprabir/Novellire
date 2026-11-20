@@ -72,9 +72,10 @@ export function renderContinuity(ctx) {
   Promise.all([
     api.get(`/api/projects/${state.activeProjectId}/continuity`),
     api.get(`/api/projects/${state.activeProjectId}/timeline`),
+    api.get(`/api/projects/${state.activeProjectId}/contradictions`),
   ])
-    .then(([ledger, validation]) =>
-      body.replaceChildren(...ledgerSections(ledger, ctx, validation))
+    .then(([ledger, validation, audit]) =>
+      body.replaceChildren(...ledgerSections(ledger, ctx, validation, audit))
     )
     .catch((error) => {
       toast(error.message, 'error');
@@ -83,7 +84,7 @@ export function renderContinuity(ctx) {
   return wrap;
 }
 
-function ledgerSections(ledger, ctx, validation) {
+function ledgerSections(ledger, ctx, validation, audit) {
   const projectId = ctx.state.activeProjectId;
   const counts = ledger.counts || {};
   const sections = [
@@ -98,6 +99,7 @@ function ledgerSections(ledger, ctx, validation) {
   ];
 
   sections.push(timelineValidationSection(validation));
+  sections.push(contradictionSection(audit, ctx));
 
   const timeline = ledger.timeline || [];
   sections.push(
@@ -288,6 +290,159 @@ function ledgerSections(ledger, ctx, validation) {
   );
 
   return sections;
+}
+
+function contradictionSection(audit, ctx) {
+  const counts = audit?.counts || {};
+  const findings = audit?.findings || [];
+  return el(
+    'section',
+    { class: 'card form-card' },
+    el(
+      'div',
+      { class: 'review-finding-head' },
+      el('h2', { class: 'section-title' }, 'Contradiction audit'),
+      el(
+        'button',
+        {
+          class: 'btn btn-sm',
+          type: 'button',
+          title: 'Compare the recorded canon with itself, read-only',
+          onClick: () => openCanonScan(ctx),
+        },
+        icon('sparkles'),
+        'Scan canon with AI'
+      )
+    ),
+    el(
+      'p',
+      { class: 'hint' },
+      `Checked ${count(counts.relationships || 0)} relationship record${
+        counts.relationships === 1 ? '' : 's'
+      } and ${count(counts.thread_resolutions || 0)} thread resolution${
+        counts.thread_resolutions === 1 ? '' : 's'
+      } for structural conflicts. The scan is a separate, read-only pass over the canon records.`
+    ),
+    findings.length
+      ? el(
+          'div',
+          { class: 'ledger-list' },
+          findings.map((finding) =>
+            el(
+              'div',
+              { class: 'ledger-row' },
+              el(
+                'div',
+                { class: 'review-finding-head' },
+                el(
+                  'span',
+                  { class: `chip severity-${finding.severity}` },
+                  finding.severity
+                ),
+                el('span', { class: 'chip' }, finding.kind.replace(/_/g, ' ')),
+                el('strong', {}, finding.summary)
+              ),
+              el('p', { class: 'hint' }, finding.detail),
+              ...finding.sources.map((source) =>
+                el('p', { class: 'continuity-source' }, source)
+              )
+            )
+          )
+        )
+      : el(
+          'p',
+          { class: 'hint' },
+          'No structural contradictions found in the recorded canon. Nothing has been changed.'
+        )
+  );
+}
+
+function openCanonScan(ctx) {
+  const state = ctx.state;
+  const settings = state.settings?.generation || {};
+  const model = settings.model || state.ollama?.models?.[0]?.name || '';
+  const host = el('div', { class: 'review-findings' });
+  const modal = openModal({
+    title: 'Scan canon for contradictions',
+    wide: true,
+    body: [
+      el(
+        'p',
+        { class: 'hint' },
+        'One read-only inference compares the recorded canon records with each other. Every finding must cite two records the project holds; nothing is written or changed.'
+      ),
+      host,
+    ],
+    footer: [
+      el(
+        'button',
+        { class: 'btn btn-ghost', type: 'button', onClick: () => modal.close() },
+        'Close'
+      ),
+    ],
+  });
+
+  if (!model) {
+    host.replaceChildren(
+      el('p', { class: 'hint' }, 'Choose a model in Settings first.')
+    );
+    return;
+  }
+  host.replaceChildren(el('p', { class: 'hint' }, 'Comparing canon records…'));
+  api
+    .post(`/api/projects/${state.activeProjectId}/contradictions/scan`, {
+      model,
+      temperature: Number(settings.temperature ?? 0.2),
+      top_p: Number(settings.top_p ?? 0.9),
+      num_predict: Number(settings.num_predict ?? 700),
+      context_window: Number(settings.context_window ?? 4096),
+    })
+    .then((result) => {
+      const findings = result.findings || [];
+      host.replaceChildren(
+        el(
+          'p',
+          { class: 'hint' },
+          `Compared ${count(result.canon_count)} canon record${
+            result.canon_count === 1 ? '' : 's'
+          }.`
+        ),
+        findings.length
+          ? el(
+              'div',
+              { class: 'review-list' },
+              findings.map((finding) =>
+                el(
+                  'div',
+                  { class: 'review-finding' },
+                  el(
+                    'div',
+                    { class: 'review-finding-head' },
+                    el(
+                      'span',
+                      { class: `chip severity-${finding.severity}` },
+                      finding.severity
+                    ),
+                    el('span', { class: 'chip' }, finding.kind)
+                  ),
+                  el('p', {}, finding.summary),
+                  finding.detail
+                    ? el('p', { class: 'hint' }, finding.detail)
+                    : null,
+                  el('p', { class: 'continuity-source' }, `Against · ${finding.source_a} — ${finding.source_a_label}`),
+                  el('p', { class: 'continuity-source' }, `Against · ${finding.source_b} — ${finding.source_b_label}`),
+                  finding.suggestion
+                    ? el('p', { class: 'review-replacement' }, finding.suggestion)
+                    : null
+                )
+              )
+            )
+          : el('p', {}, 'No contradictions found between the recorded canon records.')
+      );
+    })
+    .catch((error) => {
+      host.replaceChildren(el('p', { class: 'hint' }, error.message));
+    });
 }
 
 function relationshipEvolutionSection(relationships) {

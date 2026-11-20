@@ -350,7 +350,11 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.5.5** (schema version 18). `v0.5.5` follows relationship
+Current release: **v0.5.6** (schema version 18). `v0.5.6` detects contradictions
+inside recorded canon: a deterministic audit reports a character pair recorded
+with conflicting relationship types or a thread raised again after its recorded
+resolution, and a read-only scan compares the canon records with each other,
+keeping only findings that cite two records the project holds. `v0.5.5` follows relationship
 evolution: a chapter can propose how a pair of characters now stands, the author
 reviews and applies it, and each chapter's relationship state is recorded with
 provenance, so Continuity shows how the relationship changed. `v0.5.4` validates

@@ -3,6 +3,30 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.5.6] — 2026-11-20
+
+Contradiction detection inside recorded canon.
+
+### Added
+
+- Continuity gains a **Contradiction audit**, deterministic and model-free. It
+  reports a pair recorded with two different relationship types (approved,
+  proposed, or both) and a thread recorded as resolved in one chapter whose key
+  still appears in an event from a later chapter. Each finding lists the records
+  it comes from, including the resolving chapter's note and the later events.
+- **Scan canon with AI** compares the recorded canon records with each other in
+  one read-only inference. Every finding must cite two different supplied record
+  ids, so the server can attach the real records; citations to one id, an
+  unknown id, a reversed duplicate, or a finding with no summary are dropped.
+- `GET /api/projects/{id}/contradictions` returns the deterministic audit with
+  its counts; `POST /api/projects/{id}/contradictions/scan` returns the cited
+  findings. Neither writes anything, so no canon record changes.
+- The audit treats a deliberate re-raise as the author's call: it reports the
+  conflict and says to reopen the thread or record the aftermath, and changes
+  nothing itself.
+
+Schema stays at 18; every result is derived from records that already exist.
+
 ## [0.5.5] — 2026-11-20
 
 Relationship evolution, recorded chapter by chapter.
