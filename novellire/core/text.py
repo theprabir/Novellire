@@ -18,6 +18,21 @@ def count_words(text: str) -> int:
     return len(text.split())
 
 
+def clip(text: str, limit: int) -> str:
+    """Collapse whitespace and cut to a limit, for excerpts and quotes."""
+    return " ".join((text or "").split())[:limit].strip()
+
+
+def average(total: int, count: int) -> float:
+    """Mean to one decimal, or zero when there is nothing to average."""
+    return round(total / count, 1) if count else 0.0
+
+
+def percent(part: int, whole: int) -> int:
+    """Whole-number percentage, or zero when the whole is empty."""
+    return round(part / whole * 100) if whole else 0
+
+
 def split_sentences(text: str) -> list[str]:
     """Split prose into sentence-sized pieces, collapsing whitespace first.
 

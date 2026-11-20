@@ -3,6 +3,37 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.6.4] — 2026-11-20
+
+Backup and restore verification, plus a simplification pass over the editorial
+reviews.
+
+### Added
+
+- **Backup verification**: `POST /api/backup/verify` checks an uploaded file
+  without restoring or changing anything and reports its schema version, whether
+  an upgrade is required, its project, chapter, and character counts, and its
+  size.
+- Choosing **Restore backup** now verifies the file first and shows that report
+  in the confirmation, so a wrong or damaged file is refused before anything is
+  replaced.
+- A snapshot is verified before it is offered for download: header, SQLite
+  integrity, Novellire tables, and schema version. A failed snapshot is removed
+  instead of being handed out.
+- A restore is verified again after replacement and migration. If that check
+  fails, the pre-restore safety copy is put back automatically.
+
+### Changed
+
+- The style profile is now the only implementation of chapter measurement
+  (sentences, paragraphs, dialogue, averages, longest paragraph). Pacing reuses
+  it, so the Style and Pacing sections cannot disagree, and duplicate
+  measurement code is gone.
+- `average`, `percent`, and `clip` live in `core/text.py` instead of three
+  private copies.
+
+Schema stays at 19.
+
 ## [0.6.3] — 2026-11-20
 
 Revision suggestions located in the prose, without a model.

@@ -226,7 +226,7 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-327 tests run fully offline. All inference is stubbed, so no model or Ollama
+330 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
@@ -255,7 +255,7 @@ novellire/
   logging_setup.py         Logging (never logs prompts or prose)
   core/
     projects.py            Project validation and use cases
-    backup.py              Snapshot, validation, and safe database restore
+    backup.py              Verified snapshots, file checks, and safe restore
     settings_service.py    Persisted generation and appearance preferences
     generation.py          Prompt -> provider -> saved record
     documents.py           Workspace document definitions and save/read service
@@ -372,7 +372,12 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.6.3** (schema version 19). `v0.6.3` turns the measured
+Current release: **v0.6.4** (schema version 19). `v0.6.4` finishes v0.6 with
+backup and restore verification: a backup can be checked before restoring and
+reports its schema and record counts, snapshots are verified before download, and
+a restore is verified again after migration with automatic rollback to the
+safety copy. The editorial measurements now live in one implementation and are
+shared by the Style and Pacing sections. `v0.6.3` turns the measured
 review into revision suggestions: a per-chapter checklist quoting long sentences,
 dense paragraphs, and repeated phrases, each with one next step, linking to the
 chapter editor and storing nothing. `v0.6.2` adds a deterministic

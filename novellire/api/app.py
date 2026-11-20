@@ -584,8 +584,11 @@ def build_services(
         event_repository,
         relationship_repository,
     )
+    style_profile_service = StyleProfileService(
+        project_repository, chapter_repository, document_service
+    )
     pacing_service = PacingReviewService(
-        project_repository, chapter_repository
+        style_profile_service, chapter_repository
     )
     continuity_service = ContinuityCheckService(
         provider,
@@ -661,9 +664,7 @@ def build_services(
         style_guide=StyleGuideService(
             provider, project_repository, chapter_service, document_service
         ),
-        style_profile=StyleProfileService(
-            project_repository, chapter_repository, document_service
-        ),
+        style_profile=style_profile_service,
         style_deviations=StyleDeviationService(
             provider,
             project_repository,
@@ -1909,6 +1910,11 @@ def _build_router(services: ApiServices) -> APIRouter:
             filename=filename,
             background=BackgroundTask(path.unlink, missing_ok=True),
         )
+
+    @router.post("/backup/verify")
+    async def verify_backup(request: Request) -> dict[str, Any]:
+        """Check an uploaded backup without restoring or changing anything."""
+        return asdict(services.backup.verify(await request.body()))
 
     @router.post("/backup/restore")
     async def restore_backup(request: Request) -> dict[str, Any]:

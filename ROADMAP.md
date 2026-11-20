@@ -237,7 +237,10 @@ expected findings.
 - DOCX and Markdown export: Markdown, plain text, and a locally generated Word
   document, with part breaks, chapter headings, and per-chapter and total word
   counts (`0.6.0`).
-- Backup/restore verification.
+- Backup/restore verification: a backup can be checked before restoring (schema
+  version, upgrade need, project/chapter/character counts, size), snapshots are
+  verified before download, and a restore is verified after migration with
+  automatic rollback to the pre-restore copy (`0.6.4`).
 
 Acceptance: a completed manuscript can be reviewed, exported, and restored.
 

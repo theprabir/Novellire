@@ -22,7 +22,7 @@ from ..storage.repositories import ProjectRepository
 from ..storage.story_repositories import ChapterRecord, ChapterRepository
 from .documents import ProjectDocumentService
 from .settings_service import GenerationSettings
-from .text import split_sentences
+from .text import average, clip, percent, split_sentences
 
 STYLE_SOURCE_CHARS = 12_000
 STYLE_MAX_OUTPUT_TOKENS = 900
@@ -68,6 +68,8 @@ class ChapterStyle:
     dialogue_paragraphs: int
     long_sentences: int
     average_sentence_words: float
+    average_paragraph_words: float
+    longest_paragraph_words: int
     longest_sentence_words: int
     longest_sentence: str
 
@@ -166,8 +168,8 @@ class StyleProfileService:
                 "long_sentences": sum(row.long_sentences for row in rows),
                 "rules": len(rules),
             },
-            "average_sentence_words": _average(words, sentences),
-            "dialogue_share": _percent(dialogue, paragraphs),
+            "average_sentence_words": average(words, sentences),
+            "dialogue_share": percent(dialogue, paragraphs),
             "guide": {
                 "present": bool(guide is not None and guide.content.strip()),
                 "derived": bool(guide.derived) if guide is not None else False,
@@ -315,16 +317,17 @@ def parse_style_deviations(
 def _measure_chapter(chapter: ChapterRecord) -> ChapterStyle:
     text = chapter.content or ""
     sentences = split_sentences(text)
-    lengths = [len(sentence.split()) for sentence in sentences]
-    longest = max(lengths) if lengths else 0
+    sentence_lengths = [len(sentence.split()) for sentence in sentences]
+    longest = max(sentence_lengths) if sentence_lengths else 0
     longest_sentence = ""
-    if lengths:
-        longest_sentence = _clip(sentences[lengths.index(longest)], 160)
+    if sentence_lengths:
+        longest_sentence = clip(sentences[sentence_lengths.index(longest)], 160)
     paragraphs = [
         paragraph
         for paragraph in re.split(r"\n\s*\n", text)
         if paragraph.strip()
     ]
+    paragraph_lengths = [len(paragraph.split()) for paragraph in paragraphs]
     dialogue = sum(1 for paragraph in paragraphs if _DIALOGUE.search(paragraph))
     return ChapterStyle(
         id=chapter.id,
@@ -335,9 +338,15 @@ def _measure_chapter(chapter: ChapterRecord) -> ChapterStyle:
         paragraphs=len(paragraphs),
         dialogue_paragraphs=dialogue,
         long_sentences=sum(
-            1 for length in lengths if length > STYLE_LONG_SENTENCE_WORDS
+            1
+            for length in sentence_lengths
+            if length > STYLE_LONG_SENTENCE_WORDS
         ),
-        average_sentence_words=_average(sum(lengths), len(lengths)),
+        average_sentence_words=average(
+            sum(sentence_lengths), len(sentence_lengths)
+        ),
+        average_paragraph_words=average(chapter.word_count, len(paragraphs)),
+        longest_paragraph_words=max(paragraph_lengths) if paragraph_lengths else 0,
         longest_sentence_words=longest,
         longest_sentence=longest_sentence,
     )
@@ -365,19 +374,9 @@ def _rule(index: int, text: str) -> StyleRule:
     )
 
 
-def _average(total: int, count: int) -> float:
-    return round(total / count, 1) if count else 0.0
-
-
-def _percent(part: int, whole: int) -> int:
-    return round(part / whole * 100) if whole else 0
-
-
 def _raw(value: object) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
 def _clip(value: object, limit: int) -> str:
-    if not isinstance(value, str):
-        return ""
-    return " ".join(value.split())[:limit].strip()
+    return clip(_raw(value), limit)

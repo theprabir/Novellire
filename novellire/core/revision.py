@@ -17,7 +17,7 @@ from ..storage.repositories import ProjectRepository
 from ..storage.story_repositories import ChapterRecord, ChapterRepository
 from .pacing import PacingReviewService
 from .style import STYLE_LONG_SENTENCE_WORDS
-from .text import split_sentences
+from .text import clip, split_sentences
 
 REVISION_DENSE_PARAGRAPH_WORDS = 180
 REVISION_DENSE_PARAGRAPH_HIGH = 300
@@ -100,7 +100,7 @@ def _chapter_items(
             {
                 "kind": "long_sentence",
                 "severity": "high" if words >= STYLE_LONG_SENTENCE_WORDS * 2 else "medium",
-                "quote": _clip(sentence),
+                "quote": clip(sentence, REVISION_QUOTE_CHARS),
                 "detail": f"{words} words in one sentence.",
                 "suggestion": "Split it at a natural pause, or cut a clause.",
             }
@@ -116,7 +116,7 @@ def _chapter_items(
                 "severity": (
                     "high" if words >= REVISION_DENSE_PARAGRAPH_HIGH else "medium"
                 ),
-                "quote": _clip(paragraph),
+                "quote": clip(paragraph, REVISION_QUOTE_CHARS),
                 "detail": f"{words} words in one paragraph.",
                 "suggestion": "Break it where the subject or scene shifts.",
             }
@@ -155,6 +155,3 @@ def _chapter_items(
         item["id"] = index
     return items
 
-
-def _clip(text: str) -> str:
-    return " ".join((text or "").split())[:REVISION_QUOTE_CHARS].strip()

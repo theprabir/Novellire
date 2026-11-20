@@ -1,23 +1,22 @@
 """Pacing and repetition review, measured without a model.
 
 Pacing is reported, not judged: paragraph length, sentence length, and how much
-of a chapter is dialogue, per chapter and for the manuscript. Repetition is
-counted: a four-word phrase that appears at least three times is listed with the
-chapters and sentences it appears in. Adjacent repeated windows with the same
-count are merged into one longer phrase, so one crutch sentence is one finding
-rather than three overlapping ones. Deliberate refrains are the author's call;
-nothing is rewritten, flagged in the chapter, or sent anywhere.
+of a chapter is dialogue. Those measurements come from the Style profile, so
+both surfaces report the same numbers from one implementation. Repetition is
+counted here: a four-word phrase that appears at least three times is listed
+with the chapters and sentences it appears in. Adjacent repeated windows with
+the same count are merged into one longer phrase, so one crutch sentence is one
+finding rather than three overlapping ones. Deliberate refrains are the author's
+call; nothing is rewritten, flagged in the chapter, or sent anywhere.
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 
-from ..errors import ProjectNotFoundError
-from ..storage.repositories import ProjectRepository
 from ..storage.story_repositories import ChapterRecord, ChapterRepository
-from .text import split_sentences
+from .style import StyleProfileService
+from .text import average, clip, split_sentences
 
 PACING_PHRASE_WORDS = 4
 PACING_MIN_REPETITIONS = 3
@@ -27,7 +26,6 @@ PACING_EXCERPT_CHARS = 160
 PACING_MAX_WORDS = 200_000
 
 _WORD = re.compile(r"[^\W\d_]+(?:['\u2019][^\W\d_]+)?", re.UNICODE)
-_DIALOGUE = re.compile(r"[\"\u201c\u201d\u201e\u00ab\u00bb]")
 _STOPWORDS = frozenset(
     """
     a an and are as at be been but by did do for from had has have he her hers
@@ -38,47 +36,26 @@ _STOPWORDS = frozenset(
 )
 
 
-@dataclass(frozen=True)
-class ChapterPacing:
-    id: int
-    position: int
-    title: str
-    words: int
-    sentences: int
-    paragraphs: int
-    average_paragraph_words: float
-    longest_paragraph_words: int
-    average_sentence_words: float
-    dialogue_paragraphs: int
-    dialogue_share: int
-
-
 class PacingReviewService:
-    """Measure pacing and repeated phrases in the stored manuscript. No model."""
+    """Report pacing and repeated phrases in the stored manuscript. No model."""
 
     def __init__(
-        self, projects: ProjectRepository, chapters: ChapterRepository
+        self, style: StyleProfileService, chapters: ChapterRepository
     ) -> None:
-        self._projects = projects
+        self._style = style
         self._chapters = chapters
 
     def review(self, project_id: int) -> dict[str, object]:
-        if self._projects.get(project_id) is None:
-            raise ProjectNotFoundError(
-                "That project no longer exists. Choose another project."
-            )
+        profile = self._style.profile(project_id)
+        rows = profile["chapters"]  # type: ignore[assignment]
+        counts = profile["counts"]  # type: ignore[assignment]
         chapters = [
             chapter
             for chapter in self._chapters.list_for_project(project_id)
             if (chapter.content or "").strip()
         ]
-        rows = [_measure_chapter(chapter) for chapter in chapters]
-        words = sum(row.words for row in rows)
-        sentences = sum(row.sentences for row in rows)
-        paragraphs = sum(row.paragraphs for row in rows)
-        dialogue = sum(row.dialogue_paragraphs for row in rows)
-        counts, truncated = _count_phrases(chapters)
-        repeated = _merge_repeated(counts)[:PACING_MAX_FINDINGS]
+        phrase_counts, truncated = _count_phrases(chapters)
+        repeated = _merge_repeated(phrase_counts)[:PACING_MAX_FINDINGS]
         occurrences = _collect_occurrences(
             chapters, {source for _, _, source in repeated}
         )
@@ -95,63 +72,31 @@ class PacingReviewService:
         return {
             "counts": {
                 "chapters": len(rows),
-                "words": words,
+                "words": counts["words"],
                 "phrases": len(repetitions),
                 "truncated": truncated,
             },
             "pacing": {
-                "words": words,
-                "sentences": sentences,
-                "paragraphs": paragraphs,
-                "average_paragraph_words": _average(words, paragraphs),
-                "longest_paragraph_words": max(
-                    (row.longest_paragraph_words for row in rows), default=0
+                "words": counts["words"],
+                "sentences": counts["sentences"],
+                "paragraphs": counts["paragraphs"],
+                "average_paragraph_words": average(
+                    counts["words"], counts["paragraphs"]
                 ),
-                "average_sentence_words": _average(words, sentences),
-                "dialogue_paragraphs": dialogue,
-                "dialogue_share": _percent(dialogue, paragraphs),
+                "longest_paragraph_words": max(
+                    (
+                        row["longest_paragraph_words"]
+                        for row in rows  # type: ignore[union-attr]
+                    ),
+                    default=0,
+                ),
+                "average_sentence_words": profile["average_sentence_words"],
+                "dialogue_paragraphs": counts["dialogue_paragraphs"],
+                "dialogue_share": profile["dialogue_share"],
             },
-            "chapters": [
-                {
-                    "id": row.id,
-                    "position": row.position,
-                    "title": row.title,
-                    "words": row.words,
-                    "sentences": row.sentences,
-                    "paragraphs": row.paragraphs,
-                    "average_paragraph_words": row.average_paragraph_words,
-                    "longest_paragraph_words": row.longest_paragraph_words,
-                    "average_sentence_words": row.average_sentence_words,
-                    "dialogue_paragraphs": row.dialogue_paragraphs,
-                    "dialogue_share": row.dialogue_share,
-                }
-                for row in rows
-            ],
+            "chapters": rows,
             "repetitions": repetitions,
         }
-
-
-def _measure_chapter(chapter: ChapterRecord) -> ChapterPacing:
-    text = chapter.content or ""
-    paragraphs = [
-        paragraph for paragraph in re.split(r"\n\s*\n", text) if paragraph.strip()
-    ]
-    lengths = [len(paragraph.split()) for paragraph in paragraphs]
-    sentences = split_sentences(text)
-    dialogue = sum(1 for paragraph in paragraphs if _DIALOGUE.search(paragraph))
-    return ChapterPacing(
-        id=chapter.id,
-        position=chapter.position,
-        title=chapter.title,
-        words=chapter.word_count,
-        sentences=len(sentences),
-        paragraphs=len(paragraphs),
-        average_paragraph_words=_average(chapter.word_count, len(paragraphs)),
-        longest_paragraph_words=max(lengths) if lengths else 0,
-        average_sentence_words=_average(chapter.word_count, len(sentences)),
-        dialogue_paragraphs=dialogue,
-        dialogue_share=_percent(dialogue, len(paragraphs)),
-    )
 
 
 def _count_phrases(
@@ -250,19 +195,7 @@ def _collect_occurrences(
                     {
                         "chapter_position": chapter.position,
                         "chapter_title": chapter.title,
-                        "excerpt": _clip(sentence, PACING_EXCERPT_CHARS),
+                        "excerpt": clip(sentence, PACING_EXCERPT_CHARS),
                     }
                 )
     return found
-
-
-def _average(total: int, count: int) -> float:
-    return round(total / count, 1) if count else 0.0
-
-
-def _percent(part: int, whole: int) -> int:
-    return round(part / whole * 100) if whole else 0
-
-
-def _clip(text: str, limit: int) -> str:
-    return " ".join((text or "").split())[:limit].strip()

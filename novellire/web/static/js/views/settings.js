@@ -455,10 +455,35 @@ function privacyCard(ctx) {
   return settingsCard('shield', 'Data and privacy', 'Where this installation keeps its data.', body);
 }
 
-function openRestoreDialog(file) {
+async function openRestoreDialog(file) {
+  let report;
+  try {
+    const response = await fetch('/api/backup/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: file,
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      toast(
+        payload?.detail || `That file could not be verified (${response.status}).`,
+        'error'
+      );
+      return;
+    }
+    report = payload;
+  } catch (error) {
+    toast('Cannot reach the Novellire server. Is it still running?', 'error');
+    return;
+  }
+
+  const size = `${(report.size_bytes / (1024 * 1024)).toFixed(1)} MB`;
+  const upgrade = report.upgrade_required
+    ? ' It was made by an older version and will be upgraded during restore.'
+    : '';
   confirmDialog({
-    title: 'Restore backup',
-    message: `“${file.name}” will replace every project and memory record in this installation. A safety copy of the current database is kept in the backups folder before anything changes.`,
+    title: 'Restore verified backup',
+    message: `“${file.name}” passed verification: schema ${report.schema_version}, ${report.projects} project${report.projects === 1 ? '' : 's'}, ${report.chapters} chapter${report.chapters === 1 ? '' : 's'}, ${size}.${upgrade} It will replace every project and memory record in this installation. A safety copy of the current database is kept in the backups folder before anything changes.`,
     confirmLabel: 'Restore backup',
     onConfirm: async () => {
       let response;

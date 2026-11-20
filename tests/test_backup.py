@@ -7,9 +7,13 @@ import sqlite3
 from contextlib import closing
 
 import pytest
+from fastapi.testclient import TestClient
 
+from novellire.api.app import create_app
+from novellire.config import AnalysisSettings, GenerationDefaults, Settings
 from novellire.core.backup import BackupService
 from novellire.errors import InvalidInputError
+from novellire.storage.schema import LATEST_SCHEMA_VERSION
 
 
 @pytest.fixture()
@@ -109,6 +113,93 @@ def test_restore_rejects_corrupt_sqlite_payload(
 
     with pytest.raises(InvalidInputError):
         backup_service.restore(corrupt.read_bytes())
+
+    assert [project.name for project in project_service.list_projects()] == [
+        "Original"
+    ]
+
+
+def test_verify_reports_a_backup_without_touching_data(
+    backup_service: BackupService, project_service, database
+) -> None:
+    project_service.create_project(name="Original")
+    snapshot, _ = backup_service.snapshot()
+    payload = snapshot.read_bytes()
+    snapshot.unlink()
+
+    report = backup_service.verify(payload)
+
+    assert report.schema_version == LATEST_SCHEMA_VERSION
+    assert report.latest_schema_version == LATEST_SCHEMA_VERSION
+    assert report.upgrade_required is False
+    assert report.projects == 1
+    assert report.chapters == 0
+    assert report.characters == 0
+    assert report.size_bytes == len(payload)
+    assert [project.name for project in project_service.list_projects()] == [
+        "Original"
+    ]
+    assert not list(database.path.parent.glob("*.verify.db"))
+
+
+def test_verify_reports_an_older_schema_and_rejects_bad_files(
+    backup_service: BackupService, project_service
+) -> None:
+    project_service.create_project(name="Original")
+    snapshot, _ = backup_service.snapshot()
+    with closing(sqlite3.connect(snapshot)) as connection:
+        connection.execute("DELETE FROM schema_migrations WHERE version > 1")
+        connection.commit()
+    payload = snapshot.read_bytes()
+    snapshot.unlink()
+
+    report = backup_service.verify(payload)
+    assert report.schema_version == 1
+    assert report.upgrade_required is True
+
+    with pytest.raises(InvalidInputError, match="Choose a Novellire backup"):
+        backup_service.verify(b"")
+    with pytest.raises(InvalidInputError, match="not a Novellire"):
+        backup_service.verify(b"this is not a database")
+
+    assert [project.name for project in project_service.list_projects()] == [
+        "Original"
+    ]
+
+
+def test_api_verifies_a_backup_and_reports_a_bad_file(
+    database, fake_provider, project_service, tmp_path
+) -> None:
+    project_service.create_project(name="Original")
+    snapshot, _ = BackupService(database).snapshot()
+    payload = snapshot.read_bytes()
+    snapshot.unlink()
+    settings = Settings(
+        data_dir=tmp_path / "api-data",
+        generation=GenerationDefaults(model="fake-model"),
+        analysis=AnalysisSettings(auto_run=False),
+    )
+    with TestClient(
+        create_app(settings=settings, database=database, provider=fake_provider)
+    ) as client:
+        response = client.post(
+            "/api/backup/verify",
+            content=payload,
+            headers={"content-type": "application/octet-stream"},
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["schema_version"] == LATEST_SCHEMA_VERSION
+        assert body["projects"] == 1
+        assert body["size_bytes"] == len(payload)
+
+        bad = client.post(
+            "/api/backup/verify",
+            content=b"not a backup",
+            headers={"content-type": "application/octet-stream"},
+        )
+        assert bad.status_code == 400
+        assert "not a Novellire" in bad.json()["detail"]
 
     assert [project.name for project in project_service.list_projects()] == [
         "Original"
