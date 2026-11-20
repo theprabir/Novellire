@@ -3,6 +3,38 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.5.5] — 2026-11-20
+
+Relationship evolution, recorded chapter by chapter.
+
+### Added
+
+- **Suggest relationships** in the chapter editor. One inference reads the saved
+  chapter against the character roster (names and aliases) and the recorded
+  relationships, and proposes how a pair of characters now stands: a type from
+  the existing list and one sentence about the current state.
+- The server resolves every proposed name to a real character, orders the pair,
+  and drops unknown names, a character paired with itself, duplicates, and
+  proposals with no description. The chapter text is refused over 12,000
+  characters rather than clipped.
+- Proposals are shown with an editable type and description, and each says
+  whether it creates a new relationship or updates one already recorded.
+  **Apply selected** writes them and records the relationship's state for that
+  chapter; applying twice in the same chapter updates that chapter's entry
+  instead of duplicating it.
+- The Continuity view gains **Relationship evolution**: every recorded
+  relationship with its current type, description, and approval status, plus
+  each chapter that recorded it and which fields changed there.
+- `POST /api/chapters/{id}/relationship-proposals` proposes; `/apply` re-checks
+  both characters against the project before writing. The first call writes
+  nothing, so inference still cannot change canon on its own.
+
+### Migrations
+
+- Schema 18 adds `relationship_snapshots`, one row per relationship per chapter,
+  unique on that pair, with `ON DELETE CASCADE` from the relationship and the
+  chapter. Existing relationships keep no history until a chapter records one.
+
 ## [0.5.4] — 2026-11-20
 
 Timeline validation from author-recorded story days.

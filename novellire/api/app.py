@@ -32,6 +32,10 @@ from ..core.characters import PROFILE_FIELDS, CharacterService
 from ..core.chat import ChatService
 from ..core.context import GenerationContextBuilder
 from ..core.continuity import ContinuityCheckService, ContinuityLedgerService
+from ..core.relationship_evolution import (
+    RelationshipEvolutionService,
+    RelationshipUpdateInput,
+)
 from ..core.state_proposals import (
     CharacterStateProposalService,
     StateUpdateInput,
@@ -94,6 +98,9 @@ from ..storage.document_repository import DocumentRepository
 from ..storage.event_repository import EventRepository
 from ..storage.search_repository import SearchRepository
 from ..storage.relationship_repository import RelationshipRepository
+from ..storage.relationship_snapshot_repository import (
+    RelationshipSnapshotRepository,
+)
 from ..storage.revision_repository import RevisionRepository
 from ..storage.state_repository import CharacterStateRepository
 from ..storage.thread_repository import ThreadResolutionRepository
@@ -320,6 +327,17 @@ class StateUpdateApplyRequest(BaseModel):
     updates: list[StateUpdateItem] = Field(default_factory=list)
 
 
+class RelationshipUpdateItem(BaseModel):
+    character_a_id: int
+    character_b_id: int
+    relation_type: str
+    description: str = ""
+
+
+class RelationshipUpdateApplyRequest(BaseModel):
+    updates: list[RelationshipUpdateItem] = Field(default_factory=list)
+
+
 class ThreadStatusRequest(BaseModel):
     thread: str
     status: str = "resolved"
@@ -446,6 +464,7 @@ class ApiServices:
     threads: ThreadService
     timeline: TimelineValidationService
     state_proposals: CharacterStateProposalService
+    relationship_evolution: RelationshipEvolutionService
 
 
 def build_services(
@@ -459,6 +478,7 @@ def build_services(
     bible_repository = StoryBibleRepository(database)
     event_repository = EventRepository(database)
     relationship_repository = RelationshipRepository(database)
+    relationship_snapshot_repository = RelationshipSnapshotRepository(database)
     state_repository = CharacterStateRepository(database)
     thread_repository = ThreadResolutionRepository(database)
     insight_repository = ChapterInsightRepository(database)
@@ -534,6 +554,12 @@ def build_services(
         chapter_repository,
         state_repository,
     )
+    relationship_service = RelationshipService(
+        project_repository,
+        character_repository,
+        event_repository,
+        relationship_repository,
+    )
 
     return ApiServices(
         settings=settings,
@@ -557,12 +583,7 @@ def build_services(
         memory=MemoryService(SearchRepository(database), project_repository),
         events=event_service,
         event_repository=event_repository,
-        relationships=RelationshipService(
-            project_repository,
-            character_repository,
-            event_repository,
-            relationship_repository,
-        ),
+        relationships=relationship_service,
         character_states=state_service,
         state_proposals=CharacterStateProposalService(
             provider,
@@ -571,6 +592,15 @@ def build_services(
             character_repository,
             state_repository,
             state_service,
+        ),
+        relationship_evolution=RelationshipEvolutionService(
+            provider,
+            project_repository,
+            chapter_repository,
+            character_repository,
+            relationship_repository,
+            relationship_service,
+            relationship_snapshot_repository,
         ),
         backup=BackupService(database),
         context=context_builder,
@@ -605,8 +635,10 @@ def build_services(
             chapter_repository,
             character_repository,
             state_repository,
+            relationship_repository,
             event_repository,
             thread_repository,
+            relationship_snapshot_repository,
         ),
         threads=ThreadService(
             project_repository, chapter_repository, thread_repository
@@ -1938,6 +1970,48 @@ def _build_router(services: ApiServices) -> APIRouter:
             ],
         )
         return {"states": [asdict(state) for state in states]}
+
+    @router.post("/chapters/{chapter_id}/relationship-proposals")
+    def propose_relationship_changes(
+        chapter_id: int, payload: PlanDiscussionRequest
+    ) -> dict[str, Any]:
+        """Propose relationship changes. Writes nothing until applied."""
+        proposals = services.relationship_evolution.propose(
+            chapter_id,
+            settings=GenerationSettings(
+                model=payload.model,
+                temperature=payload.temperature,
+                top_p=payload.top_p,
+                num_predict=payload.num_predict,
+                context_window=payload.context_window,
+            ),
+        )
+        return {
+            "proposals": [asdict(proposal) for proposal in proposals],
+            "model": payload.model,
+        }
+
+    @router.post("/chapters/{chapter_id}/relationship-proposals/apply")
+    def apply_relationship_changes(
+        chapter_id: int, payload: RelationshipUpdateApplyRequest
+    ) -> dict[str, Any]:
+        """Record reviewed proposals as this chapter's relationship state."""
+        applied = services.relationship_evolution.apply(
+            chapter_id,
+            [
+                RelationshipUpdateInput(
+                    character_a_id=update.character_a_id,
+                    character_b_id=update.character_b_id,
+                    relation_type=update.relation_type,
+                    description=update.description,
+                )
+                for update in payload.updates
+            ],
+        )
+        return {
+            "relationships": [asdict(row.relationship) for row in applied],
+            "snapshots": [asdict(row.snapshot) for row in applied],
+        }
 
     @router.put("/projects/{project_id}/threads")
     def set_thread_status(

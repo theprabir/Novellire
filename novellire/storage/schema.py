@@ -515,6 +515,25 @@ MIGRATION_17_CHAPTER_STORY_DAY = """
 ALTER TABLE chapters ADD COLUMN story_day INTEGER
 """
 
+MIGRATION_18_RELATIONSHIP_SNAPSHOTS = """
+CREATE TABLE relationship_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    relationship_id INTEGER NOT NULL
+        REFERENCES character_relationships(id) ON DELETE CASCADE,
+    chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+    relation_type TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    UNIQUE (relationship_id, chapter_id)
+)
+"""
+
+MIGRATION_18_RELATIONSHIP_SNAPSHOTS_INDEX = """
+CREATE INDEX idx_relationship_snapshots_project
+    ON relationship_snapshots (project_id, relationship_id, chapter_id)
+"""
+
 MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
     (
         1,
@@ -644,6 +663,13 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
         (
             17,
             (MIGRATION_17_CHAPTER_STORY_DAY,),
+        ),
+        (
+            18,
+            (
+                MIGRATION_18_RELATIONSHIP_SNAPSHOTS,
+                MIGRATION_18_RELATIONSHIP_SNAPSHOTS_INDEX,
+            ),
         ),
     )
 

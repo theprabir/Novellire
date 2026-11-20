@@ -206,7 +206,9 @@ Chat while memory updates automatically.
 - Timeline validation: an optional story day per chapter, and a deterministic
   Continuity check that reports a chapter running backwards in recorded story
   time without treating a flashback as an error (`0.5.4`).
-- Relationship evolution.
+- Relationship evolution: propose how a pair of characters now stands from a
+  finished chapter, apply the reviewed change, and record each chapter's
+  relationship state so the ledger shows how it changed (`0.5.5`).
 - Contradiction detection.
 - Plot-thread management.
 - Canon-change review and supersession.

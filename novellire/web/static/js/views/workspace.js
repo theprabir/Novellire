@@ -1,5 +1,6 @@
 import { api } from '../api.js';
-import { openStateProposalDialog } from './state-proposals.js?v=0.5.4';
+import { openStateProposalDialog } from './state-proposals.js?v=0.5.5';
+import { openRelationshipProposalDialog } from './relationship-proposals.js?v=0.5.5';
 import {
   closeModal,
   confirmDialog,
@@ -758,6 +759,17 @@ function chapterEditor(ctx, chapter) {
                 },
                 icon('user'),
                 'Suggest state updates'
+              ),
+              el(
+                'button',
+                {
+                  class: 'btn btn-ghost',
+                  type: 'button',
+                  title: 'Propose relationship changes from this chapter',
+                  onClick: () => openRelationshipProposalDialog(ctx, chapter),
+                },
+                icon('sparkles'),
+                'Suggest relationships'
               ),
             ]
     )

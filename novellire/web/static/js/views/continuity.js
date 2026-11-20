@@ -18,6 +18,11 @@ const FIELD_LABELS = {
   knowledge: 'Knowledge',
 };
 
+const RELATIONSHIP_FIELD_LABELS = {
+  relation_type: 'Type',
+  description: 'Description',
+};
+
 export function renderContinuity(ctx) {
   const { state } = ctx;
   const wrap = el('div', { class: 'view-inner' });
@@ -195,6 +200,8 @@ function ledgerSections(ledger, ctx, validation) {
     )
   );
 
+  sections.push(relationshipEvolutionSection(ledger.relationships || []));
+
   const threads = ledger.threads || [];
   const timelineRows = ledger.timeline || [];
   sections.push(
@@ -281,6 +288,97 @@ function ledgerSections(ledger, ctx, validation) {
   );
 
   return sections;
+}
+
+function relationshipEvolutionSection(relationships) {
+  return el(
+    'section',
+    { class: 'card form-card' },
+    el('h2', { class: 'section-title' }, 'Relationship evolution'),
+    relationships.length
+      ? el(
+          'div',
+          { class: 'ledger-list' },
+          relationships.map((row) =>
+            el(
+              'div',
+              { class: 'ledger-row' },
+              el(
+                'div',
+                { class: 'review-finding-head' },
+                el(
+                  'strong',
+                  {},
+                  `${row.character_a_name} and ${row.character_b_name}`
+                ),
+                el('span', { class: 'chip' }, relationshipTypeLabel(row.relation_type)),
+                el(
+                  'span',
+                  {
+                    class:
+                      row.status === 'approved'
+                        ? 'chip severity-low'
+                        : 'chip accent',
+                  },
+                  row.status
+                )
+              ),
+              row.description
+                ? el('p', { class: 'hint' }, row.description)
+                : null,
+              row.history.length
+                ? el(
+                    'div',
+                    {},
+                    row.history.map((snapshot) =>
+                      el(
+                        'div',
+                        { class: 'ledger-snapshot' },
+                        el(
+                          'div',
+                          { class: 'review-finding-head' },
+                          el(
+                            'span',
+                            { class: 'hint' },
+                            `Chapter ${snapshot.chapter_position} “${snapshot.chapter_title}”`
+                          ),
+                          ...(snapshot.changed || []).map((field) =>
+                            el(
+                              'span',
+                              { class: 'chip accent' },
+                              RELATIONSHIP_FIELD_LABELS[field] || field
+                            )
+                          )
+                        ),
+                        el(
+                          'p',
+                          { class: 'hint' },
+                          `${relationshipTypeLabel(snapshot.relation_type)}${
+                            snapshot.description ? ` · ${snapshot.description}` : ''
+                          }`
+                        )
+                      )
+                    )
+                  )
+                : el(
+                    'p',
+                    { class: 'hint' },
+                    'No chapter has recorded this relationship yet.'
+                  )
+            )
+          )
+        )
+      : el(
+          'p',
+          { class: 'hint' },
+          'No recorded relationships yet. Create one in Memory, or suggest changes from a chapter.'
+        )
+  );
+}
+
+function relationshipTypeLabel(type) {
+  const value = (type || 'other').replace(/_/g, ' ');
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function timelineValidationSection(validation) {

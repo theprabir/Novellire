@@ -160,10 +160,13 @@ def test_an_empty_project_has_an_empty_ledger(tmp_path: Path) -> None:
             "states": 0,
             "threads": 0,
             "open_threads": 0,
+            "relationships": 0,
+            "relationship_changes": 0,
         }
         assert ledger["timeline"] == []
         assert ledger["characters"] == []
         assert ledger["threads"] == []
+        assert ledger["relationships"] == []
 
 
 def test_an_unknown_project_is_reported(tmp_path: Path) -> None:

@@ -20,6 +20,7 @@ from ..llm.base import GenerationRequest, LLMProvider
 from ..prompts.templates import build_continuity_prompt
 from ..storage.event_repository import EventRepository
 from ..storage.relationship_repository import RelationshipRepository
+from ..storage.relationship_snapshot_repository import RelationshipSnapshotRepository
 from ..storage.repositories import ProjectRepository
 from ..storage.state_repository import CharacterStateRepository
 from ..storage.story_repositories import (
@@ -251,15 +252,19 @@ class ContinuityLedgerService:
         chapters: ChapterRepository,
         characters: CharacterRepository,
         states: CharacterStateRepository,
+        relationships: RelationshipRepository,
         events: EventRepository,
         threads: ThreadResolutionRepository,
+        relationship_snapshots: RelationshipSnapshotRepository,
     ) -> None:
         self._projects = projects
         self._chapters = chapters
         self._characters = characters
         self._states = states
+        self._relationships = relationships
         self._events = events
         self._threads = threads
+        self._relationship_snapshots = relationship_snapshots
 
     def ledger(self, project_id: int) -> dict[str, object]:
         if self._projects.get(project_id) is None:
@@ -379,6 +384,58 @@ class ContinuityLedgerService:
             ),
         )
 
+        relationship_rows = []
+        snapshots_by_relationship: dict[int, list] = {}
+        for snapshot in self._relationship_snapshots.list_for_project(project_id):
+            snapshots_by_relationship.setdefault(
+                snapshot.relationship_id, []
+            ).append(snapshot)
+        for record in self._relationships.list_for_project(project_id):
+            if record.status == "rejected":
+                continue
+            previous: dict[str, str] | None = None
+            history = []
+            for snapshot in snapshots_by_relationship.get(record.id, []):
+                current = {
+                    "relation_type": snapshot.relation_type,
+                    "description": snapshot.description,
+                }
+                changed = (
+                    list(current)
+                    if previous is None
+                    else [
+                        field_name
+                        for field_name in current
+                        if current[field_name] != previous.get(field_name, "")
+                    ]
+                )
+                previous = current
+                history.append(
+                    {
+                        "chapter_position": snapshot.chapter_position,
+                        "chapter_title": snapshot.chapter_title,
+                        **current,
+                        "changed": changed,
+                    }
+                )
+            relationship_rows.append(
+                {
+                    "relationship_id": record.id,
+                    "character_a_name": record.character_a_name,
+                    "character_b_name": record.character_b_name,
+                    "relation_type": record.relation_type,
+                    "description": record.description,
+                    "status": record.status,
+                    "history": history,
+                }
+            )
+        relationship_rows.sort(
+            key=lambda item: (
+                str(item["character_a_name"]).casefold(),
+                str(item["character_b_name"]).casefold(),
+            )
+        )
+
         return {
             "counts": {
                 "chapters": len(chapters),
@@ -388,10 +445,15 @@ class ContinuityLedgerService:
                 "open_threads": sum(
                     1 for row in thread_rows if row["status"] == "open"
                 ),
+                "relationships": len(relationship_rows),
+                "relationship_changes": sum(
+                    len(row["history"]) for row in relationship_rows
+                ),
             },
             "timeline": timeline,
             "characters": character_ledger,
             "threads": thread_rows,
+            "relationships": relationship_rows,
         }
 
 
