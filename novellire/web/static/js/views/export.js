@@ -67,6 +67,7 @@ export function renderExport(ctx) {
   const format = select(
     [
       { value: 'markdown', label: 'Markdown (.md)' },
+      { value: 'docx', label: 'Word document (.docx)' },
       { value: 'text', label: 'Plain text (.txt)' },
     ],
     { value: 'markdown' }
@@ -104,14 +105,18 @@ export function renderExport(ctx) {
   );
 
   prepare.addEventListener('click', async () => {
+    const url = `/api/projects/${project.id}/export?format=${format.value}&include_documents=${
+      includeDocuments.checked ? 'true' : 'false'
+    }`;
+    if (format.value === 'docx') {
+      output.replaceChildren(docxView(url, written.length, state.tree.stats.words));
+      toast('Word document generated on this machine.', 'success');
+      return;
+    }
     prepare.disabled = true;
     prepare.replaceChildren(icon('refresh'), 'Preparing…');
     try {
-      const result = await api.get(
-        `/api/projects/${project.id}/export?format=${format.value}&include_documents=${
-          includeDocuments.checked ? 'true' : 'false'
-        }`
-      );
+      const result = await api.get(url);
       output.replaceChildren(resultView(result));
       toast(`${result.filename} prepared.`, 'success');
     } catch (error) {
@@ -199,7 +204,7 @@ export function renderExport(ctx) {
             el(
               'p',
               { class: 'hint', style: { marginTop: '14px' } },
-              'Markdown uses headings for the project and each chapter. Plain text keeps only the title, chapter headings, and prose.'
+              'Markdown uses a heading for the project, each part, and each chapter. The Word document uses the same structure with title and heading styles. Plain text keeps the title, part breaks, chapter headings, and prose. Every chapter heading is followed by its word count.'
             )
           )
         )
@@ -208,6 +213,49 @@ export function renderExport(ctx) {
   );
 
   return wrap;
+}
+
+function docxView(url, chapterCount, words) {
+  return el(
+    'section',
+    { class: 'card settings-card' },
+    el(
+      'div',
+      { class: 'settings-card-head' },
+      icon('file'),
+      el(
+        'div',
+        {},
+        el('h2', {}, 'Word document ready'),
+        el(
+          'p',
+          {},
+          `${count(chapterCount)} chapter${
+            chapterCount === 1 ? '' : 's'
+          } · ${count(words)} words · generated locally`
+        )
+      )
+    ),
+    el(
+      'div',
+      { class: 'settings-card-body' },
+      el(
+        'div',
+        { class: 'form-actions' },
+        el(
+          'a',
+          { class: 'btn btn-primary', href: url },
+          icon('download'),
+          'Download .docx'
+        ),
+        el(
+          'span',
+          { class: 'hint' },
+          'Title, part breaks, chapter headings, and word counts are styled by Word.'
+        )
+      )
+    )
+  );
 }
 
 function resultView(result) {

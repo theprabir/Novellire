@@ -227,7 +227,9 @@ expected findings.
 - Style analysis and deviations.
 - Pacing and repetition review.
 - Revision suggestions.
-- DOCX and Markdown export.
+- DOCX and Markdown export: Markdown, plain text, and a locally generated Word
+  document, with part breaks, chapter headings, and per-chapter and total word
+  counts (`0.6.0`).
 - Backup/restore verification.
 
 Acceptance: a completed manuscript can be reviewed, exported, and restored.

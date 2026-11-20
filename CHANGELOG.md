@@ -3,6 +3,28 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.6.0] — 2026-11-20
+
+Manuscript export: Markdown, plain text, and Word, all generated locally.
+
+### Added
+
+- **Word (.docx) export** built from stored prose with no document library and no
+  network access: a small WordprocessingML package with title, heading, and word
+  count styles. `GET /api/projects/{id}/export?format=docx` returns the file as
+  an attachment; Markdown and text still return JSON for preview and copy.
+- **Part breaks**: a non-empty chapter part prints once, where it starts
+  (`# Part One` in Markdown, an upper-case line in text, a Heading 1 in Word).
+- **Word counts**: each chapter heading is followed by its own count, and the
+  manuscript opens with a chapter and word total. Counts come from the stored
+  per-chapter `word_count`, so no prose is recounted differently from the app.
+- The optional document appendix now applies to Word as well as Markdown; plain
+  text still omits it, as before.
+- The Export view offers Word alongside Markdown and plain text and links
+  straight to the generated `.docx`.
+
+Schema stays at 19; export reads existing records only.
+
 ## [0.5.8] — 2026-11-20
 
 Provenance on every continuity finding.

@@ -1,3 +1,3 @@
 """Novellire — local-first narrative intelligence and novel writing environment."""
 
-__version__ = "0.5.8"
+__version__ = "0.6.0"

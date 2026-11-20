@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from starlette.background import BackgroundTask
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -1382,16 +1382,26 @@ def _build_router(services: ApiServices) -> APIRouter:
     @router.get("/projects/{project_id}/export")
     def export_project(
         project_id: int,
-        export_format: Literal["markdown", "text"] = Query(
+        export_format: Literal["markdown", "text", "docx"] = Query(
             default="markdown", alias="format"
         ),
         include_documents: bool = False,
-    ) -> dict[str, Any]:
+    ) -> Any:
         result = services.export.build(
             project_id,
             file_format=export_format,
             include_documents=include_documents,
         )
+        if result.data is not None:
+            return Response(
+                content=result.data,
+                media_type=result.content_type,
+                headers={
+                    "Content-Disposition": (
+                        f'attachment; filename="{result.filename}"'
+                    )
+                },
+            )
         return {
             "filename": result.filename,
             "content": result.content,
