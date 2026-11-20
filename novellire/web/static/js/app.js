@@ -7,15 +7,16 @@ import {
   toast,
 } from './ui.js';
 import { renderHome } from './views/home.js';
-import { renderMemory } from './views/memory.js?v=0.6.0';
+import { renderMemory } from './views/memory.js?v=0.6.1';
 import { openProjectForm } from './views/projects.js';
 import { renderProjectSettings } from './views/project-settings.js';
-import { renderWorkspace } from './views/workspace.js?v=0.6.0';
+import { renderWorkspace } from './views/workspace.js?v=0.6.1';
 import { renderPreview } from './views/preview.js';
-import { renderExport } from './views/export.js?v=0.6.0';
+import { renderExport } from './views/export.js?v=0.6.1';
 import { renderSettings } from './views/settings.js';
-import { renderChat } from './views/chat.js?v=0.6.0';
-import { renderContinuity } from './views/continuity.js?v=0.6.0';
+import { renderChat } from './views/chat.js?v=0.6.1';
+import { renderContinuity } from './views/continuity.js?v=0.6.1';
+import { renderStyle } from './views/style.js?v=0.6.1';
 
 const NAV = [
   { key: 'home', label: 'Home', icon: 'home' },
@@ -24,6 +25,7 @@ const NAV = [
   { key: 'chat', label: 'Chat', icon: 'message' },
   { key: 'memory', label: 'Memory', icon: 'database' },
   { key: 'continuity', label: 'Continuity', icon: 'shield', pill: 'Phase 5' },
+  { key: 'style', label: 'Style', icon: 'feather', pill: 'Phase 6' },
   { key: 'export', label: 'Export', icon: 'download' },
   { key: 'settings', label: 'Settings', icon: 'sliders' },
 ];
@@ -292,6 +294,9 @@ function render() {
       break;
     case 'continuity':
       node = renderContinuity(context);
+      break;
+    case 'style':
+      node = renderStyle(context);
       break;
     default:
       node = renderHome(context);

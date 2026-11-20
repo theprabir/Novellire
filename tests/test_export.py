@@ -89,6 +89,19 @@ def test_text_export_omits_markdown_and_documents(
     assert "Project documents" not in result.content
 
 
+def test_a_one_word_chapter_reads_naturally(
+    export_service: ExportService, chapter_service, sample_project
+) -> None:
+    chapter_service.create_chapter(
+        project_id=sample_project.id, title="Ash", content="Ash."
+    )
+
+    result = export_service.build(sample_project.id)
+
+    assert "*1 word*" in result.content
+    assert "_1 chapter · 1 word_" in result.content
+
+
 def test_export_rejects_an_empty_manuscript(
     export_service: ExportService, sample_project
 ) -> None:

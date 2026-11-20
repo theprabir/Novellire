@@ -76,6 +76,7 @@ from ..core.story_bible import (
     STORY_BIBLE_CATEGORIES,
     StoryBibleService,
 )
+from ..core.style import StyleDeviationService, StyleProfileService
 from ..core.style_guide import StyleGuideService
 from ..core.supersessions import SupersessionService
 from ..core.summaries import ChapterSummaryService
@@ -456,6 +457,8 @@ class ApiServices:
     export: ExportService
     context: GenerationContextBuilder
     style_guide: StyleGuideService
+    style_profile: StyleProfileService
+    style_deviations: StyleDeviationService
     summaries: ChapterSummaryService
     memory: MemoryService
     events: EventExtractionService
@@ -650,6 +653,15 @@ def build_services(
         context=context_builder,
         style_guide=StyleGuideService(
             provider, project_repository, chapter_service, document_service
+        ),
+        style_profile=StyleProfileService(
+            project_repository, chapter_repository, document_service
+        ),
+        style_deviations=StyleDeviationService(
+            provider,
+            project_repository,
+            chapter_repository,
+            document_service,
         ),
         generations=generation_repository,
         insights=insight_service,
@@ -1353,6 +1365,36 @@ def _build_router(services: ApiServices) -> APIRouter:
             "word_count": outcome.word_count,
             "duration_ms": outcome.duration_ms,
             "derived": True,
+        }
+
+    # -- style ---------------------------------------------------------
+
+    @router.get("/projects/{project_id}/style")
+    def get_style_profile(project_id: int) -> dict[str, Any]:
+        """Measure the stored prose and number the Style Guide. No model."""
+        return services.style_profile.profile(project_id)
+
+    @router.post("/chapters/{chapter_id}/style-check")
+    def check_chapter_style(
+        chapter_id: int, payload: ContinuityCheckRequest
+    ) -> dict[str, Any]:
+        """Compare a saved chapter with the Style Guide. Read-only."""
+        result = services.style_deviations.check(
+            chapter_id,
+            settings=GenerationSettings(
+                model=payload.model,
+                temperature=payload.temperature,
+                top_p=payload.top_p,
+                num_predict=payload.num_predict,
+                context_window=payload.context_window,
+            ),
+        )
+        return {
+            "rule_count": result.rule_count,
+            "model": result.model,
+            "deviations": [
+                asdict(deviation) for deviation in result.deviations
+            ],
         }
 
     # -- memory --------------------------------------------------------

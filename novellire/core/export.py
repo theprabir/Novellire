@@ -139,7 +139,7 @@ class ExportService:
                 part = chapter.part
                 parts.append(f"# {part}")
             parts.append(f"## Chapter {chapter.position} — {chapter.title}")
-            parts.append(f"*{chapter.word_count:,} words*")
+            parts.append(f"*{_words(chapter.word_count)}*")
             parts.append(chapter.content)
 
         if documents:
@@ -170,7 +170,7 @@ class ExportService:
                 parts.append(part.upper())
             parts.append(
                 f"Chapter {chapter.position} — {chapter.title} "
-                f"({chapter.word_count:,} words)"
+                f"({_words(chapter.word_count)})"
             )
             parts.append(chapter.content)
 
@@ -197,7 +197,7 @@ class ExportService:
             entries.append(
                 ("chapter", f"Chapter {chapter.position} — {chapter.title}")
             )
-            entries.append(("words", f"{chapter.word_count:,} words"))
+            entries.append(("words", _words(chapter.word_count)))
             entries.append(("body", chapter.content))
 
         if documents:
@@ -212,8 +212,12 @@ class ExportService:
 def _summary(chapters: list[ChapterRecord], total_words: int) -> str:
     return (
         f"{len(chapters)} chapter{'s' if len(chapters) != 1 else ''} · "
-        f"{total_words:,} words"
+        f"{_words(total_words)}"
     )
+
+
+def _words(count: int) -> str:
+    return f"{count:,} word" if count == 1 else f"{count:,} words"
 
 
 def _slug(name: str) -> str:

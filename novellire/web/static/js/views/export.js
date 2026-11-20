@@ -110,7 +110,7 @@ export function renderExport(ctx) {
     }`;
     if (format.value === 'docx') {
       output.replaceChildren(docxView(url, written.length, state.tree.stats.words));
-      toast('Word document generated on this machine.', 'success');
+      toast('Word download ready. The file is generated locally when you open it.', 'success');
       return;
     }
     prepare.disabled = true;
@@ -226,13 +226,13 @@ function docxView(url, chapterCount, words) {
       el(
         'div',
         {},
-        el('h2', {}, 'Word document ready'),
+        el('h2', {}, 'Word document download'),
         el(
           'p',
           {},
           `${count(chapterCount)} chapter${
             chapterCount === 1 ? '' : 's'
-          } · ${count(words)} words · generated locally`
+          } · ${count(words)} words · generated locally when you download`
         )
       )
     ),

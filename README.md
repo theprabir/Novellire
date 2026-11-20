@@ -198,9 +198,17 @@ The interface has these surfaces:
   reply** above the composer to keep as a message or discard. Conversations live
   in a slide-over drawer, and a reload reopens the stored conversation, its pane,
   and the draft belonging to it.
-- **Continuity** — a designed scope. Its layout, filters, and detail panes are
-  reserved and labelled with the phase that will connect them; it shows no
-  project data yet.
+- **Continuity** — the recorded canon, without a model: the chapter timeline with
+  extracted events, each character's state changes, relationship evolution,
+  open and resolved threads, timeline validation, canon changes awaiting a
+  decision, and a deterministic contradiction audit. A saved chapter can be
+  checked against cited canon, and the canon can be scanned with AI, every
+  finding citing records the project holds.
+- **Style** — how the manuscript actually reads: sentences, average and longest
+  sentence, paragraphs with dialogue, and long sentences, per chapter and in
+  total. Counted locally without a model. The Style Guide is numbered into rules,
+  and a per-chapter **Check deviations** pass, read-only, reports only departures
+  that cite one of those rules and quote the chapter exactly once.
 
 Appearance choices are stored in the database (`app_settings`, key
 `appearance.settings`) and mirrored to `localStorage`, so the workspace reopens
@@ -212,7 +220,7 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-236 tests run fully offline. All inference is stubbed, so no model or Ollama
+316 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
@@ -235,7 +243,7 @@ novellire/
     static/js/markdown.js  Safe markdown-to-DOM renderer for model replies
     static/js/ui.js        DOM helpers, modal, toasts, prose rendering
     static/js/views/       home, project-settings, projects, workspace,
-                           preview, export, memory, settings, chat, scopes
+                           preview, export, memory, settings, chat, continuity, style, scopes
   config.py                Settings model, TOML loading, env overrides
   errors.py                User-facing error hierarchy
   logging_setup.py         Logging (never logs prompts or prose)
@@ -246,6 +254,7 @@ novellire/
     generation.py          Prompt -> provider -> saved record
     documents.py           Workspace document definitions and save/read service
     style_guide.py         Learns a style guide from the manuscript
+    style.py               Measured prose and cited departures from the guide
     story_bible.py         Categorised story bible entries (legacy API)
     characters.py          Character profiles and aliases (legacy API)
     context.py             Ranked canon and earlier-chapter context for generation
@@ -355,7 +364,11 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.6.0** (schema version 19). `v0.6.0` starts editorial and
+Current release: **v0.6.1** (schema version 19). `v0.6.1` adds style analysis:
+the Style view measures the stored prose locally and numbers the Style Guide into
+rules, and a read-only per-chapter check reports deviations that cite one of
+those rules and quote the chapter exactly once. A one-word chapter now reads
+“1 word”. `v0.6.0` starts editorial and
 export work with a complete manuscript export: Markdown, plain text, and a
 locally generated Word document, each with part breaks, chapter headings, and
 per-chapter and total word counts. `v0.5.8` adds provenance to

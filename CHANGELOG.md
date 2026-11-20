@@ -3,6 +3,36 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.6.1] — 2026-11-20
+
+Style analysis and deviations against the project's Style Guide.
+
+### Added
+
+- **Style** view and `GET /api/projects/{id}/style`: a deterministic profile of
+  the stored manuscript — chapters, words, sentences, average and longest
+  sentence, paragraphs with dialogue, and long sentences — per chapter and in
+  total, counted locally with no model.
+- The Style Guide is numbered into citable rules (`S1`, `S2`…): one rule per
+  paragraph, with a short heading line labelling the paragraph under it. A guide
+  that is a single paragraph becomes one rule, and a heading with no text under
+  it still becomes a rule of its own.
+- **Check deviations** per chapter and `POST /api/chapters/{id}/style-check`: one
+  read-only inference compares a saved chapter with those rules. A deviation is
+  kept only when it cites a supplied rule and quotes the chapter exactly once (at
+  most 300 characters); the server attaches the guide's own words, clamps the
+  aspect and severity, drops duplicates, and returns at most six. Nothing is
+  written.
+- Refusals before inference: no Style Guide, an empty chapter, a chapter over
+  12,000 characters, or no model.
+
+### Fixed
+
+- A one-word chapter now prints “1 word” instead of “1 words” in Markdown, plain
+  text, Word, and the manuscript summary.
+
+Schema stays at 19; style analysis reads existing records only.
+
 ## [0.6.0] — 2026-11-20
 
 Manuscript export: Markdown, plain text, and Word, all generated locally.

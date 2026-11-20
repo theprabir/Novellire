@@ -224,7 +224,10 @@ expected findings.
 
 ### v0.6 — Editorial and export
 
-- Style analysis and deviations.
+- Style analysis and deviations: a deterministic profile of the stored prose
+  (sentences, average and longest sentence, dialogue, long sentences), the Style
+  Guide numbered into cited rules, and a read-only per-chapter deviation check
+  (`0.6.1`).
 - Pacing and repetition review.
 - Revision suggestions.
 - DOCX and Markdown export: Markdown, plain text, and a locally generated Word
