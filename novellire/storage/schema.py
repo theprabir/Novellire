@@ -511,6 +511,10 @@ CREATE INDEX idx_thread_resolutions_project
     ON thread_resolutions(project_id)
 """
 
+MIGRATION_17_CHAPTER_STORY_DAY = """
+ALTER TABLE chapters ADD COLUMN story_day INTEGER
+"""
+
 MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
     (
         1,
@@ -636,6 +640,10 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
                 MIGRATION_16_THREAD_RESOLUTIONS,
                 MIGRATION_16_THREAD_RESOLUTIONS_INDEX,
             ),
+        ),
+        (
+            17,
+            (MIGRATION_17_CHAPTER_STORY_DAY,),
         ),
     )
 

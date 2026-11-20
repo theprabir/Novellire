@@ -3,6 +3,30 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.5.4] — 2026-11-20
+
+Timeline validation from author-recorded story days.
+
+### Added
+
+- **Story day** in the chapter editor: an optional whole number counting from the
+  story start (day 0). It is stored with the chapter and returned by the chapter
+  API, so chronology is recorded explicitly instead of inferred from prose.
+- The Continuity view gains **Timeline validation**, composed without a model:
+  how many chapters are anchored, the elapsed days between anchors, and a
+  finding for any chapter whose story day runs backwards from the chapter before
+  it. A deliberate flashback is the author's call, so the finding names both
+  chapters and days without changing anything.
+- `GET /api/projects/{id}/timeline` returns `counts`, `anchors` (chapter, story
+  day, elapsed since the previous anchor), and `findings`.
+- Chapter create and update accept `story_day` between 0 and 1,000,000. Sending
+  `null` clears the anchor; a negative or fractional value is refused.
+
+### Migrations
+
+- Schema 17 adds `chapters.story_day`. It is nullable, so existing chapters keep
+  no anchor and are reported as unanchored rather than guessed.
+
 ## [0.5.3] — 2026-11-19
 
 Knowledge tracking: proposed character-state updates from a chapter.

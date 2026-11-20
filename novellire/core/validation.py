@@ -35,6 +35,25 @@ def validate_direction(value: str) -> str:
     return cleaned
 
 
+def clean_story_day(value: object, *, maximum: int) -> int | None:
+    """Validate an optional in-story day anchor, counting from story start."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or (
+        isinstance(value, float) and not value.is_integer()
+    ):
+        raise InvalidInputError("Story day must be a whole number.")
+    try:
+        number = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError) as exc:
+        raise InvalidInputError("Story day must be a whole number.") from exc
+    if number < 0:
+        raise InvalidInputError("Story day must be zero or greater.")
+    if number > maximum:
+        raise InvalidInputError(f"Story day must be {maximum:,} or fewer.")
+    return number
+
+
 def clean_word_target(
     value: int | None, label: str, *, maximum: int
 ) -> int | None:

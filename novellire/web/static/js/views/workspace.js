@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { openStateProposalDialog } from './state-proposals.js?v=0.5.3';
+import { openStateProposalDialog } from './state-proposals.js?v=0.5.4';
 import {
   closeModal,
   confirmDialog,
@@ -573,6 +573,13 @@ function chapterEditor(ctx, chapter) {
     ]
   ).map((item) => ({ value: item.key, label: item.label }));
   const status = select(statusOptions, { value: chapter.status });
+  const storyDay = input({
+    type: 'number',
+    min: '0',
+    step: '1',
+    value: chapter.story_day ?? '',
+    placeholder: 'Optional',
+  });
   const content = textarea({
     value: chapter.content,
     rows: 24,
@@ -607,6 +614,15 @@ function chapterEditor(ctx, chapter) {
         'Status',
         status,
         'Approved chapters must be reopened before their text changes.'
+      )
+    ),
+    el(
+      'div',
+      {},
+      field(
+        'Story day',
+        storyDay,
+        'Optional. Days from the story start (0 is the first day) for timeline validation.'
       )
     ),
     el('div', { class: 'span-2' }, content),
@@ -758,6 +774,7 @@ function chapterEditor(ctx, chapter) {
         summary: summary.value,
         objectives: plan.value,
         status: status.value,
+        story_day: storyDay.value === '' ? null : Number(storyDay.value),
       });
       await ctx.refresh();
       toast('Chapter saved.', 'success');

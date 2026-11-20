@@ -341,13 +341,18 @@ by Git. Never commit a novel project's database.
 | 13 | `chat_drafts` checkpoints of a reply that was still streaming |
 | 14 | chat message revision scope and the reply a revision came from |
 | 15 | the chapter passage a revision rewrote, so it applies only there |
+| 16 | `thread_resolutions` author decisions about recorded plot threads |
+| 17 | chapters' optional `story_day` anchor for timeline validation |
 
 Migrations are applied in order inside transactions; an existing database is
 upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.5.3** (schema version 16). `v0.5.3` proposes character
+Current release: **v0.5.4** (schema version 17). `v0.5.4` validates the recorded
+timeline: a chapter can carry an optional story day, and Continuity reports any
+chapter that runs backwards in story time against the chapter before it, while
+leaving deliberate flashbacks to the author. `v0.5.3` proposes character
 state updates from a finished chapter, validated against the roster and applied
 only when the author confirms. `v0.5.2` lets the author
 resolve or reopen a recorded plot thread, keeping the note and the chapter where

@@ -64,9 +64,13 @@ export function renderContinuity(ctx) {
   const body = el('div', { class: 'review-findings' }, el('p', { class: 'hint' }, 'Reading recorded canon…'));
   wrap.append(body);
 
-  api
-    .get(`/api/projects/${state.activeProjectId}/continuity`)
-    .then((ledger) => body.replaceChildren(...ledgerSections(ledger, ctx)))
+  Promise.all([
+    api.get(`/api/projects/${state.activeProjectId}/continuity`),
+    api.get(`/api/projects/${state.activeProjectId}/timeline`),
+  ])
+    .then(([ledger, validation]) =>
+      body.replaceChildren(...ledgerSections(ledger, ctx, validation))
+    )
     .catch((error) => {
       toast(error.message, 'error');
       body.replaceChildren(el('p', { class: 'hint' }, error.message));
@@ -74,7 +78,7 @@ export function renderContinuity(ctx) {
   return wrap;
 }
 
-function ledgerSections(ledger, ctx) {
+function ledgerSections(ledger, ctx, validation) {
   const projectId = ctx.state.activeProjectId;
   const counts = ledger.counts || {};
   const sections = [
@@ -87,6 +91,8 @@ function ledgerSections(ledger, ctx) {
       statCard('Open threads', counts.open_threads || 0)
     ),
   ];
+
+  sections.push(timelineValidationSection(validation));
 
   const timeline = ledger.timeline || [];
   sections.push(
@@ -275,6 +281,58 @@ function ledgerSections(ledger, ctx) {
   );
 
   return sections;
+}
+
+function timelineValidationSection(validation) {
+  const counts = validation?.counts || {};
+  const anchors = validation?.anchors || [];
+  const findings = validation?.findings || [];
+  return el(
+    'section',
+    { class: 'card form-card' },
+    el('h2', { class: 'section-title' }, 'Timeline validation'),
+    el(
+      'p',
+      { class: 'hint' },
+      `${count(counts.anchored || 0)} of ${count(counts.chapters || 0)} chapter${
+        counts.chapters === 1 ? '' : 's'
+      } have a story day${counts.unanchored ? ` · ${count(counts.unanchored)} without one` : ''}.`
+    ),
+    findings.length
+      ? el(
+          'div',
+          { class: 'ledger-list' },
+          findings.map((finding) =>
+            el(
+              'div',
+              { class: 'ledger-row' },
+              el(
+                'div',
+                { class: 'review-finding-head' },
+                el('span', { class: 'chip severity-high' }, 'out of order'),
+                el(
+                  'strong',
+                  {},
+                  `Chapter ${finding.position} · ${finding.title || 'Untitled chapter'}`
+                ),
+                el(
+                  'span',
+                  { class: 'hint' },
+                  `day ${finding.story_day} after chapter ${finding.previous_position} on day ${finding.previous_day}`
+                )
+              ),
+              el('p', { class: 'hint' }, finding.detail)
+            )
+          )
+        )
+      : el(
+          'p',
+          { class: 'hint' },
+          anchors.length
+            ? 'No chapter runs backwards in recorded story time.'
+            : 'No story days recorded. Set one in the chapter editor to validate chronology.'
+        )
+  );
 }
 
 function resolveThread(ctx, projectId, thread, chapters) {

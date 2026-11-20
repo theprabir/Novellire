@@ -37,6 +37,7 @@ from ..core.state_proposals import (
     StateUpdateInput,
 )
 from ..core.threads import ThreadService
+from ..core.timeline import TimelineValidationService
 from ..core.discussion import ChapterDiscussionService
 from ..core.documents import ProjectDocumentService, WORKSPACE_DOCUMENTS
 from ..core.events import EventExtractionService
@@ -190,6 +191,7 @@ class ChapterCreateRequest(BaseModel):
     status: str = "planned"
     content: str = ""
     origin: Literal["written", "imported"] = "written"
+    story_day: int | None = None
 
 
 class ChapterUpdateRequest(BaseModel):
@@ -200,6 +202,7 @@ class ChapterUpdateRequest(BaseModel):
     status: str | None = None
     viewpoint_character_id: int | None = None
     target_word_count: int | None = None
+    story_day: int | None = None
     content: str | None = None
 
 
@@ -441,6 +444,7 @@ class ApiServices:
     continuity: ContinuityCheckService
     ledger: ContinuityLedgerService
     threads: ThreadService
+    timeline: TimelineValidationService
     state_proposals: CharacterStateProposalService
 
 
@@ -607,6 +611,7 @@ def build_services(
         threads=ThreadService(
             project_repository, chapter_repository, thread_repository
         ),
+        timeline=TimelineValidationService(project_repository, chapter_repository),
     )
 
 
@@ -1435,6 +1440,7 @@ def _build_router(services: ApiServices) -> APIRouter:
             status=payload.status,
             content=payload.content,
             origin=payload.origin,
+            story_day=payload.story_day,
         )
         services.analysis_scheduler.schedule_chapter(chapter)
         return asdict(chapter)
@@ -1450,6 +1456,8 @@ def _build_router(services: ApiServices) -> APIRouter:
                 kwargs[key] = data[key]
         if "viewpoint_character_id" in data:
             kwargs["viewpoint_character_id"] = data["viewpoint_character_id"]
+        if "story_day" in data:
+            kwargs["story_day"] = data["story_day"]
         if "target_word_count" in data:
             kwargs["target_word_count"] = data["target_word_count"]
         chapter = services.chapters.update_chapter(chapter_id, **kwargs)
@@ -1952,6 +1960,11 @@ def _build_router(services: ApiServices) -> APIRouter:
     def get_continuity_ledger(project_id: int) -> dict[str, Any]:
         """Recorded timeline, knowledge changes, and unresolved threads."""
         return services.ledger.ledger(project_id)
+
+    @router.get("/projects/{project_id}/timeline")
+    def get_timeline_validation(project_id: int) -> dict[str, Any]:
+        """Validate recorded story days against chapter order. No model."""
+        return services.timeline.validate(project_id)
 
     @router.post("/chapters/{chapter_id}/continuity")
     def check_chapter_continuity(

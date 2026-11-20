@@ -26,7 +26,7 @@ _CHARACTER_COLUMNS = (
 _CHAPTER_COLUMNS = (
     "id, project_id, position, title, part, summary, objectives, "
     "viewpoint_character_id, target_word_count, status, created_at, updated_at, "
-    "content, word_count, origin"
+    "content, word_count, origin, story_day"
 )
 
 _SCENE_COLUMNS = (
@@ -59,6 +59,7 @@ _CHAPTER_UPDATE_FIELDS = frozenset(
         "objectives",
         "viewpoint_character_id",
         "target_word_count",
+        "story_day",
         "status",
         "content",
         "word_count",
@@ -118,6 +119,7 @@ class ChapterRecord:
     content: str = ""
     word_count: int = 0
     origin: str = "written"
+    story_day: int | None = None
 
 
 @dataclass(frozen=True)
@@ -174,6 +176,7 @@ def _row_to_character(
 def _row_to_chapter(row: sqlite3.Row) -> ChapterRecord:
     viewpoint = row["viewpoint_character_id"]
     target = row["target_word_count"]
+    story_day = row["story_day"]
     return ChapterRecord(
         id=int(row["id"]),
         project_id=int(row["project_id"]),
@@ -190,6 +193,7 @@ def _row_to_chapter(row: sqlite3.Row) -> ChapterRecord:
         content=str(row["content"]),
         word_count=int(row["word_count"]),
         origin=str(row["origin"]),
+        story_day=int(story_day) if story_day is not None else None,
     )
 
 
@@ -452,6 +456,7 @@ class ChapterRepository:
         content: str = "",
         word_count: int = 0,
         origin: str = "written",
+        story_day: int | None = None,
         position: int | None = None,
     ) -> ChapterRecord:
         now = utc_now_iso()
@@ -483,8 +488,9 @@ class ChapterRepository:
                     INSERT INTO chapters
                         (project_id, position, title, part, summary, objectives,
                          viewpoint_character_id, target_word_count, status,
-                         created_at, updated_at, content, word_count, origin)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         created_at, updated_at, content, word_count, origin,
+                         story_day)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         project_id,
@@ -501,6 +507,7 @@ class ChapterRepository:
                         content,
                         word_count,
                         origin,
+                        story_day,
                     ),
                 )
             except sqlite3.IntegrityError as exc:

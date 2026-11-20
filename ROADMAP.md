@@ -203,7 +203,9 @@ Chat while memory updates automatically.
 - Character knowledge tracking: propose location, status, goals, and knowledge
   updates from a finished chapter, review them field by field, and apply them as
   snapshots (`0.5.3`).
-- Timeline validation.
+- Timeline validation: an optional story day per chapter, and a deterministic
+  Continuity check that reports a chapter running backwards in recorded story
+  time without treating a flashback as an error (`0.5.4`).
 - Relationship evolution.
 - Contradiction detection.
 - Plot-thread management.

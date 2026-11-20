@@ -21,6 +21,7 @@ from .text import count_words
 from .validation import (
     clean_optional_text,
     clean_required_text,
+    clean_story_day,
     clean_word_target,
     validate_direction,
 )
@@ -33,6 +34,7 @@ PART_MAX_LENGTH = 120
 TEXT_MAX_LENGTH = 20_000
 CONTENT_MAX_LENGTH = 400_000
 MAX_TARGET_WORDS = 1_000_000
+MAX_STORY_DAY = 1_000_000
 CHAPTER_ORIGINS = ("written", "imported")
 
 
@@ -66,6 +68,7 @@ class ChapterService:
         status: str = "planned",
         content: str = "",
         origin: str = "written",
+        story_day: int | None = None,
         position: int | None = None,
     ) -> ChapterRecord:
         if self._projects.get(project_id) is None:
@@ -99,6 +102,7 @@ class ChapterService:
             content=cleaned_content,
             word_count=count_words(cleaned_content),
             origin=self._validate_origin(origin),
+            story_day=clean_story_day(story_day, maximum=MAX_STORY_DAY),
             position=validated_position,
         )
 
@@ -139,6 +143,7 @@ class ChapterService:
         status: str | None = None,
         viewpoint_character_id: object = _UNSET,
         target_word_count: object = _UNSET,
+        story_day: object = _UNSET,
         content: str | None = None,
     ) -> ChapterRecord:
         chapter = self.require_chapter(chapter_id)
@@ -174,6 +179,10 @@ class ChapterService:
                 target_word_count,  # type: ignore[arg-type]
                 "Target word count",
                 maximum=MAX_TARGET_WORDS,
+            )
+        if story_day is not _UNSET:
+            fields["story_day"] = clean_story_day(
+                story_day, maximum=MAX_STORY_DAY
             )
         if content is not None:
             cleaned = clean_optional_text(
