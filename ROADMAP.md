@@ -213,7 +213,9 @@ Chat while memory updates automatically.
   types and threads raised after resolution, plus a read-only inference that
   compares canon records and must cite two of them (`0.5.6`).
 - Plot-thread management.
-- Canon-change review and supersession.
+- Canon-change review and supersession: review changed state snapshots, mark an
+  earlier record superseded by a later one with a note, and stop citing it as
+  current canon while keeping it as history (`0.5.7`).
 - Provenance display for every continuity finding.
 
 Acceptance: a synthetic manuscript with planted contradictions produces the

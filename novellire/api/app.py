@@ -77,6 +77,7 @@ from ..core.story_bible import (
     StoryBibleService,
 )
 from ..core.style_guide import StyleGuideService
+from ..core.supersessions import SupersessionService
 from ..core.summaries import ChapterSummaryService
 from ..core.work_status import WORK_STATUSES, WORK_STATUS_LABELS
 from ..errors import (
@@ -120,6 +121,7 @@ from ..storage.story_repositories import (
     SceneRepository,
     StoryBibleRepository,
 )
+from ..storage.supersession_repository import SupersessionRepository
 
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 _SNIPPET_LENGTH = 280
@@ -342,6 +344,13 @@ class RelationshipUpdateApplyRequest(BaseModel):
     updates: list[RelationshipUpdateItem] = Field(default_factory=list)
 
 
+class SupersessionRequest(BaseModel):
+    earlier_id: int
+    later_id: int
+    note: str = ""
+    superseded: bool = True
+
+
 class ThreadStatusRequest(BaseModel):
     thread: str
     status: str = "resolved"
@@ -471,6 +480,7 @@ class ApiServices:
     relationship_evolution: RelationshipEvolutionService
     contradictions: ContradictionAuditService
     contradiction_scan: ContradictionScanService
+    supersessions: SupersessionService
 
 
 def build_services(
@@ -487,6 +497,7 @@ def build_services(
     relationship_snapshot_repository = RelationshipSnapshotRepository(database)
     state_repository = CharacterStateRepository(database)
     thread_repository = ThreadResolutionRepository(database)
+    supersession_repository = SupersessionRepository(database)
     insight_repository = ChapterInsightRepository(database)
     analysis_state_repository = AnalysisStateRepository(database)
     chapter_service = ChapterService(
@@ -575,6 +586,7 @@ def build_services(
         relationship_repository,
         event_repository,
         bible_repository,
+        supersession_repository,
     )
 
     return ApiServices(
@@ -627,6 +639,13 @@ def build_services(
         contradiction_scan=ContradictionScanService(
             provider, project_repository, continuity_service
         ),
+        supersessions=SupersessionService(
+            project_repository,
+            chapter_repository,
+            character_repository,
+            state_repository,
+            supersession_repository,
+        ),
         backup=BackupService(database),
         context=context_builder,
         style_guide=StyleGuideService(
@@ -655,6 +674,7 @@ def build_services(
             event_repository,
             thread_repository,
             relationship_snapshot_repository,
+            supersession_repository,
         ),
         threads=ThreadService(
             project_repository, chapter_repository, thread_repository
@@ -2080,6 +2100,28 @@ def _build_router(services: ApiServices) -> APIRouter:
             "canon_count": result.canon_count,
             "model": result.model,
             "findings": [asdict(finding) for finding in result.findings],
+        }
+
+    @router.get("/projects/{project_id}/supersessions")
+    def get_canon_changes(project_id: int) -> dict[str, Any]:
+        """Review changed state records and recorded supersessions. No model."""
+        return services.supersessions.review(project_id)
+
+    @router.put("/projects/{project_id}/supersessions")
+    def set_canon_supersession(
+        project_id: int, payload: SupersessionRequest
+    ) -> dict[str, Any]:
+        """Mark an earlier record superseded by a later one, or undo that."""
+        decision = services.supersessions.set_superseded(
+            project_id,
+            earlier_id=payload.earlier_id,
+            later_id=payload.later_id,
+            note=payload.note,
+            superseded=payload.superseded,
+        )
+        return {
+            "superseded": decision is not None,
+            "decision": asdict(decision) if decision is not None else None,
         }
 
     @router.post("/chapters/{chapter_id}/continuity")

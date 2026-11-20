@@ -73,9 +73,10 @@ export function renderContinuity(ctx) {
     api.get(`/api/projects/${state.activeProjectId}/continuity`),
     api.get(`/api/projects/${state.activeProjectId}/timeline`),
     api.get(`/api/projects/${state.activeProjectId}/contradictions`),
+    api.get(`/api/projects/${state.activeProjectId}/supersessions`),
   ])
-    .then(([ledger, validation, audit]) =>
-      body.replaceChildren(...ledgerSections(ledger, ctx, validation, audit))
+    .then(([ledger, validation, audit, changes]) =>
+      body.replaceChildren(...ledgerSections(ledger, ctx, validation, audit, changes))
     )
     .catch((error) => {
       toast(error.message, 'error');
@@ -84,7 +85,7 @@ export function renderContinuity(ctx) {
   return wrap;
 }
 
-function ledgerSections(ledger, ctx, validation, audit) {
+function ledgerSections(ledger, ctx, validation, audit, changes) {
   const projectId = ctx.state.activeProjectId;
   const counts = ledger.counts || {};
   const sections = [
@@ -99,6 +100,7 @@ function ledgerSections(ledger, ctx, validation, audit) {
   ];
 
   sections.push(timelineValidationSection(validation));
+  sections.push(canonChangesSection(changes, ctx));
   sections.push(contradictionSection(audit, ctx));
 
   const timeline = ledger.timeline || [];
@@ -184,11 +186,25 @@ function ledgerSections(ledger, ctx, validation, audit) {
                       ),
                       ...(snapshot.changed || []).map((field) =>
                         el('span', { class: 'chip accent' }, FIELD_LABELS[field] || field)
-                      )
+                      ),
+                      snapshot.superseded
+                        ? el('span', { class: 'chip severity-low' }, 'superseded')
+                        : null
                     ),
                     ...Object.entries(FIELD_LABELS)
                       .filter(([field]) => snapshot[field])
-                      .map(([field, label]) => el('p', { class: 'hint' }, `${label}: ${snapshot[field]}`))
+                      .map(([field, label]) => el('p', { class: 'hint' }, `${label}: ${snapshot[field]}`)),
+                    snapshot.superseded
+                      ? el(
+                          'p',
+                          { class: 'hint' },
+                          `Superseded by chapter ${snapshot.superseded_by_chapter_position}${
+                            snapshot.superseded_by_chapter_title
+                              ? ` “${snapshot.superseded_by_chapter_title}”`
+                              : ''
+                          }${snapshot.supersession_note ? ` · ${snapshot.supersession_note}` : ''}`
+                        )
+                      : null
                   )
                 )
               )
@@ -290,6 +306,180 @@ function ledgerSections(ledger, ctx, validation, audit) {
   );
 
   return sections;
+}
+
+function canonChangesSection(review, ctx) {
+  const counts = review?.counts || {};
+  const changes = review?.changes || [];
+  return el(
+    'section',
+    { class: 'card form-card' },
+    el('h2', { class: 'section-title' }, 'Canon changes'),
+    el(
+      'p',
+      { class: 'hint' },
+      `${
+        changes.length
+          ? `${count(counts.pending || 0)} of ${count(counts.changes)} changed record${
+              counts.changes === 1 ? '' : 's'
+            } still awaiting a decision.`
+          : 'No changed character-state records yet.'
+      } Marking an earlier record superseded keeps it as history and stops a continuity check treating it as current canon.`
+    ),
+    changes.length
+      ? el(
+          'div',
+          { class: 'ledger-list' },
+          changes.map((change) =>
+            el(
+              'div',
+              { class: 'ledger-row' },
+              el(
+                'div',
+                { class: 'review-finding-head' },
+                el('strong', {}, change.character_name),
+                el(
+                  'span',
+                  { class: 'chip' },
+                  `chapter ${change.earlier_chapter_position} → ${change.later_chapter_position}`
+                ),
+                ...(change.changed || []).map((field) =>
+                  el('span', { class: 'chip accent' }, FIELD_LABELS[field] || field)
+                ),
+                change.superseded
+                  ? el('span', { class: 'chip severity-low' }, 'superseded')
+                  : el('span', { class: 'chip' }, 'pending')
+              ),
+              el(
+                'p',
+                { class: 'hint' },
+                `Before · chapter ${change.earlier_chapter_position} “${change.earlier_chapter_title}” · ${describeFields(
+                  change.changed,
+                  change.earlier_details
+                )}`
+              ),
+              el(
+                'p',
+                { class: 'hint' },
+                `After · chapter ${change.later_chapter_position} “${change.later_chapter_title}” · ${describeFields(
+                  change.changed,
+                  change.later_details
+                )}`
+              ),
+              change.superseded
+                ? el(
+                    'div',
+                    { class: 'hint' },
+                    `Superseded${change.note ? ` · ${change.note}` : ''}`
+                  )
+                : null,
+              el(
+                'div',
+                { class: 'review-finding-head' },
+                change.superseded
+                  ? el(
+                      'button',
+                      {
+                        class: 'btn btn-sm',
+                        type: 'button',
+                        onClick: () => undoSupersession(ctx, change),
+                      },
+                      'Undo'
+                    )
+                  : el(
+                      'button',
+                      {
+                        class: 'btn btn-sm',
+                        type: 'button',
+                        onClick: () => markSuperseded(ctx, change),
+                      },
+                      'Mark superseded'
+                    )
+              )
+            )
+          )
+        )
+      : el(
+          'p',
+          { class: 'hint' },
+          'Record state snapshots for a character in two chapters to review a change.'
+        )
+  );
+}
+
+function describeFields(fields, details) {
+  return (fields || [])
+    .map(
+      (field) =>
+        `${FIELD_LABELS[field] || field}: ${(details || {})[field] || '—'}`
+    )
+    .join(' · ');
+}
+
+function markSuperseded(ctx, change) {
+  const note = textarea({
+    rows: 3,
+    placeholder: 'Why the later record replaces this one, if useful later.',
+  });
+  const save = el(
+    'button',
+    { class: 'btn btn-primary', type: 'button' },
+    'Mark superseded'
+  );
+  const modal = openModal({
+    title: 'Mark record superseded',
+    body: [
+      el(
+        'p',
+        { class: 'review-quote' },
+        `${change.character_name} · chapter ${change.earlier_chapter_position} → chapter ${change.later_chapter_position}`
+      ),
+      field(
+        'Note',
+        note,
+        'Optional. Stored with the decision; the earlier record is kept as history.'
+      ),
+    ],
+    footer: [
+      el(
+        'button',
+        { class: 'btn btn-ghost', type: 'button', onClick: () => modal.close() },
+        'Cancel'
+      ),
+      save,
+    ],
+  });
+  save.addEventListener('click', async () => {
+    save.disabled = true;
+    try {
+      await api.put(`/api/projects/${ctx.state.activeProjectId}/supersessions`, {
+        earlier_id: change.earlier_id,
+        later_id: change.later_id,
+        note: note.value,
+        superseded: true,
+      });
+      modal.close();
+      toast('Record marked superseded.', 'success');
+      await ctx.refresh();
+    } catch (error) {
+      toast(error.message, 'error');
+      save.disabled = false;
+    }
+  });
+}
+
+async function undoSupersession(ctx, change) {
+  try {
+    await api.put(`/api/projects/${ctx.state.activeProjectId}/supersessions`, {
+      earlier_id: change.earlier_id,
+      later_id: change.later_id,
+      superseded: false,
+    });
+    toast('Supersession cleared.', 'success');
+    await ctx.refresh();
+  } catch (error) {
+    toast(error.message, 'error');
+  }
 }
 
 function contradictionSection(audit, ctx) {

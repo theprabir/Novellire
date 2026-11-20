@@ -28,6 +28,7 @@ from ..storage.story_repositories import (
     CharacterRepository,
     StoryBibleRepository,
 )
+from ..storage.supersession_repository import SupersessionRepository
 from ..storage.thread_repository import ThreadResolutionRepository
 from .threads import thread_key
 from .settings_service import GenerationSettings
@@ -96,6 +97,7 @@ class ContinuityCheckService:
         relationships: RelationshipRepository,
         events: EventRepository,
         bible: StoryBibleRepository,
+        supersessions: SupersessionRepository,
     ) -> None:
         self._provider = provider
         self._projects = projects
@@ -105,6 +107,7 @@ class ContinuityCheckService:
         self._relationships = relationships
         self._events = events
         self._bible = bible
+        self._supersessions = supersessions
 
     def check(self, chapter_id: int, *, settings: GenerationSettings) -> ContinuityReport:
         chapter = self._chapters.get(chapter_id)
@@ -181,11 +184,17 @@ class ContinuityCheckService:
         }
         labels: list[str] = []
 
+        superseded = {
+            decision.earlier_id
+            for decision in self._supersessions.list_for_project(project_id)
+            if decision.record_kind == "state"
+        }
         states = [
             state
             for state in self._states.list_for_project(project_id)
             if (chapter := chapter_rows.get(state.chapter_id)) is not None
             and chapter.position <= position
+            and state.id not in superseded
         ]
         for state in states[-_MAX_STATES:]:
             chapter = chapter_rows[state.chapter_id]
@@ -260,6 +269,7 @@ class ContinuityLedgerService:
         events: EventRepository,
         threads: ThreadResolutionRepository,
         relationship_snapshots: RelationshipSnapshotRepository,
+        supersessions: SupersessionRepository,
     ) -> None:
         self._projects = projects
         self._chapters = chapters
@@ -269,6 +279,7 @@ class ContinuityLedgerService:
         self._events = events
         self._threads = threads
         self._relationship_snapshots = relationship_snapshots
+        self._supersessions = supersessions
 
     def ledger(self, project_id: int) -> dict[str, object]:
         if self._projects.get(project_id) is None:
@@ -304,6 +315,12 @@ class ContinuityLedgerService:
         ]
 
         states = self._states.list_for_project(project_id)
+        state_rows = {state.id: state for state in states}
+        decisions = {
+            decision.earlier_id: decision
+            for decision in self._supersessions.list_for_project(project_id)
+            if decision.record_kind == "state"
+        }
         grouped: dict[int, list] = {}
         for state in sorted(
             states,
@@ -333,12 +350,32 @@ class ContinuityLedgerService:
                     if current[field] != previous.get(field, "")
                 ]
                 previous = current
+                decision = decisions.get(state.id)
+                superseded_by = (
+                    state_rows.get(decision.later_id)
+                    if decision is not None
+                    else None
+                )
                 snapshots.append(
                     {
                         "chapter_position": chapter.position if chapter else 0,
                         "chapter_title": chapter.title if chapter else "",
                         **current,
                         "changed": changed,
+                        "superseded": decision is not None,
+                        "superseded_by_chapter_position": (
+                            superseded_by.chapter_position
+                            if superseded_by is not None
+                            else None
+                        ),
+                        "superseded_by_chapter_title": (
+                            superseded_by.chapter_title
+                            if superseded_by is not None
+                            else ""
+                        ),
+                        "supersession_note": (
+                            decision.note if decision is not None else ""
+                        ),
                     }
                 )
             character_ledger.append(

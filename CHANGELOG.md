@@ -3,6 +3,32 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.5.7] — 2026-11-20
+
+Canon-change review and supersession.
+
+### Added
+
+- Continuity gains **Canon changes**: every adjacent pair of character-state
+  snapshots that differ, with the character, the two chapters, the fields that
+  changed, and the values before and after. Unchanged pairs are left out.
+- **Mark superseded** records that the later snapshot replaces the earlier one,
+  with an optional note, or **Undo** clears the decision. The earlier record is
+  never deleted or rewritten; it stays in the ledger marked *superseded* with
+  the chapter that replaced it and the note.
+- A superseded snapshot is excluded from the canon a continuity check (and the
+  contradiction scan) may cite, so a replaced fact is no longer treated as
+  current canon. Everything else — the ledger, the review list, the record
+  itself — keeps its full provenance.
+- `GET /api/projects/{id}/supersessions` returns `counts` and `changes`;
+  `PUT /api/projects/{id}/supersessions` sets or clears the decision. Marking
+  twice updates the note rather than adding a second decision.
+
+### Migrations
+
+- Schema 19 adds `canon_supersessions`, unique per project, record kind, and
+  earlier record, with `ON DELETE CASCADE` from the project.
+
 ## [0.5.6] — 2026-11-20
 
 Contradiction detection inside recorded canon.

@@ -534,6 +534,24 @@ CREATE INDEX idx_relationship_snapshots_project
     ON relationship_snapshots (project_id, relationship_id, chapter_id)
 """
 
+MIGRATION_19_CANON_SUPERSESSIONS = """
+CREATE TABLE canon_supersessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    record_kind TEXT NOT NULL,
+    earlier_id INTEGER NOT NULL,
+    later_id INTEGER NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    UNIQUE (project_id, record_kind, earlier_id)
+)
+"""
+
+MIGRATION_19_CANON_SUPERSESSIONS_INDEX = """
+CREATE INDEX idx_canon_supersessions_project
+    ON canon_supersessions (project_id, record_kind)
+"""
+
 MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
     (
         1,
@@ -669,6 +687,13 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
             (
                 MIGRATION_18_RELATIONSHIP_SNAPSHOTS,
                 MIGRATION_18_RELATIONSHIP_SNAPSHOTS_INDEX,
+            ),
+        ),
+        (
+            19,
+            (
+                MIGRATION_19_CANON_SUPERSESSIONS,
+                MIGRATION_19_CANON_SUPERSESSIONS_INDEX,
             ),
         ),
     )

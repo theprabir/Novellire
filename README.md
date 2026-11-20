@@ -344,13 +344,17 @@ by Git. Never commit a novel project's database.
 | 16 | `thread_resolutions` author decisions about recorded plot threads |
 | 17 | chapters' optional `story_day` anchor for timeline validation |
 | 18 | `relationship_snapshots`: each relationship's state in a chapter |
+| 19 | `canon_supersessions`: author decisions that a later record replaces one |
 
 Migrations are applied in order inside transactions; an existing database is
 upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.5.6** (schema version 18). `v0.5.6` detects contradictions
+Current release: **v0.5.7** (schema version 19). `v0.5.7` reviews canon changes:
+Continuity lists state snapshots that differ from the one before them, and the
+author can mark the earlier record superseded, with a note, so it stays as
+history but is no longer cited as current canon. `v0.5.6` detects contradictions
 inside recorded canon: a deterministic audit reports a character pair recorded
 with conflicting relationship types or a thread raised again after its recorded
 resolution, and a read-only scan compares the canon records with each other,
