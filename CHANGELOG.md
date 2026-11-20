@@ -3,6 +3,29 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.6.2] — 2026-11-20
+
+Pacing and repetition review, measured locally without a model.
+
+### Added
+
+- **Pacing** on the Style surface: paragraphs, average and longest paragraph,
+  average sentence, and the share of paragraphs carrying dialogue, per chapter
+  and for the manuscript. It reports measurements rather than verdicts, so a
+  deliberately slow chapter is not flagged as wrong.
+- **Repeated phrases**: a four-word phrase appearing three or more times is
+  listed with its count, the chapters it appears in, and up to five example
+  sentences. Adjacent repeated windows with the same count are merged, so one
+  crutch sentence is one finding (`“the gate was sealed with iron”`) instead of
+  three overlapping four-word ones. Windows made only of stopwords are ignored.
+- `GET /api/projects/{id}/pacing` returns counts, the pacing summary, per-chapter
+  rows, and the repetition findings. The review reads at most 200,000 words at
+  once and reports `truncated` instead of implying it read the whole manuscript.
+- Sentence splitting moved to `core/text.py`, shared by the style profile and the
+  pacing review.
+
+Schema stays at 19; pacing reads existing records only.
+
 ## [0.6.1] — 2026-11-20
 
 Style analysis and deviations against the project's Style Guide.

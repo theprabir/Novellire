@@ -228,7 +228,9 @@ expected findings.
   (sentences, average and longest sentence, dialogue, long sentences), the Style
   Guide numbered into cited rules, and a read-only per-chapter deviation check
   (`0.6.1`).
-- Pacing and repetition review.
+- Pacing and repetition review: paragraph and sentence rhythm, dialogue density,
+  and four-word phrases repeated three or more times with their source sentences,
+  all measured locally without inference (`0.6.2`).
 - Revision suggestions.
 - DOCX and Markdown export: Markdown, plain text, and a locally generated Word
   document, with part breaks, chapter headings, and per-chapter and total word

@@ -22,6 +22,7 @@ from ..storage.repositories import ProjectRepository
 from ..storage.story_repositories import ChapterRecord, ChapterRepository
 from .documents import ProjectDocumentService
 from .settings_service import GenerationSettings
+from .text import split_sentences
 
 STYLE_SOURCE_CHARS = 12_000
 STYLE_MAX_OUTPUT_TOKENS = 900
@@ -313,7 +314,7 @@ def parse_style_deviations(
 
 def _measure_chapter(chapter: ChapterRecord) -> ChapterStyle:
     text = chapter.content or ""
-    sentences = _sentences(text)
+    sentences = split_sentences(text)
     lengths = [len(sentence.split()) for sentence in sentences]
     longest = max(lengths) if lengths else 0
     longest_sentence = ""
@@ -340,17 +341,6 @@ def _measure_chapter(chapter: ChapterRecord) -> ChapterStyle:
         longest_sentence_words=longest,
         longest_sentence=longest_sentence,
     )
-
-
-def _sentences(text: str) -> list[str]:
-    collapsed = " ".join((text or "").split())
-    if not collapsed:
-        return []
-    return [
-        part
-        for part in re.split(r"(?<=[.!?\u2026])\s+", collapsed)
-        if part.strip()
-    ]
 
 
 def _is_heading(line: str) -> bool:

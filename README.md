@@ -208,7 +208,10 @@ The interface has these surfaces:
   sentence, paragraphs with dialogue, and long sentences, per chapter and in
   total. Counted locally without a model. The Style Guide is numbered into rules,
   and a per-chapter **Check deviations** pass, read-only, reports only departures
-  that cite one of those rules and quote the chapter exactly once.
+  that cite one of those rules and quote the chapter exactly once. The same
+  surface adds **pacing** (paragraph and sentence rhythm, dialogue density per
+  chapter) and **repeated phrases** (a four-word phrase seen three or more times,
+  with its example sentences), both measured locally with no model.
 
 Appearance choices are stored in the database (`app_settings`, key
 `appearance.settings`) and mirrored to `localStorage`, so the workspace reopens
@@ -220,7 +223,7 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-316 tests run fully offline. All inference is stubbed, so no model or Ollama
+321 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
@@ -255,6 +258,7 @@ novellire/
     documents.py           Workspace document definitions and save/read service
     style_guide.py         Learns a style guide from the manuscript
     style.py               Measured prose and cited departures from the guide
+    pacing.py              Paragraph rhythm, dialogue density, repeated phrases
     story_bible.py         Categorised story bible entries (legacy API)
     characters.py          Character profiles and aliases (legacy API)
     context.py             Ranked canon and earlier-chapter context for generation
@@ -364,7 +368,10 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.6.1** (schema version 19). `v0.6.1` adds style analysis:
+Current release: **v0.6.2** (schema version 19). `v0.6.2` adds a deterministic
+pacing and repetition review to the Style surface: paragraph and sentence rhythm,
+dialogue density per chapter, and four-word phrases repeated three or more times
+with the sentences they appear in, all counted locally without a model. `v0.6.1` adds style analysis:
 the Style view measures the stored prose locally and numbers the Style Guide into
 rules, and a read-only per-chapter check reports deviations that cite one of
 those rules and quote the chapter exactly once. A one-word chapter now reads

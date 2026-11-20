@@ -56,6 +56,7 @@ from ..core.memory import MemoryService
 from ..core.orchestration import ChapterDraftSequence
 from ..core.review import ChapterReviewService
 from ..core.outline import OutlineService
+from ..core.pacing import PacingReviewService
 from ..core.projects import ProjectService
 from ..core.relationships import (
     RELATIONSHIP_TYPE_LABELS,
@@ -459,6 +460,7 @@ class ApiServices:
     style_guide: StyleGuideService
     style_profile: StyleProfileService
     style_deviations: StyleDeviationService
+    pacing: PacingReviewService
     summaries: ChapterSummaryService
     memory: MemoryService
     events: EventExtractionService
@@ -663,6 +665,7 @@ def build_services(
             chapter_repository,
             document_service,
         ),
+        pacing=PacingReviewService(project_repository, chapter_repository),
         generations=generation_repository,
         insights=insight_service,
         insight_repository=insight_repository,
@@ -1396,6 +1399,11 @@ def _build_router(services: ApiServices) -> APIRouter:
                 asdict(deviation) for deviation in result.deviations
             ],
         }
+
+    @router.get("/projects/{project_id}/pacing")
+    def get_pacing_review(project_id: int) -> dict[str, Any]:
+        """Paragraph rhythm, dialogue density, and repeated phrases. No model."""
+        return services.pacing.review(project_id)
 
     # -- memory --------------------------------------------------------
 

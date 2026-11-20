@@ -16,7 +16,7 @@ export function renderStyle(ctx) {
         el(
           'div',
           { class: 'sub' },
-          'How the manuscript actually reads, and where a chapter departs from your Style Guide. Measurements are counted locally; only a deviation check calls the model, and it changes nothing.'
+          'How the manuscript actually reads — sentence and paragraph rhythm, dialogue density, repeated phrases — and where a chapter departs from your Style Guide. Measurements are counted locally; only a deviation check calls the model, and it changes nothing.'
         )
       ),
       el(
@@ -51,9 +51,16 @@ export function renderStyle(ctx) {
   );
   wrap.append(body);
 
-  api
-    .get(`/api/projects/${state.activeProjectId}/style`)
-    .then((profile) => body.replaceChildren(...profileSections(profile, ctx)))
+  Promise.all([
+    api.get(`/api/projects/${state.activeProjectId}/style`),
+    api.get(`/api/projects/${state.activeProjectId}/pacing`),
+  ])
+    .then(([profile, pacing]) =>
+      body.replaceChildren(
+        ...profileSections(profile, ctx),
+        ...pacingSections(pacing)
+      )
+    )
     .catch((error) => {
       toast(error.message, 'error');
       body.replaceChildren(el('p', { class: 'hint' }, error.message));
@@ -217,6 +224,122 @@ function chaptersSection(profile, ctx) {
         )
       : el('p', { class: 'hint' }, 'No chapter with text yet.')
   );
+}
+
+function pacingSections(pacing) {
+  const counts = pacing.counts || {};
+  const summary = pacing.pacing || {};
+  const chapters = pacing.chapters || [];
+  const repetitions = pacing.repetitions || [];
+  return [
+    el(
+      'section',
+      { class: 'card form-card' },
+      el('h2', { class: 'section-title' }, 'Pacing'),
+      el(
+        'p',
+        { class: 'hint' },
+        `${count(summary.paragraphs || 0)} paragraphs · ${
+          summary.average_paragraph_words || 0
+        } words per paragraph on average · longest paragraph ${count(
+          summary.longest_paragraph_words || 0
+        )} words · ${summary.dialogue_share || 0}% of paragraphs carry dialogue. Measured, not judged: a slow chapter is the author’s choice.`
+      ),
+      chapters.length
+        ? el(
+            'div',
+            { class: 'ledger-list' },
+            chapters.map((chapter) =>
+              el(
+                'div',
+                { class: 'ledger-row' },
+                el(
+                  'div',
+                  { class: 'review-finding-head' },
+                  el('span', { class: 'chip' }, String(chapter.position).padStart(2, '0')),
+                  el('strong', {}, chapter.title || 'Untitled chapter'),
+                  el(
+                    'span',
+                    { class: 'hint' },
+                    `${count(chapter.words)} words · ${
+                      chapter.average_paragraph_words
+                    } words per paragraph · ${chapter.dialogue_share}% dialogue`
+                  )
+                ),
+                el(
+                  'p',
+                  { class: 'hint' },
+                  `${chapter.sentences} sentence${
+                    chapter.sentences === 1 ? '' : 's'
+                  } · ${chapter.paragraphs} paragraph${
+                    chapter.paragraphs === 1 ? '' : 's'
+                  } · longest paragraph ${count(
+                    chapter.longest_paragraph_words
+                  )} words`
+                )
+              )
+            )
+          )
+        : el('p', { class: 'hint' }, 'No chapter with text yet.')
+    ),
+    el(
+      'section',
+      { class: 'card form-card' },
+      el(
+        'div',
+        { class: 'review-finding-head' },
+        el('h2', { class: 'section-title' }, 'Repeated phrases'),
+        el(
+          'span',
+          { class: 'chip' },
+          `${count(repetitions.length)} phrase${
+            repetitions.length === 1 ? '' : 's'
+          }`
+        )
+      ),
+      el(
+        'p',
+        { class: 'hint' },
+        'A four-word phrase repeated three or more times, with the sentences it appears in. Overlapping windows are merged into one phrase. A deliberate refrain belongs; anything else is a place to look.'
+      ),
+      counts.truncated
+        ? el(
+            'p',
+            { class: 'hint' },
+            'The manuscript is longer than this review reads at once, so only its first 200,000 words were counted.'
+          )
+        : null,
+      repetitions.length
+        ? el(
+            'div',
+            { class: 'ledger-list' },
+            repetitions.map((row) =>
+              el(
+                'div',
+                { class: 'ledger-row' },
+                el(
+                  'div',
+                  { class: 'review-finding-head' },
+                  el('strong', {}, `“${row.phrase}”`),
+                  el('span', { class: 'chip accent' }, `${count(row.count)} times`)
+                ),
+                ...row.occurrences.map((occurrence) =>
+                  el(
+                    'p',
+                    { class: 'continuity-source' },
+                    `chapter ${occurrence.chapter_position} “${occurrence.chapter_title}” · ${occurrence.excerpt}`
+                  )
+                )
+              )
+            )
+          )
+        : el(
+            'p',
+            { class: 'hint' },
+            'No four-word phrase repeats three times in the stored prose.'
+          )
+    ),
+  ];
 }
 
 function openDeviationCheck(ctx, chapter) {
