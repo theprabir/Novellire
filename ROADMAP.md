@@ -257,6 +257,17 @@ Acceptance: a completed manuscript can be reviewed, exported, and restored.
 Acceptance: the benchmark suite reports retrieval quality and the planted
 continuity findings without a model, and local inference remains the default.
 
+### v0.8 — Installation preflight
+
+- `novellire doctor` reports the interpreter, the configuration file in use, the
+  data directory's writability, the database's schema version and pending
+  upgrade, and the selected provider, all read-only and offline (`0.8.0`).
+- A failing check names one next step and exits `1`, and `--json` gives the same
+  report to packaging and recovery checks (`0.8.0`).
+
+Acceptance: a fresh install and a deliberately broken one both explain
+themselves before the server starts, without a model or a network call.
+
 ### v1.0 — Stable release
 
 - UI refinement and accessibility.
@@ -282,6 +293,6 @@ novel, maintain continuity, and export the manuscript without cloud services.
 
 ## Immediate Next Work
 
-v1.0 remains: the UI accessibility and refinement pass, installation and
-configuration documentation review, performance and memory profiling on the
-target hardware, and release packaging with a recovery test.
+v1.0 remains: the UI accessibility and refinement pass, configuration
+documentation beneath the new install preflight, performance and memory
+profiling on the target hardware, and release packaging with a recovery test.

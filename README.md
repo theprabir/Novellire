@@ -88,6 +88,20 @@ compatible API. The key is read from the environment at startup, never written
 to the database or the browser. Leave `enabled = false` to keep every request
 local.
 
+### Check the install
+
+```bash
+novellire doctor
+```
+
+A read-only preflight, useful before the first start and after moving a
+library. It reports the Python version, the configuration file in use, whether
+the data directory is writable, the database's schema version and whether an
+upgrade is pending, and which provider will be used. It opens the database
+read-only, never runs a migration, and never contacts a model. A failing check
+names one next step; `--json` prints the same report for a script, and the
+command exits `1` when a check fails.
+
 ### Run
 
 Start Ollama in one terminal:
@@ -245,7 +259,7 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-346 tests run fully offline. All inference is stubbed, so no model or Ollama
+357 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
@@ -259,12 +273,15 @@ separately from prose: recall, precision, and mean reciprocal rank for a detail
 planted in chapter 2 and used in chapter 27, plus the ledger, the open mystery,
 the location change, and the planted contradiction. `tests/test_cloud_provider.py`
 covers the opt-in cloud provider and provider selection without a network call.
+`tests/test_preflight.py` covers every installation check — a fresh install, an
+unreadable database, a pending upgrade, and a cloud key that is missing or set —
+with no network access.
 
 ## Architecture
 
 ```
 novellire/
-  __main__.py              CLI entry point (--host, --port, --log-level)
+  __main__.py              CLI: the server (--host, --port, --log-level), and `doctor`
   api/
     app.py                 Application factory, JSON API, static client serving
   web/                     Browser client (no build step)
@@ -281,6 +298,7 @@ novellire/
   logging_setup.py         Logging (never logs prompts or prose)
   core/
     projects.py            Project validation and use cases
+    preflight.py           Read-only installation checks behind `novellire doctor`
     backup.py              Verified snapshots, file checks, and safe restore
     settings_service.py    Persisted generation and appearance preferences
     generation.py          Prompt -> provider -> saved record
@@ -376,9 +394,6 @@ Environment overrides: `NOVELLIRE_CONFIG`, `NOVELLIRE_DATA_DIR`,
 `NOVELLIRE_CLOUD_URL`, `NOVELLIRE_CLOUD_MODEL`. The key itself is read only from
 `cloud.api_key_env`.
 
-Environment overrides: `NOVELLIRE_CONFIG`, `NOVELLIRE_DATA_DIR`,
-`NOVELLIRE_OLLAMA_URL`.
-
 The data directory, databases, `config.toml`, and generated drafts are ignored
 by Git. Never commit a novel project's database.
 
@@ -411,10 +426,15 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.7.0** (schema version 19). `v0.7.0` adds the v1.0
-benchmark slice: a synthetic 27-chapter sample with aliases, a detail that
-matters 25 chapters later, a secret, an open mystery, a location change, and a
-planted contradiction. The suite seeds it through the real services and reports
+Current release: **v0.8.0** (schema version 19). `v0.8.0` adds an installation
+preflight: `novellire doctor` checks the interpreter, the configuration file in
+use, the data directory, the database's schema version and pending upgrade, and
+the selected provider, and names one next step for anything that fails. It
+opens the database read-only, never migrates it, and calls no model; `--json`
+gives the same report to a script. `v0.7.0` adds the v1.0 benchmark slice: a
+synthetic 27-chapter sample with aliases, a detail that matters 25 chapters
+later, a secret, an open mystery, a location change, and a planted
+contradiction. The suite seeds it through the real services and reports
 retrieval recall, precision, and rank separately from prose quality, then
 asserts the ledger and continuity findings with stub providers. The same
 release adds opt-in cloud inference: an OpenAI-compatible provider selected only

@@ -139,13 +139,20 @@ def _merge_ollama_override(raw: dict[str, object], base_url: str) -> dict[str, o
     return _merge_override(raw, "ollama", base_url=base_url)
 
 
+def resolve_config_path(config_path: Path | None = None) -> Path:
+    """Return the configuration file that would be read, existing or not."""
+    if config_path is not None:
+        return Path(config_path)
+    configured = os.environ.get("NOVELLIRE_CONFIG")
+    return Path(configured) if configured else DEFAULT_CONFIG_FILE
+
+
 def load_settings(config_path: Path | None = None) -> Settings:
     """Load settings from TOML, applying environment overrides.
 
     A missing configuration file is not an error: defaults are used.
     """
-    configured = os.environ.get("NOVELLIRE_CONFIG")
-    path = config_path or (Path(configured) if configured else DEFAULT_CONFIG_FILE)
+    path = resolve_config_path(config_path)
 
     raw: dict[str, object] = {}
     if path.is_file():

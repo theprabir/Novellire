@@ -3,6 +3,34 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.8.0] — 2026-11-20
+
+Installation preflight, so a new install explains itself before the server
+starts.
+
+### Added
+
+- **`novellire doctor`**: a read-only preflight that reports the Python version,
+  the configuration file in use, whether the data directory is writable, the
+  database's schema version with any pending upgrade and its project and chapter
+  counts, and the provider this install will use. Each check that fails names
+  one next step.
+- The preflight opens the database through a read-only SQLite URI and never
+  migrates it, creates no data directory, reads no cloud key into its report,
+  and contacts no provider or model.
+- `novellire doctor --json` prints the same report as JSON, and the command
+  exits `1` when a check fails, so an install script or a release check can use
+  it without parsing prose.
+- `novellire/core/preflight.py` holds the checks and the report; the CLI and the
+  tests share one implementation.
+
+### Changed
+
+- `load_settings` resolves its file with `resolve_config_path`, so the preflight
+  and the server agree on exactly which configuration file is read.
+
+Schema stays at 19; no dependencies were added.
+
 ## [0.7.0] — 2026-11-20
 
 Synthetic retrieval/continuity benchmarks and opt-in cloud inference.
