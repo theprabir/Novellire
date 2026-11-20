@@ -63,6 +63,9 @@ _LEDGER_FIELDS = ("location", "status", "goals", "knowledge")
 class CanonReference:
     id: str
     label: str
+    kind: str
+    chapter_position: int | None = None
+    chapter_title: str = ""
 
 
 @dataclass(frozen=True)
@@ -73,6 +76,9 @@ class ContinuityFinding:
     quote: str
     source_id: str
     source: str
+    source_kind: str
+    source_chapter_position: int | None
+    source_chapter_title: str
     explanation: str
     suggestion: str
 
@@ -182,7 +188,7 @@ class ContinuityCheckService:
             chapter.id: chapter
             for chapter in self._chapters.list_for_project(project_id)
         }
-        labels: list[str] = []
+        records: list[tuple[str, int | None, str, str]] = []
 
         superseded = {
             decision.earlier_id
@@ -208,21 +214,31 @@ class ContinuityCheckService:
                 )
                 if part
             )
-            labels.append(
-                f"Character state · {names.get(state.character_id, 'Unknown')} · "
-                f"chapter {chapter.position} “{chapter.title}” · {details}"
+            records.append(
+                (
+                    "state",
+                    chapter.position,
+                    chapter.title,
+                    f"Character state · {names.get(state.character_id, 'Unknown')} · "
+                    f"chapter {chapter.position} “{chapter.title}” · {details}",
+                )
             )
 
         for relationship in self._relationships.list_for_project(project_id):
             if relationship.status != "approved":
                 continue
-            labels.append(
-                "Approved relationship · "
-                f"{names.get(relationship.character_a_id, 'Unknown')} and "
-                f"{names.get(relationship.character_b_id, 'Unknown')} · "
-                f"{relationship.relation_type} · {relationship.description}"
+            records.append(
+                (
+                    "relationship",
+                    relationship.source_chapter_position,
+                    relationship.source_chapter_title,
+                    "Approved relationship · "
+                    f"{names.get(relationship.character_a_id, 'Unknown')} and "
+                    f"{names.get(relationship.character_b_id, 'Unknown')} · "
+                    f"{relationship.relation_type} · {relationship.description}",
+                )
             )
-            if sum(1 for label in labels if label.startswith("Approved")) >= (
+            if sum(1 for record in records if record[0] == "relationship") >= (
                 _MAX_RELATIONSHIPS
             ):
                 break
@@ -234,21 +250,39 @@ class ContinuityCheckService:
         ]
         for event in events[-_MAX_EVENTS:]:
             threads = "; ".join(event.threads)
-            labels.append(
-                f"Event · chapter {event.chapter_position} "
-                f"“{event.chapter_title}” · {event.summary}"
-                + (f" · threads: {threads}" if threads else "")
+            records.append(
+                (
+                    "event",
+                    event.chapter_position,
+                    event.chapter_title,
+                    f"Event · chapter {event.chapter_position} "
+                    f"“{event.chapter_title}” · {event.summary}"
+                    + (f" · threads: {threads}" if threads else ""),
+                )
             )
 
         for entry in self._bible.list_for_project(project_id)[:_MAX_BIBLE_ENTRIES]:
-            labels.append(
-                f"Story bible · {entry.category} · {entry.title} · "
-                f"{_clip(entry.content, 300)}"
+            records.append(
+                (
+                    "bible",
+                    None,
+                    "",
+                    f"Story bible · {entry.category} · {entry.title} · "
+                    f"{_clip(entry.content, 300)}",
+                )
             )
 
         return [
-            CanonReference(id=f"C{index}", label=label)
-            for index, label in enumerate(labels, start=1)
+            CanonReference(
+                id=f"C{index}",
+                label=label,
+                kind=kind,
+                chapter_position=chapter_position,
+                chapter_title=chapter_title,
+            )
+            for index, (kind, chapter_position, chapter_title, label) in enumerate(
+                records, start=1
+            )
         ]
 
 
@@ -549,6 +583,9 @@ def parse_continuity_payload(
                 quote=quote,
                 source_id=reference.id,
                 source=reference.label,
+                source_kind=reference.kind,
+                source_chapter_position=reference.chapter_position,
+                source_chapter_title=reference.chapter_title,
                 explanation=(
                     _clip(item.get("explanation"), CONTINUITY_EXPLANATION_CHARS)
                     or _FALLBACK_EXPLANATION

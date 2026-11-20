@@ -3,6 +3,27 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.5.8] — 2026-11-20
+
+Provenance on every continuity finding.
+
+### Added
+
+- Each canon record handed to a check now carries a **kind** (character state,
+  relationship, event, story bible) and, where it has one, its **chapter**:
+  position and title. A relationship uses the chapter of its source event; a
+  bible entry has a kind and no chapter.
+- Continuity findings return `source_kind`, `source_chapter_position`, and
+  `source_chapter_title` alongside the cited record, and the chapter dialog
+  shows a **Provenance** line under the citation.
+- Contradiction-scan findings return the same three fields for both cited
+  records (`source_a_*`, `source_b_*`), so the scan dialog shows where each side
+  came from rather than only its record label.
+- Deterministic findings already named their chapters; nothing about them
+  changed.
+
+Schema stays at 19; provenance is derived from records that already exist.
+
 ## [0.5.7] — 2026-11-20
 
 Canon-change review and supersession.

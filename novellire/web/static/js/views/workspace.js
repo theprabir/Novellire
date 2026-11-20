@@ -1,6 +1,6 @@
 import { api } from '../api.js';
-import { openStateProposalDialog } from './state-proposals.js?v=0.5.7';
-import { openRelationshipProposalDialog } from './relationship-proposals.js?v=0.5.7';
+import { openStateProposalDialog } from './state-proposals.js?v=0.5.8';
+import { openRelationshipProposalDialog } from './relationship-proposals.js?v=0.5.8';
 import {
   closeModal,
   confirmDialog,
@@ -1719,6 +1719,19 @@ function openContinuityDialog(ctx, chapter) {
                   ),
                   el('p', { class: 'review-quote' }, `“${finding.quote}”`),
                   el('p', { class: 'continuity-source' }, `Against · ${finding.source}`),
+                  el(
+                    'p',
+                    { class: 'hint' },
+                    `Provenance · ${finding.source_kind || 'canon record'}${
+                      finding.source_chapter_position
+                        ? ` · chapter ${finding.source_chapter_position}${
+                            finding.source_chapter_title
+                              ? ` “${finding.source_chapter_title}”`
+                              : ''
+                          }`
+                        : ''
+                    }`
+                  ),
                   el('p', {}, finding.explanation),
                   finding.suggestion
                     ? el('p', { class: 'review-replacement' }, finding.suggestion)

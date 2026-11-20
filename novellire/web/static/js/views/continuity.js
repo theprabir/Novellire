@@ -407,6 +407,21 @@ function canonChangesSection(review, ctx) {
   );
 }
 
+function provenanceLabel(kind, position, title) {
+  const label = kind ? kind.replace(/_/g, ' ') : 'canon record';
+  return position
+    ? `Provenance · ${label} · chapter ${position}${
+        title ? ` “${title}”` : ''
+      }`
+    : `Provenance · ${label}`;
+}
+
+function provenanceSuffix(kind, position, title) {
+  return position
+    ? ` · ${kind || 'canon'} · chapter ${position}${title ? ` “${title}”` : ''}`
+    : '';
+}
+
 function describeFields(fields, details) {
   return (fields || [])
     .map(
@@ -619,8 +634,24 @@ function openCanonScan(ctx) {
                   finding.detail
                     ? el('p', { class: 'hint' }, finding.detail)
                     : null,
-                  el('p', { class: 'continuity-source' }, `Against · ${finding.source_a} — ${finding.source_a_label}`),
-                  el('p', { class: 'continuity-source' }, `Against · ${finding.source_b} — ${finding.source_b_label}`),
+                  el(
+                    'p',
+                    { class: 'continuity-source' },
+                    `Against · ${finding.source_a} — ${finding.source_a_label}${provenanceSuffix(
+                      finding.source_a_kind,
+                      finding.source_a_chapter_position,
+                      finding.source_a_chapter_title
+                    )}`
+                  ),
+                  el(
+                    'p',
+                    { class: 'continuity-source' },
+                    `Against · ${finding.source_b} — ${finding.source_b_label}${provenanceSuffix(
+                      finding.source_b_kind,
+                      finding.source_b_chapter_position,
+                      finding.source_b_chapter_title
+                    )}`
+                  ),
                   finding.suggestion
                     ? el('p', { class: 'review-replacement' }, finding.suggestion)
                     : null

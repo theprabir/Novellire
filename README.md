@@ -351,7 +351,10 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.5.7** (schema version 19). `v0.5.7` reviews canon changes:
+Current release: **v0.5.8** (schema version 19). `v0.5.8` adds provenance to
+every continuity finding: the cited canon record now also names its kind and the
+chapter it came from, and contradiction findings show that for both sides.
+`v0.5.7` reviews canon changes:
 Continuity lists state snapshots that differ from the one before them, and the
 author can mark the earlier record superseded, with a note, so it stays as
 history but is no longer cited as current canon. `v0.5.6` detects contradictions

@@ -63,6 +63,12 @@ class CanonContradiction:
     source_b: str
     source_a_label: str
     source_b_label: str
+    source_a_kind: str
+    source_a_chapter_position: int | None
+    source_a_chapter_title: str
+    source_b_kind: str
+    source_b_chapter_position: int | None
+    source_b_chapter_title: str
     summary: str
     detail: str
     suggestion: str
@@ -304,6 +310,12 @@ def parse_canon_contradictions(
                 source_b=second.id,
                 source_a_label=first.label,
                 source_b_label=second.label,
+                source_a_kind=first.kind,
+                source_a_chapter_position=first.chapter_position,
+                source_a_chapter_title=first.chapter_title,
+                source_b_kind=second.kind,
+                source_b_chapter_position=second.chapter_position,
+                source_b_chapter_title=second.chapter_title,
                 summary=summary,
                 detail=_clip(item.get("detail"), SCAN_DETAIL_CHARS),
                 suggestion=_clip(item.get("suggestion"), SCAN_DETAIL_CHARS),
