@@ -54,11 +54,13 @@ export function renderStyle(ctx) {
   Promise.all([
     api.get(`/api/projects/${state.activeProjectId}/style`),
     api.get(`/api/projects/${state.activeProjectId}/pacing`),
+    api.get(`/api/projects/${state.activeProjectId}/revision-plan`),
   ])
-    .then(([profile, pacing]) =>
+    .then(([profile, pacing, plan]) =>
       body.replaceChildren(
         ...profileSections(profile, ctx),
-        ...pacingSections(pacing)
+        ...pacingSections(pacing),
+        revisionSection(plan)
       )
     )
     .catch((error) => {
@@ -340,6 +342,98 @@ function pacingSections(pacing) {
           )
     ),
   ];
+}
+
+const REVISION_KIND_LABELS = {
+  long_sentence: 'Long sentence',
+  dense_paragraph: 'Dense paragraph',
+  repetition: 'Repeated phrase',
+};
+
+function revisionSection(plan) {
+  const counts = plan.counts || {};
+  const chapters = plan.chapters || [];
+  return el(
+    'section',
+    { class: 'card form-card' },
+    el(
+      'div',
+      { class: 'review-finding-head' },
+      el('h2', { class: 'section-title' }, 'Revision suggestions'),
+      el(
+        'span',
+        { class: 'chip' },
+        `${count(counts.items || 0)} suggestion${
+          counts.items === 1 ? '' : 's'
+        }`
+      )
+    ),
+    el(
+      'p',
+      { class: 'hint' },
+      'Built from the measurements above: long sentences, dense paragraphs, and repeated phrases, each pointing at the passage and one next step. Nothing is rewritten, and a suggestion disappears once the prose changes.'
+    ),
+    chapters.length
+      ? el(
+          'div',
+          { class: 'ledger-list' },
+          chapters.map((chapter) =>
+            el(
+              'div',
+              { class: 'ledger-row' },
+              el(
+                'div',
+                { class: 'review-finding-head' },
+                el('span', { class: 'chip' }, String(chapter.position).padStart(2, '0')),
+                el('strong', {}, chapter.title || 'Untitled chapter'),
+                el(
+                  'span',
+                  { class: 'hint' },
+                  `${chapter.items.length} suggestion${
+                    chapter.items.length === 1 ? '' : 's'
+                  } · ${count(chapter.words)} words`
+                ),
+                el(
+                  'a',
+                  {
+                    class: 'btn btn-sm',
+                    href: `#/workspace/chapters/${chapter.id}`,
+                  },
+                  'Open chapter'
+                )
+              ),
+              ...chapter.items.map((item) =>
+                el(
+                  'div',
+                  { class: 'ledger-snapshot' },
+                  el(
+                    'div',
+                    { class: 'review-finding-head' },
+                    el(
+                      'span',
+                      { class: `chip severity-${item.severity}` },
+                      item.severity
+                    ),
+                    el(
+                      'span',
+                      { class: 'chip' },
+                      REVISION_KIND_LABELS[item.kind] || item.kind
+                    )
+                  ),
+                  el('p', { class: 'review-quote' }, `“${item.quote}”`),
+                  el('p', { class: 'hint' }, item.detail),
+                  el('p', { class: 'review-replacement' }, item.suggestion)
+                )
+              )
+            )
+          )
+        )
+      : el(
+          'p',
+          { class: 'hint' },
+          'No measured suggestion in the current prose.'
+        )
+  );
 }
 
 function openDeviationCheck(ctx, chapter) {

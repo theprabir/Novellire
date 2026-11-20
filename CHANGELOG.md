@@ -3,6 +3,26 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.6.3] — 2026-11-20
+
+Revision suggestions located in the prose, without a model.
+
+### Added
+
+- **Revision suggestions** on the Style surface, and `GET
+  /api/projects/{id}/revision-plan`: a per-chapter checklist built from the
+  measurements above.
+  - a sentence over 35 words, quoted, with its word count (high at 70+);
+  - a paragraph over 180 words, quoted, with its word count (high at 300+);
+  - a repeated phrase the pacing review found in that chapter, with how often it
+    appears, so the same finding is not repeated once per occurrence.
+- Each item says one next step and links to the chapter editor. At most six
+  items per chapter, ordered by severity, then kind.
+- The plan stores nothing. Items disappear when the prose changes, so there is no
+  dismissal state to keep in sync with the manuscript, and nothing is rewritten.
+
+Schema stays at 19; the plan is derived from existing records.
+
 ## [0.6.2] — 2026-11-20
 
 Pacing and repetition review, measured locally without a model.

@@ -231,7 +231,9 @@ expected findings.
 - Pacing and repetition review: paragraph and sentence rhythm, dialogue density,
   and four-word phrases repeated three or more times with their source sentences,
   all measured locally without inference (`0.6.2`).
-- Revision suggestions.
+- Revision suggestions: a located per-chapter checklist from the measured prose
+  — quoted long sentences, dense paragraphs, and repeated phrases, each with one
+  next step and a link to the editor, storing no state (`0.6.3`).
 - DOCX and Markdown export: Markdown, plain text, and a locally generated Word
   document, with part breaks, chapter headings, and per-chapter and total word
   counts (`0.6.0`).

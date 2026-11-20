@@ -58,6 +58,7 @@ from ..core.review import ChapterReviewService
 from ..core.outline import OutlineService
 from ..core.pacing import PacingReviewService
 from ..core.projects import ProjectService
+from ..core.revision import RevisionPlanService
 from ..core.relationships import (
     RELATIONSHIP_TYPE_LABELS,
     RelationshipService,
@@ -461,6 +462,7 @@ class ApiServices:
     style_profile: StyleProfileService
     style_deviations: StyleDeviationService
     pacing: PacingReviewService
+    revision_plan: RevisionPlanService
     summaries: ChapterSummaryService
     memory: MemoryService
     events: EventExtractionService
@@ -582,6 +584,9 @@ def build_services(
         event_repository,
         relationship_repository,
     )
+    pacing_service = PacingReviewService(
+        project_repository, chapter_repository
+    )
     continuity_service = ContinuityCheckService(
         provider,
         project_repository,
@@ -665,7 +670,10 @@ def build_services(
             chapter_repository,
             document_service,
         ),
-        pacing=PacingReviewService(project_repository, chapter_repository),
+        pacing=pacing_service,
+        revision_plan=RevisionPlanService(
+            project_repository, chapter_repository, pacing_service
+        ),
         generations=generation_repository,
         insights=insight_service,
         insight_repository=insight_repository,
@@ -1404,6 +1412,11 @@ def _build_router(services: ApiServices) -> APIRouter:
     def get_pacing_review(project_id: int) -> dict[str, Any]:
         """Paragraph rhythm, dialogue density, and repeated phrases. No model."""
         return services.pacing.review(project_id)
+
+    @router.get("/projects/{project_id}/revision-plan")
+    def get_revision_plan(project_id: int) -> dict[str, Any]:
+        """Located revision suggestions from measured prose. No model."""
+        return services.revision_plan.plan(project_id)
 
     # -- memory --------------------------------------------------------
 

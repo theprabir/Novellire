@@ -211,7 +211,10 @@ The interface has these surfaces:
   that cite one of those rules and quote the chapter exactly once. The same
   surface adds **pacing** (paragraph and sentence rhythm, dialogue density per
   chapter) and **repeated phrases** (a four-word phrase seen three or more times,
-  with its example sentences), both measured locally with no model.
+  with its example sentences), both measured locally with no model. **Revision
+  suggestions** turn those measurements into a located per-chapter checklist — a
+  quoted long sentence or dense paragraph, a repeated phrase, one next step —
+  linking straight to the chapter editor and disappearing as the prose changes.
 
 Appearance choices are stored in the database (`app_settings`, key
 `appearance.settings`) and mirrored to `localStorage`, so the workspace reopens
@@ -223,7 +226,7 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-321 tests run fully offline. All inference is stubbed, so no model or Ollama
+327 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
@@ -259,6 +262,7 @@ novellire/
     style_guide.py         Learns a style guide from the manuscript
     style.py               Measured prose and cited departures from the guide
     pacing.py              Paragraph rhythm, dialogue density, repeated phrases
+    revision.py            Located revision suggestions from measured prose
     story_bible.py         Categorised story bible entries (legacy API)
     characters.py          Character profiles and aliases (legacy API)
     context.py             Ranked canon and earlier-chapter context for generation
@@ -368,7 +372,10 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.6.2** (schema version 19). `v0.6.2` adds a deterministic
+Current release: **v0.6.3** (schema version 19). `v0.6.3` turns the measured
+review into revision suggestions: a per-chapter checklist quoting long sentences,
+dense paragraphs, and repeated phrases, each with one next step, linking to the
+chapter editor and storing nothing. `v0.6.2` adds a deterministic
 pacing and repetition review to the Style surface: paragraph and sentence rhythm,
 dialogue density per chapter, and four-word phrases repeated three or more times
 with the sentences they appear in, all counted locally without a model. `v0.6.1` adds style analysis:
