@@ -6,6 +6,10 @@
 #   NOVELLIRE_CONFIG      path to an alternative configuration file
 #   NOVELLIRE_DATA_DIR    overrides `data_dir`
 #   NOVELLIRE_OLLAMA_URL  overrides `ollama.base_url`
+#   NOVELLIRE_CLOUD_ENABLED / NOVELLIRE_CLOUD_URL / NOVELLIRE_CLOUD_MODEL
+#                         override the matching `[cloud]` values
+#   NOVELLIRE_CLOUD_API_KEY
+#                         holds the cloud API key; never put it in this file
 
 data_dir = "data"
 log_level = "INFO"
@@ -19,6 +23,22 @@ request_timeout_seconds = 180.0
 connect_timeout_seconds = 5.0
 # How long Ollama keeps the model in memory after a request.
 keep_alive = "5m"
+
+[cloud]
+# Opt-in hosted inference over an OpenAI-compatible API. Off by default: while
+# disabled, every request goes to local Ollama and no project content leaves
+# this machine. Enabling it sends each prompt and its retrieved context to
+# `base_url` under that provider's terms.
+enabled = false
+base_url = "https://api.openai.com/v1"
+# Name of the environment variable holding the key. Keep the key out of this
+# file; the value is read from the environment at startup.
+api_key_env = "NOVELLIRE_CLOUD_API_KEY"
+# Model name to use when the selected generation model is empty, e.g.
+# "gpt-4o-mini" or an OpenRouter model id. Choose the active model in Settings.
+model = ""
+request_timeout_seconds = 120.0
+connect_timeout_seconds = 10.0
 
 [analysis]
 # Analyse saved chapters in the background, one inference request at a time.

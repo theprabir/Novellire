@@ -247,6 +247,12 @@ function accentSwatches(ctx, current) {
 function modelCard(ctx) {
   const { state } = ctx;
   const generation = state.settings.generation;
+  const provider = state.settings.provider || {
+    kind: 'ollama',
+    label: 'Ollama (local)',
+    base_url: '',
+    privacy: 'No project content leaves this machine.',
+  };
   const ollama = state.ollama || { available: false, models: [] };
   const body = el('div', { class: 'settings-card-body' });
 
@@ -260,9 +266,13 @@ function modelCard(ctx) {
         'strong',
         { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
         el('span', { class: `status-dot ${ollama.available ? 'online' : 'offline'}` }),
-        ollama.available ? 'Ollama connected' : 'Ollama offline'
+        `${provider.label} ${ollama.available ? 'connected' : 'offline'}`
       ),
-      el('small', {}, `${state.settings.provider.base_url} · loopback only. Start it with \`ollama serve\`.`)
+      el(
+        'small',
+        {},
+        `${provider.base_url} · ${provider.kind === 'cloud' ? 'hosted inference, configured explicitly.' : 'loopback only. Start it with \`ollama serve\`.'}`
+      )
     ),
     el(
       'div',
@@ -370,30 +380,46 @@ function modelCard(ctx) {
     )
   );
 
-  const future = el(
+  const providerNote = el(
     'div',
     { class: 'cloud-card', style: { marginTop: '8px' } },
-    icon('sparkles'),
+    icon('layers'),
     el(
       'div',
       { class: 'text' },
-      el('strong', {}, 'Cloud API providers — planned'),
+      el(
+        'strong',
+        {},
+        provider.kind === 'cloud'
+          ? 'Cloud API is active'
+          : 'Local inference is active'
+      ),
+      el('p', {}, provider.privacy),
       el(
         'p',
         {},
-        'A later release adds opt-in hosted providers next to local models. Nothing is sent off-device unless you configure a provider and choose it explicitly.'
+        provider.kind === 'cloud'
+          ? `The key is read from ${provider.api_key_env}; it is never stored in the database or sent to the browser.`
+          : 'To opt in to a hosted OpenAI-compatible API, set [cloud] enabled = true and cloud.model in config.toml, put the key in NOVELLIRE_CLOUD_API_KEY, then restart Novellire. Local inference stays the default.'
       )
     )
   );
-  body.append(future);
+  body.append(providerNote);
 
-  return settingsCard('layers', 'Writing model', 'Ollama connection and app-wide generation defaults.', body);
+  return settingsCard(
+    'layers',
+    'Writing model',
+    `${provider.label} connection and app-wide generation defaults.`,
+    body
+  );
 }
 
 /* -- data and privacy ----------------------------------------------------- */
 
 function privacyCard(ctx) {
   const { state } = ctx;
+  const provider = state.settings.provider || { label: 'Ollama (local)', privacy: '' };
+  const cloud = provider.kind === 'cloud';
   const body = el('div', { class: 'settings-card-body' });
   body.append(
     el(
@@ -403,9 +429,19 @@ function privacyCard(ctx) {
         'div',
         { class: 'setting-label' },
         el('strong', {}, 'Inference mode'),
-        el('small', {}, 'Local models keep the manuscript on this machine. Cloud providers will be opt-in and clearly labelled.')
+        el(
+          'small',
+          {},
+          cloud
+            ? 'Prompts and retrieved context leave this machine for the configured API. Local Ollama is not used while cloud mode is enabled.'
+            : 'Local models keep the manuscript on this machine. Cloud providers are opt-in and clearly labelled.'
+        )
       ),
-      el('div', { class: 'setting-control' }, el('span', { class: 'chip ok' }, 'Local (Ollama)'))
+      el(
+        'div',
+        { class: 'setting-control' },
+        el('span', { class: `chip ${cloud ? 'warn' : 'ok'}` }, provider.label)
+      )
     )
   );
 
@@ -522,12 +558,13 @@ function aboutCard(state) {
       { class: 'stat-list' },
       statLine('Version', state.settings.version),
       statLine('Schema', state.settings.schema_version),
-      statLine('Provider', 'Ollama (local)')
+      statLine('Provider', state.settings.provider?.label || 'Ollama (local)')
     ),
     el(
       'p',
       { class: 'hint', style: { marginTop: '14px' } },
-      'No telemetry and no analytics. While a local model is selected, no project content leaves this machine.'
+      'No telemetry and no analytics. ' +
+        (state.settings.provider?.privacy || 'No project content leaves this machine.')
     )
   );
   return settingsCard('feather', 'About', 'Build information.', body);

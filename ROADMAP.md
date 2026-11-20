@@ -244,12 +244,25 @@ expected findings.
 
 Acceptance: a completed manuscript can be reviewed, exported, and restored.
 
+### v0.7 — Benchmarks and opt-in cloud inference
+
+- Synthetic 27-chapter benchmark sample with aliases, a detail that matters 25
+  chapters later, a secret, an unresolved mystery, a location change, and a
+  planted contradiction (`0.7.0`).
+- Deterministic retrieval recall/precision/rank tests and continuity/ledger
+  assertions using stub providers only (`0.7.0`).
+- Opt-in OpenAI-compatible cloud inference, selected explicitly by configuration
+  and never used as a silent fallback (`0.7.0`).
+
+Acceptance: the benchmark suite reports retrieval quality and the planted
+continuity findings without a model, and local inference remains the default.
+
 ### v1.0 — Stable release
 
 - UI refinement and accessibility.
 - Installation and configuration documentation.
 - Performance and memory profiling.
-- Synthetic retrieval/continuity benchmarks.
+- Synthetic retrieval/continuity benchmarks (`0.7.0`).
 - Release packaging and recovery testing.
 
 Acceptance: an author can install Novellire, build an outline, import or write a
@@ -269,6 +282,6 @@ novel, maintain continuity, and export the manuscript without cloud services.
 
 ## Immediate Next Work
 
-The first implementation slice is v0.4.2. It is deliberately foundation work:
-chapter structure, outline import, numbering, and honest context selection must
-be reliable before Chat writes into chapters.
+v1.0 remains: the UI accessibility and refinement pass, installation and
+configuration documentation review, performance and memory profiling on the
+target hardware, and release packaging with a recovery test.

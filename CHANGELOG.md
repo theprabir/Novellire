@@ -3,6 +3,48 @@
 All notable changes to Novellire are documented here.
 The project follows semantic versioning for the application, not the schema.
 
+## [0.7.0] — 2026-11-20
+
+Synthetic retrieval/continuity benchmarks and opt-in cloud inference.
+
+### Added
+
+- **Benchmark sample**: `samples/benchmark_novel` is a deterministic
+  27-chapter manuscript with five named characters and aliases, a brass
+  astrolabe planted in chapter 2 and needed in chapter 27, a secret held by one
+  character, an unresolved lighthouse-lens mystery, a move from the lighthouse
+  to the flooded archive, and a pair of relationship records that contradict
+  each other. `annotations.json` records the canon and the retrieval probes;
+  `build.py` regenerates the whole sample.
+- **Retrieval benchmark**: `tests/test_benchmark.py` seeds the sample through the
+  real services and measures retrieval separately from prose. All three probes
+  must meet recall 1.0, precision 1.0, and mean reciprocal rank 1.0, and the
+  chapter-2 detail must be returned for chapter 27 without relying on recency.
+- **Continuity benchmark**: the same suite asserts the open mystery, the
+  location change with provenance, the secret held by only one character, the
+  planted relationship contradiction, and a continuity check that keeps only a
+  finding quoting the draft once and citing the recorded location state.
+- **Opt-in cloud inference**: an OpenAI-compatible provider
+  (`novellire/llm/openai_compatible.py`) supports model discovery, generation,
+  streaming, usage reporting, and actionable auth/model/timeout errors. It is
+  used only when `[cloud].enabled` is true and the key environment variable is
+  set; a missing key stops startup instead of falling back silently.
+- `GET /api/providers/status` reports the active provider, its base URL, its
+  privacy note, availability, and models. `/api/ollama/status` remains as an
+  alias. `GET /api/settings` now describes the active provider.
+- App Settings shows the active provider, its privacy note, and configuration
+  guidance instead of the earlier “planned” card.
+
+### Changed
+
+- The cloud key is read only from the environment variable named by
+  `cloud.api_key_env`; it is never written to `config.toml`, the database, or the
+  browser.
+- New environment overrides: `NOVELLIRE_CLOUD_ENABLED`, `NOVELLIRE_CLOUD_URL`,
+  and `NOVELLIRE_CLOUD_MODEL`.
+
+Schema stays at 19; no dependencies were added.
+
 ## [0.6.4] — 2026-11-20
 
 Backup and restore verification, plus a simplification pass over the editorial

@@ -21,12 +21,13 @@ the provider you choose.
   server on `http://localhost:11434`. Prompts, story bibles, and prose stay on
   this machine. Novellire sends no telemetry and loads no remote fonts, scripts,
   or stylesheets.
-- **Cloud API providers (planned).** A later release adds hosted providers next
-  to local models. They will be opt-in: you configure a provider and its key, and
-  you select it explicitly. While a cloud provider is selected, the prompt and
-  the project context needed for that request are sent to that provider under its
-  own terms. Novellire will label the active provider in the interface and
-  document each provider's data flow before it ships.
+- **Cloud API providers (opt-in).** An OpenAI-compatible provider is available
+  for machines that cannot run a local model. It is off by default and selected
+  only when `[cloud].enabled` is true and the environment variable named by
+  `cloud.api_key_env` holds a key; startup stops rather than silently falling
+  back. While it is active, each prompt and the project context needed for that
+  request are sent to the configured API under its own terms. The interface
+  labels the active provider and shows its privacy note.
 - **Never silent.** Novellire does not enable cloud inference, analytics, or
   background uploads on its own, and it will not switch providers behind your
   back.
@@ -68,6 +69,24 @@ On macOS or Linux the activation command is `source .venv/bin/activate`.
 Optional: copy `config.example.toml` to `config.toml` to change the Ollama
 endpoint, timeouts, or default generation parameters. Novellire runs without a
 configuration file using built-in defaults.
+
+To use a hosted OpenAI-compatible API instead of Ollama, set `enabled = true`
+under `[cloud]` in `config.toml`, set `model` to that provider's model name, and
+put the key in the environment variable named by `api_key_env`
+(`NOVELLIRE_CLOUD_API_KEY` by default):
+
+```bash
+# Git Bash, macOS, or Linux
+export NOVELLIRE_CLOUD_API_KEY="..."
+novellire
+```
+
+In PowerShell use `$env:NOVELLIRE_CLOUD_API_KEY = "..."` instead.
+
+`base_url` defaults to OpenAI (`https://api.openai.com/v1`) and can point at any
+compatible API. The key is read from the environment at startup, never written
+to the database or the browser. Leave `enabled = false` to keep every request
+local.
 
 ### Run
 
@@ -226,13 +245,20 @@ with the same look with no flash of the wrong theme.
 pytest
 ```
 
-330 tests run fully offline. All inference is stubbed, so no model or Ollama
+346 tests run fully offline. All inference is stubbed, so no model or Ollama
 server is needed. `tests/test_api.py` drives the real FastAPI app with a test
 client and covers project scoping, error mapping, document saves, pre-written
 chapter protection, automatic style-guide learning, generation persistence,
 summary storage, full-text search, event extraction, character linking,
 event-aware generation, backup/restore, export, chapter revisions, and
 appearance round-trips.
+
+`tests/test_benchmark.py` seeds the synthetic sample under
+`samples/benchmark_novel` through the real services and measures retrieval
+separately from prose: recall, precision, and mean reciprocal rank for a detail
+planted in chapter 2 and used in chapter 27, plus the ledger, the open mystery,
+the location change, and the planted contradiction. `tests/test_cloud_provider.py`
+covers the opt-in cloud provider and provider selection without a network call.
 
 ## Architecture
 
@@ -281,6 +307,8 @@ novellire/
   llm/
     base.py                Provider-neutral request/result types + protocol
     ollama.py              Ollama HTTP provider and error mapping
+    openai_compatible.py   Opt-in OpenAI-compatible cloud provider
+    factory.py             Explicit local-or-cloud provider selection
   prompts/
     templates.py           Jinja2 prompt templates
   storage/
@@ -336,6 +364,17 @@ duplicate, `422` schema, `502` provider failure.
 | `generation.num_predict` | `700` | Maximum output tokens |
 | `generation.context_window` | `4096` | `num_ctx` passed to the model; UI offers 2k–16k and prompt budgets scale with it |
 | `analysis.auto_run` | `true` | Queue background chapter analysis after chapter and document saves |
+| `cloud.enabled` | `false` | Opt in to hosted inference instead of Ollama |
+| `cloud.base_url` | `https://api.openai.com/v1` | OpenAI-compatible API root |
+| `cloud.api_key_env` | `NOVELLIRE_CLOUD_API_KEY` | Environment variable holding the key; the key is never stored in config |
+| `cloud.model` | `""` | Default cloud model name |
+| `cloud.request_timeout_seconds` | `120` | Cloud generation timeout |
+| `cloud.connect_timeout_seconds` | `10` | Cloud connection timeout |
+
+Environment overrides: `NOVELLIRE_CONFIG`, `NOVELLIRE_DATA_DIR`,
+`NOVELLIRE_OLLAMA_URL`, and `NOVELLIRE_CLOUD_ENABLED`,
+`NOVELLIRE_CLOUD_URL`, `NOVELLIRE_CLOUD_MODEL`. The key itself is read only from
+`cloud.api_key_env`.
 
 Environment overrides: `NOVELLIRE_CONFIG`, `NOVELLIRE_DATA_DIR`,
 `NOVELLIRE_OLLAMA_URL`.
@@ -372,7 +411,16 @@ upgraded in place without losing projects, generations, or chapter text.
 
 ## Status
 
-Current release: **v0.6.4** (schema version 19). `v0.6.4` finishes v0.6 with
+Current release: **v0.7.0** (schema version 19). `v0.7.0` adds the v1.0
+benchmark slice: a synthetic 27-chapter sample with aliases, a detail that
+matters 25 chapters later, a secret, an open mystery, a location change, and a
+planted contradiction. The suite seeds it through the real services and reports
+retrieval recall, precision, and rank separately from prose quality, then
+asserts the ledger and continuity findings with stub providers. The same
+release adds opt-in cloud inference: an OpenAI-compatible provider selected only
+by `[cloud].enabled` with a key in the environment, never as a silent fallback,
+with the active provider and its privacy note shown in Settings. `v0.6.4`
+finishes v0.6 with
 backup and restore verification: a backup can be checked before restoring and
 reports its schema and record counts, snapshots are verified before download, and
 a restore is verified again after migration with automatic rollback to the
@@ -467,10 +515,12 @@ generation; `v0.2.7`, sequential bulk summaries; `v0.2.6`, the FTS5 Memory index
 `v0.2.5`, manuscript export; and `v0.2.4`, which separated Home from the
 Workspace and added chapter and scene ordering.
 
-The Phase 1 foundation, the Phase 2 narrative data model, and local manuscript
-memory are complete, and the interface is a browser harness. Still missing:
-semantic (embedding) retrieval, continuity validation, and cloud API providers. Continuity exists as a designed UI scope only. The older story bible entry, character, and scene endpoints remain
-for compatibility but are no longer part of the Workspace.
+The Phase 1 foundation, the Phase 2 narrative data model, local manuscript
+memory, continuity, editorial review, export, and the v1.0 benchmark slice are
+complete, and the interface is a browser harness. Still missing: semantic
+(embedding) retrieval, the UI accessibility review, performance profiling, and
+release packaging. The older story bible entry, character, and scene endpoints
+remain for compatibility but are no longer part of the Workspace.
 
 ## License
 

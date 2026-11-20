@@ -1,0 +1,153 @@
+{
+  "project": {
+    "name": "The Salt Cartographer",
+    "description": "A surveyor returns to a harbor whose coast is moving.",
+    "genre": "Literary fantasy",
+    "narrative_style": "Close third person, past tense",
+    "target_word_count": 80000
+  },
+  "characters": [
+    {
+      "name": "Ilse Marrow",
+      "aliases": [
+        "the Salt Surveyor"
+      ],
+      "role": "Protagonist",
+      "personality": "Careful, stubborn, private.",
+      "secrets": "She cut the lighthouse lens herself and has told no one."
+    },
+    {
+      "name": "Tamsin Roke",
+      "aliases": [
+        "Tam",
+        "the Ledger Girl"
+      ],
+      "role": "Apprentice",
+      "personality": "Quick, proud, eager to be trusted.",
+      "secrets": "She believes the lens was lost in the storm."
+    },
+    {
+      "name": "Brann Ocque",
+      "aliases": [
+        "the Tidewarden"
+      ],
+      "role": "Harbor master",
+      "personality": "Guarded and proud.",
+      "secrets": "He is Ilse's brother, and the harbor does not know."
+    },
+    {
+      "name": "Sera Vane",
+      "aliases": [
+        "the Gull"
+      ],
+      "role": "Smuggler",
+      "personality": "Patient, transactional, amused.",
+      "secrets": "She wants the archive's west stair opened."
+    },
+    {
+      "name": "Keeper Noll",
+      "aliases": [
+        "the Lampwright"
+      ],
+      "role": "Lighthouse keeper",
+      "personality": "Apologetic and watchful.",
+      "secrets": "He moved the oil stores and fears dismissal."
+    }
+  ],
+  "states": [
+    {
+      "character": "Ilse Marrow",
+      "chapter": 1,
+      "location": "Cinder Point lighthouse",
+      "status": "weary but working",
+      "goals": "Survey the eroding coast before the inquiry.",
+      "knowledge": "She knows who cut the lighthouse lens and has told no one."
+    },
+    {
+      "character": "Ilse Marrow",
+      "chapter": 12,
+      "location": "the flooded archive of Veyra",
+      "status": "determined",
+      "goals": "Chart the archive before the pumps reach the lowest shelf.",
+      "knowledge": "She knows who cut the lighthouse lens and has told no one; the brass astrolabe is hidden beneath the third stair."
+    },
+    {
+      "character": "Tamsin Roke",
+      "chapter": 12,
+      "location": "the flooded archive of Veyra",
+      "status": "curious",
+      "goals": "Learn to sign her own survey.",
+      "knowledge": "She believes the lens was lost in the storm."
+    },
+    {
+      "character": "Brann Ocque",
+      "chapter": 1,
+      "location": "the harbor gate",
+      "status": "watchful",
+      "goals": "Keep the gate ledger and the family debt quiet.",
+      "knowledge": "He knows Ilse is his sister."
+    }
+  ],
+  "relationships": [
+    {
+      "a": "Ilse Marrow",
+      "b": "Brann Ocque",
+      "relation_type": "ally",
+      "description": "Estranged siblings keeping a truce for the harbor.",
+      "status": "approved"
+    },
+    {
+      "a": "Ilse Marrow",
+      "b": "Brann Ocque",
+      "relation_type": "rival",
+      "description": "A dispute over the lighthouse lease.",
+      "status": "proposed"
+    }
+  ],
+  "events": [
+    {
+      "chapter": 6,
+      "summary": "The lighthouse lens is found cut cleanly across its face.",
+      "threads": [
+        "Who cut the lighthouse lens?"
+      ]
+    },
+    {
+      "chapter": 26,
+      "summary": "A fragment of the lighthouse lens is found in the archive's wreck register.",
+      "threads": [
+        "Who cut the lighthouse lens?"
+      ]
+    }
+  ],
+  "probes": [
+    {
+      "id": "astrolabe",
+      "chapter": 27,
+      "instructions": "The brass astrolabe.",
+      "expected": [
+        2
+      ]
+    },
+    {
+      "id": "flooded_archive",
+      "chapter": 27,
+      "instructions": "The flooded archive.",
+      "expected": [
+        12,
+        13,
+        19
+      ]
+    },
+    {
+      "id": "gull_ledger",
+      "chapter": 27,
+      "instructions": "Gull ledger.",
+      "expected": [
+        9,
+        12,
+        18
+      ]
+    }
+  ]
+}

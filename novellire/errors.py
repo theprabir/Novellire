@@ -15,6 +15,10 @@ class ConfigurationError(NovellireError):
     """The configuration file is missing, unreadable, or invalid."""
 
 
+class MissingCloudKeyError(ConfigurationError):
+    """Cloud inference was enabled but its API key environment variable is empty."""
+
+
 class DatabaseError(NovellireError):
     """A storage operation failed."""
 

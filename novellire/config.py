@@ -31,6 +31,45 @@ class OllamaSettings(BaseModel):
     keep_alive: str = "5m"
 
 
+class CloudSettings(BaseModel):
+    """Opt-in OpenAI-compatible cloud inference.
+
+    Disabled by default, and no key is stored here: ``api_key_env`` names the
+    environment variable that holds it, so a configuration file can be shared
+    without exposing the secret. Enabling this means prompt text and the
+    retrieved context for each request leave this machine.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    enabled: bool = False
+    base_url: str = "https://api.openai.com/v1"
+    api_key_env: str = "NOVELLIRE_CLOUD_API_KEY"
+    model: str = ""
+    request_timeout_seconds: float = Field(default=120.0, gt=0)
+    connect_timeout_seconds: float = Field(default=10.0, gt=0)
+
+    @field_validator("base_url")
+    @classmethod
+    def _require_http_url(cls, value: str) -> str:
+        cleaned = value.strip().rstrip("/")
+        if not cleaned.startswith(("http://", "https://")):
+            raise ValueError("cloud.base_url must start with http:// or https://")
+        return cleaned
+
+    @field_validator("api_key_env")
+    @classmethod
+    def _require_env_name(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("cloud.api_key_env must name an environment variable")
+        return cleaned
+
+    def api_key(self) -> str:
+        """Read the key from the named environment variable, never from config."""
+        return os.environ.get(self.api_key_env, "").strip()
+
+
 class GenerationDefaults(BaseModel):
     """Default generation parameters, all overridable in the UI.
 
@@ -63,6 +102,7 @@ class Settings(BaseModel):
     data_dir: Path = APP_ROOT / "data"
     log_level: str = "INFO"
     ollama: OllamaSettings = OllamaSettings()
+    cloud: CloudSettings = CloudSettings()
     generation: GenerationDefaults = GenerationDefaults()
     analysis: AnalysisSettings = AnalysisSettings()
 
@@ -86,11 +126,17 @@ class Settings(BaseModel):
         return self.data_dir / "novellire.db"
 
 
-def _merge_ollama_override(raw: dict[str, object], base_url: str) -> dict[str, object]:
-    existing = raw.get("ollama")
+def _merge_override(
+    raw: dict[str, object], section_name: str, **values: object
+) -> dict[str, object]:
+    existing = raw.get(section_name)
     section = dict(existing) if isinstance(existing, dict) else {}
-    section["base_url"] = base_url
+    section.update(values)
     return section
+
+
+def _merge_ollama_override(raw: dict[str, object], base_url: str) -> dict[str, object]:
+    return _merge_override(raw, "ollama", base_url=base_url)
 
 
 def load_settings(config_path: Path | None = None) -> Settings:
@@ -118,6 +164,24 @@ def load_settings(config_path: Path | None = None) -> Settings:
     ollama_url_override = os.environ.get("NOVELLIRE_OLLAMA_URL")
     if ollama_url_override:
         raw["ollama"] = _merge_ollama_override(raw, ollama_url_override)
+
+    cloud_overrides: dict[str, object] = {}
+    cloud_url_override = os.environ.get("NOVELLIRE_CLOUD_URL")
+    if cloud_url_override:
+        cloud_overrides["base_url"] = cloud_url_override
+    cloud_model_override = os.environ.get("NOVELLIRE_CLOUD_MODEL")
+    if cloud_model_override:
+        cloud_overrides["model"] = cloud_model_override
+    cloud_enabled_override = os.environ.get("NOVELLIRE_CLOUD_ENABLED")
+    if cloud_enabled_override:
+        cloud_overrides["enabled"] = cloud_enabled_override.strip().casefold() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+    if cloud_overrides:
+        raw["cloud"] = _merge_override(raw, "cloud", **cloud_overrides)
 
     try:
         return Settings.model_validate(raw)

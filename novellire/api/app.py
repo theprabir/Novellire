@@ -93,7 +93,7 @@ from ..errors import (
     RecordNotFoundError,
 )
 from ..llm.base import LLMProvider
-from ..llm.ollama import OllamaProvider
+from ..llm.factory import build_provider
 from ..llm.serialized import SerializedProvider
 from ..logging_setup import configure_logging
 from ..storage.database import Database
@@ -543,8 +543,15 @@ def build_services(
         insight_repository,
         analysis_state_repository,
     )
+    generation_defaults = settings.generation
+    if settings.cloud.enabled and settings.cloud.model.strip():
+        # A fresh installation should start on the cloud model it was configured
+        # with, not on a local Ollama name the active provider cannot serve.
+        generation_defaults = settings.generation.model_copy(
+            update={"model": settings.cloud.model.strip()}
+        )
     app_settings_service = AppSettingsService(
-        AppSettingsRepository(database), settings.generation
+        AppSettingsRepository(database), generation_defaults
     )
     analysis_scheduler = AnalysisScheduler(
         analysis_service,
@@ -735,6 +742,34 @@ def generation_payload(
     return payload
 
 
+def _active_provider(settings: Settings) -> dict[str, Any]:
+    """The provider this process uses, described for the client."""
+    if settings.cloud.enabled:
+        return {
+            "kind": "cloud",
+            "label": "Cloud API",
+            "base_url": settings.cloud.base_url,
+            "model": settings.cloud.model,
+            "api_key_env": settings.cloud.api_key_env,
+            "request_timeout_seconds": settings.cloud.request_timeout_seconds,
+            "cloud_enabled": True,
+            "privacy": (
+                "The prompt and the project context needed for each request are "
+                "sent to this API under its own terms."
+            ),
+        }
+    return {
+        "kind": "ollama",
+        "label": "Ollama (local)",
+        "base_url": settings.ollama.base_url,
+        "model": "",
+        "api_key_env": "",
+        "request_timeout_seconds": settings.ollama.request_timeout_seconds,
+        "cloud_enabled": False,
+        "privacy": "No project content leaves this machine.",
+    }
+
+
 def _status_code_for(exc: NovellireError) -> int:
     if isinstance(exc, (ProjectNotFoundError, RecordNotFoundError)):
         return 404
@@ -765,12 +800,7 @@ def create_app(
     resolved_database = database or Database(resolved_settings.database_path)
     resolved_database.initialize()
 
-    resolved_provider = provider or OllamaProvider(
-        base_url=resolved_settings.ollama.base_url,
-        request_timeout=resolved_settings.ollama.request_timeout_seconds,
-        connect_timeout=resolved_settings.ollama.connect_timeout_seconds,
-        keep_alive=resolved_settings.ollama.keep_alive,
-    )
+    resolved_provider = provider or build_provider(resolved_settings)
     services = build_services(resolved_settings, resolved_database, resolved_provider)
 
     @asynccontextmanager
@@ -882,11 +912,7 @@ def _build_router(services: ApiServices) -> APIRouter:
         return {
             "generation": services.app_settings.generation_settings().model_dump(),
             "appearance": services.app_settings.appearance().model_dump(),
-            "provider": {
-                "kind": "ollama",
-                "base_url": settings.ollama.base_url,
-                "request_timeout_seconds": settings.ollama.request_timeout_seconds,
-            },
+            "provider": _active_provider(settings),
             "paths": {
                 "data_dir": str(settings.data_dir),
                 "database": str(services.database.path),
@@ -907,8 +933,9 @@ def _build_router(services: ApiServices) -> APIRouter:
         services.app_settings.save_appearance(payload)
         return payload.model_dump()
 
-    @router.get("/ollama/status")
-    def ollama_status() -> dict[str, Any]:
+    @router.get("/providers/status")
+    @router.get("/ollama/status", include_in_schema=False)
+    def provider_status() -> dict[str, Any]:
         available = False
         models: list[dict[str, Any]] = []
         error: str | None = None
@@ -920,8 +947,8 @@ def _build_router(services: ApiServices) -> APIRouter:
             available = False
             error = str(exc)
         return {
+            **_active_provider(settings),
             "available": available,
-            "base_url": settings.ollama.base_url,
             "models": models,
             "error": error,
         }

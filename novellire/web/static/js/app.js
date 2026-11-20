@@ -7,16 +7,16 @@ import {
   toast,
 } from './ui.js';
 import { renderHome } from './views/home.js';
-import { renderMemory } from './views/memory.js?v=0.6.4';
+import { renderMemory } from './views/memory.js?v=0.7.0';
 import { openProjectForm } from './views/projects.js';
 import { renderProjectSettings } from './views/project-settings.js';
-import { renderWorkspace } from './views/workspace.js?v=0.6.4';
+import { renderWorkspace } from './views/workspace.js?v=0.7.0';
 import { renderPreview } from './views/preview.js';
-import { renderExport } from './views/export.js?v=0.6.4';
-import { renderSettings } from './views/settings.js';
-import { renderChat } from './views/chat.js?v=0.6.4';
-import { renderContinuity } from './views/continuity.js?v=0.6.4';
-import { renderStyle } from './views/style.js?v=0.6.4';
+import { renderExport } from './views/export.js?v=0.7.0';
+import { renderSettings } from './views/settings.js?v=0.7.0';
+import { renderChat } from './views/chat.js?v=0.7.0';
+import { renderContinuity } from './views/continuity.js?v=0.7.0';
+import { renderStyle } from './views/style.js?v=0.7.0';
 
 const NAV = [
   { key: 'home', label: 'Home', icon: 'home' },
@@ -77,7 +77,7 @@ async function boot() {
       api.get('/api/meta'),
       api.get('/api/projects'),
       api.get('/api/settings'),
-      api.get('/api/ollama/status'),
+      api.get('/api/providers/status'),
     ]);
     state.meta = meta;
     state.projects = projectsPayload.projects;
@@ -152,7 +152,7 @@ async function refreshProjects() {
 }
 
 async function refreshOllama() {
-  state.ollama = await api.get('/api/ollama/status');
+  state.ollama = await api.get('/api/providers/status');
   renderShell();
 }
 
